@@ -1,0 +1,43 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Campaign {
+  id          String   @id @default(cuid())
+  name        String
+  subject     String
+  body        String
+  followup1   String?
+  followup2   String?
+  delay1Days  Int      @default(3)
+  delay2Days  Int      @default(5)
+  provider    String   @default("gmail")
+  createdAt   DateTime @default(now())
+  leads       Lead[]
+}
+
+model Lead {
+  id              String    @id @default(cuid())
+  campaignId      String
+  campaign        Campaign  @relation(fields: [campaignId], references: [id])
+  recipientName   String
+  recipientEmail  String
+  websiteUrl     String?
+  niche          String?
+  status         String    @default("pending")
+  step            Int       @default(1)
+  replied         Boolean   @default(false)
+  sentAt          DateTime?
+  nextFollowup    DateTime?
+  gmailThreadId   String?   // Set when sending via Gmail API; used for reply-in-thread and reply detection
+  opened          Boolean   @default(false)
+  openedAt       DateTime?
+  clicked         Boolean   @default(false)
+  clickedAt      DateTime?
+  createdAt       DateTime  @default(now())
+}
