@@ -54,18 +54,22 @@ export async function sendLead(leadId: string): Promise<SendLeadResult> {
     };
   }
 
-  await prisma.lead.update({
-    where: { id: leadId },
-    data: {
-      status: "sent",
-      step: 1,
-      sentAt: new Date(),
-      nextFollowup: new Date(Date.now() + delay1Ms),
-      ...(result.type === "success" && result.threadId
-        ? { gmailThreadId: result.threadId }
-        : {}),
-    },
-  });
+  // Only update status to "sent" if using SMTP or Gmail API (auto-send)
+  // For manual Gmail (extension), the status will be updated when /api/update-send is called
+  if (provider !== "gmail_manual") {
+    await prisma.lead.update({
+      where: { id: leadId },
+      data: {
+        status: "sent",
+        step: 1,
+        sentAt: new Date(),
+        nextFollowup: new Date(Date.now() + delay1Ms),
+        ...(result.type === "success" && result.threadId
+          ? { gmailThreadId: result.threadId }
+          : {}),
+      },
+    });
+  }
 
   revalidatePath("/dashboard");
 

@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "Leads Dashboard AI Outreach",
-  "version": "1.0.0",
+  "version": "1.0.18",
   "description": "Integrates with Leads Dashboard to generate and send AI-powered cold emails via ChatGPT and Gmail",
-  "permissions": ["tabs", "scripting", "activeTab"],
+  "permissions": ["tabs", "scripting", "activeTab", "alarms", "storage"],
   "host_permissions": [
     "https://chat.openai.com/*",
     "https://chatgpt.com/*",

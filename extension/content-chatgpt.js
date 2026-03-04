@@ -6,28 +6,45 @@
 (function () {
   "use strict";
 
+  const LOG_PREFIX = "[Leads Extension ChatGPT]";
+
+  function log(...args) {
+    console.log(LOG_PREFIX, ...args);
+  }
+
+  function logError(...args) {
+    console.error(LOG_PREFIX, ...args);
+  }
+
   let pendingPrompt = null;
   let pendingRecipientEmail = null;
+  let pendingLeadId = null;
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.action !== "pasteAndSend") return;
+
+    sendResponse({ success: true, accepted: true });
+
     pendingPrompt = message.prompt;
+    const recipientName = message.recipientName;
     pendingRecipientEmail = message.recipientEmail;
-    runPasteAndSend(message.prompt, message.recipientEmail)
+    pendingLeadId = message.leadId;
+    runPasteAndSend(message.prompt, recipientName, message.recipientEmail, message.leadId)
       .then((result) => {
         pendingPrompt = null;
         pendingRecipientEmail = null;
-        sendResponse(result);
+        pendingLeadId = null;
+        if (!result?.success) {
+          logError("ChatGPT", "pasteAndSend failed:", result?.error || "Unknown error");
+        }
       })
       .catch((err) => {
         logError("ChatGPT", err);
-        sendResponse({ success: false, error: String(err.message) });
       });
-    return true;
   });
 
-  async function runPasteAndSend(prompt, recipientEmail) {
-    log("ChatGPT", "pasteAndSend started, prompt length:", prompt?.length);
+  async function runPasteAndSend(prompt, recipientName, recipientEmail, leadId) {
+    log("ChatGPT", "pasteAndSend started, prompt length:", prompt?.length, "leadId:", leadId ? "***" : "");
     const textarea = await waitForSelector('textarea[data-id="root"], textarea, [contenteditable="true"]', 20000);
     if (!textarea) {
       log("ChatGPT", "Could not find input field");
@@ -55,13 +72,46 @@
     const responseText = await waitForResponse(120000);
     if (!responseText) return { success: false, error: "No response or timeout" };
 
-    const { subject, body } = parseEmailResponse(responseText);
+    const parsed = parseEmailResponse(responseText);
+    const fallbackSubject =
+      parsed.subject ||
+      "Quick guest post idea for your audience";
+    const fallbackBody =
+      parsed.body ||
+      responseText ||
+      "";
+    const subject = fallbackSubject;
+    const body = cleanEmailBody(fallbackBody, { recipientName });
     log("ChatGPT", "Parsed subject length:", subject.length, "body length:", body.length);
+    
+    if (!subject || !body) {
+      logError("ChatGPT", "Failed to parse email - subject or body is empty");
+      logError("ChatGPT", "Raw response (first 500 chars):", responseText.substring(0, 500));
+      return { success: false, error: "Failed to parse ChatGPT response - no subject or body found" };
+    }
 
-    chrome.runtime.sendMessage({
-      action: "chatgptDone",
-      data: { subject, body, recipientEmail },
-    });
+    let sentToBackground = false;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const ack = await chrome.runtime.sendMessage({
+          action: "chatgptDone",
+          data: { subject, body, recipientEmail, leadId },
+        });
+        sentToBackground = !!(ack && ack.success);
+        if (sentToBackground) {
+          log("ChatGPT", "chatgptDone acknowledged by background (attempt " + attempt + ")");
+          break;
+        }
+      } catch (err) {
+        logError("ChatGPT", "chatgptDone send failed (attempt " + attempt + "):", err && err.message ? err.message : err);
+      }
+      await delay(700);
+    }
+
+    if (!sentToBackground) {
+      return { success: false, error: "Could not hand off generated email to background workflow" };
+    }
+
     return { success: true, subject, body };
   }
 
@@ -157,6 +207,16 @@
       const start = Date.now();
       let lastText = "";
       let stableCount = 0;
+      const softResolveAfterMs = 45000;
+
+      function looksLikeEmailOutput(text) {
+        if (!text || text.length < 40) return false;
+        if (/(?:^|\n)\s*\*{0,2}subject\*{0,2}\s*[:\-]/i.test(text)) return true;
+        if (/(?:^|\n)\s*\*{0,2}body\*{0,2}\s*[:\-]/i.test(text)) return true;
+        if (/^hi\s+[^\n,]+,/im.test(text) && /(?:^|\n)\s*best(?: regards)?[,]?/im.test(text)) return true;
+        return false;
+      }
+
       const interval = setInterval(() => {
         if (Date.now() - start > timeoutMs) {
           clearInterval(interval);
@@ -165,10 +225,25 @@
         }
         const generating = isStillGenerating();
         const text = getLastAssistantText();
-        if (!generating && text.length > 50 && (text.includes("Subject:") || text.includes("Body:"))) {
+        const hasEmailShape = looksLikeEmailOutput(text);
+        if (hasEmailShape) {
           if (text === lastText) {
             stableCount++;
-            if (stableCount >= 2) {
+            const elapsed = Date.now() - start;
+            const stableNeeded = generating ? 4 : 2;
+            if (stableCount >= stableNeeded || (elapsed >= softResolveAfterMs && stableCount >= 2)) {
+              clearInterval(interval);
+              resolve(text);
+            }
+          } else {
+            lastText = text;
+            stableCount = 0;
+          }
+        } else if (!generating && text.length > 120) {
+          // Fallback when model ignores requested Subject/Body labels.
+          if (text === lastText) {
+            stableCount++;
+            if (stableCount >= 3) {
               clearInterval(interval);
               resolve(text);
             }
@@ -183,6 +258,66 @@
 
   function delay(ms) {
     return new Promise((r) => setTimeout(r, ms));
+  }
+
+  /**
+   * Parse email response from ChatGPT
+   * Looks for "Subject:" and "Body:" in the response text
+   * Works even if ChatGPT returns extra instructions before the email
+   */
+  function parseEmailResponse(text) {
+    if (!text || typeof text !== "string") {
+      return { subject: "", body: "" };
+    }
+    
+    const trimmed = text.trim().replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+    const subjectPatterns = [
+      /(?:^|\n)\s*\*{0,2}subject\*{0,2}\s*:\s*(.+?)(?=\n|$)/i,
+      /(?:^|\n)\s*subject\s*-\s*(.+?)(?=\n|$)/i,
+      /(?:^|\n)\s*title\s*:\s*(.+?)(?=\n|$)/i
+    ];
+    let subject = "";
+    for (let i = 0; i < subjectPatterns.length; i++) {
+      const m = trimmed.match(subjectPatterns[i]);
+      if (m && m[1]) {
+        subject = m[1].replace(/[*_`]/g, "").trim();
+        break;
+      }
+    }
+
+    const bodyPatterns = [
+      /(?:^|\n)\s*\*{0,2}body\*{0,2}\s*:\s*([\s\S]*)$/i,
+      /(?:^|\n)\s*email\s*:\s*([\s\S]*)$/i
+    ];
+    let body = "";
+    for (let i = 0; i < bodyPatterns.length; i++) {
+      const m = trimmed.match(bodyPatterns[i]);
+      if (m && m[1]) {
+        body = m[1].trim();
+        break;
+      }
+    }
+
+    if (!body) {
+      const lines = trimmed.split("\n").map((l) => l.trim());
+      const filtered = lines.filter((line) => {
+        if (!line) return false;
+        return !/^\*{0,2}(subject|body)\*{0,2}\s*[:\-]/i.test(line);
+      });
+      body = filtered.join("\n").trim();
+    }
+
+    if (!subject && body) {
+      const firstLine = body.split("\n")[0].trim();
+      if (firstLine && firstLine.length <= 120) {
+        subject = firstLine.replace(/[*_`]/g, "").trim();
+      }
+    }
+    
+    log("ChatGPT", "Parsed email - Subject:", subject.substring(0, 50), "| Body length:", body.length);
+    
+    return { subject, body };
   }
 
   log("ChatGPT", "Content script loaded");

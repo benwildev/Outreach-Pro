@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { deleteLead } from "./actions";
+import { Trash2 } from "lucide-react";
 
 export function LeadDeleteButton({ leadId }: { leadId: string }) {
   const router = useRouter();
@@ -35,11 +36,14 @@ export function LeadDeleteButton({ leadId }: { leadId: string }) {
       <Button
         type="button"
         variant="outline"
-        size="sm"
-        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+        size="icon"
+        className="h-9 w-9 text-destructive hover:bg-destructive/10 hover:text-destructive"
+        data-action="delete"
         onClick={() => setOpen(true)}
+        aria-label="Delete lead"
+        title="Delete lead"
       >
-        Delete
+        <Trash2 className="h-4 w-4" />
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-sm">

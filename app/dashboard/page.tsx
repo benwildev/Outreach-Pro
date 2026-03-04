@@ -22,14 +22,25 @@ import { AddLeadDialog } from "./AddLeadDialog";
 import { ImportLeadsDialog } from "./ImportLeadsDialog";
 import { LeadSendButton } from "./LeadSendButton";
 import { LeadFollowupButton } from "./LeadFollowupButton";
+import { LeadCheckReplyButton } from "./LeadCheckReplyButton";
 import { LeadEditButton } from "./LeadEditButton";
 import { LeadDeleteButton } from "./LeadDeleteButton";
+import { LeadMessagePreviewButton } from "./LeadMessagePreviewButton";
 import { DashboardTabs } from "./DashboardTabs";
 import { Badge } from "@/components/ui/badge";
 import { CampaignFilter } from "./CampaignFilter";
+import { StatsCards } from "./StatsCards";
+import { Settings } from "lucide-react";
 
 const VALID_STATUSES = ["pending", "sent", "replied"] as const;
 const PAGE_SIZE = 50;
+
+type LeadRow = Awaited<ReturnType<typeof prisma.lead.findMany>>[number] & {
+  sentSubject: string | null;
+  sentBody: string | null;
+  gmailThreadId: string | null;
+  sentAt: Date | null;
+};
 
 function formatDate(date: Date | null): string {
   if (!date) return "—";
@@ -93,53 +104,92 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     where.status = status;
   }
 
-  const leads = await prisma.lead.findMany({
+  const leads = (await prisma.lead.findMany({
     where,
     orderBy: { createdAt: "desc" },
     take: PAGE_SIZE,
     include: {
       campaign: { select: { id: true, name: true, subject: true, body: true, followup1: true, followup2: true } },
     },
+  })) as LeadRow[];
+
+  // Get all leads for stats (no pagination)
+  const totalLeads = await prisma.lead.count();
+  const sentLeads = await prisma.lead.count({ where: { status: "sent" } });
+  const repliedLeads = await prisma.lead.count({ where: { status: "replied" } });
+  const pendingLeads = await prisma.lead.count({ where: { status: "pending" } });
+  
+  // Count follow-ups due
+  const followupDueLeads = await prisma.lead.findMany({
+    where: { status: "sent", nextFollowup: { lte: new Date() } },
   });
+  const followupDueCount = followupDueLeads.length;
 
   return (
-    <main className="container mx-auto max-w-6xl py-10">
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0">
-          <CardTitle>Leads Dashboard</CardTitle>
-          <div className="flex items-center gap-2">
-            <AddLeadDialog campaigns={campaigns} />
-            <ImportLeadsDialog campaigns={campaigns} />
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/dashboard/campaigns">Manage Campaigns</Link>
-            </Button>
+    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-8 px-4">
+      <div className="container mx-auto max-w-7xl">
+        {/* Header */}
+        <div className="mb-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold text-gray-900">Leads Dashboard</h1>
+              <p className="text-gray-600 mt-1">Manage and track your outreach campaigns</p>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <AddLeadDialog campaigns={campaigns} />
+              <ImportLeadsDialog campaigns={campaigns} />
+              <Button variant="outline" size="sm" asChild className="gap-2">
+                <Link href="/dashboard/campaigns">
+                  <Settings className="w-4 h-4" />
+                  Manage Campaigns
+                </Link>
+              </Button>
+            </div>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="flex flex-wrap items-center gap-4">
-            <DashboardTabs currentStatus={status} filter={filter} />
-            <CampaignFilter campaigns={campaigns} currentCampaignId={campaignId} />
-          </div>
-          <div className="rounded-md border">
-            <Table>
+        </div>
+
+        {/* Stats Cards */}
+        <StatsCards
+          totalLeads={totalLeads}
+          sentLeads={sentLeads}
+          repliedLeads={repliedLeads}
+          pendingLeads={pendingLeads}
+          followupDueCount={followupDueCount}
+        />
+
+        {/* Main Content Card */}
+        <Card className="border-0 shadow-lg">
+          <CardHeader className="border-b border-gray-100 bg-gradient-to-r from-slate-50 to-blue-50">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <CardTitle className="text-xl">Leads List</CardTitle>
+              <div className="flex flex-col md:flex-row gap-3">
+                <DashboardTabs currentStatus={status} filter={filter} />
+                <CampaignFilter campaigns={campaigns} currentCampaignId={campaignId} />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <Table className="min-w-[1400px]">
               <TableHeader>
-                <TableRow>
-                  <TableHead>Campaign</TableHead>
-                  <TableHead>Recipient Name</TableHead>
-                  <TableHead>Recipient Email</TableHead>
-                  <TableHead>Website</TableHead>
-                  <TableHead>Niche</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Sent At</TableHead>
-                  <TableHead>Created At</TableHead>
-                  <TableHead className="w-[280px]">Actions</TableHead>
+                <TableRow className="border-b border-gray-200 bg-gray-50 hover:bg-gray-50">
+                  <TableHead className="font-semibold text-gray-700">Campaign</TableHead>
+                  <TableHead className="font-semibold text-gray-700">Recipient Name</TableHead>
+                  <TableHead className="font-semibold text-gray-700">Recipient Email</TableHead>
+                  <TableHead className="font-semibold text-gray-700">Website</TableHead>
+                  <TableHead className="font-semibold text-gray-700">Niche</TableHead>
+                  <TableHead className="font-semibold text-gray-700">Status</TableHead>
+                  <TableHead className="font-semibold text-gray-700">Thread ID</TableHead>
+                  <TableHead className="font-semibold text-gray-700">Mail Data</TableHead>
+                  <TableHead className="font-semibold text-gray-700">Sent At</TableHead>
+                  <TableHead className="font-semibold text-gray-700">Created At</TableHead>
+                  <TableHead className="w-[280px] font-semibold text-gray-700">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {leads.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={9}
+                      colSpan={12}
                       className="h-24 text-center text-muted-foreground"
                     >
                       No leads found.
@@ -149,10 +199,15 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                   leads.map((lead) => (
                     <TableRow
                       key={lead.id}
+                      data-lead-id={lead.id}
                       data-campaign-body={lead.campaign.body ?? ""}
                       data-campaign-subject={lead.campaign.subject ?? ""}
+                      data-followup1={lead.campaign.followup1 ?? ""}
+                      data-followup2={lead.campaign.followup2 ?? ""}
+                      data-gmail-thread-id={lead.gmailThreadId ?? ""}
+                      className="border-b border-gray-100 hover:bg-blue-50 transition-colors duration-150"
                     >
-                      <TableCell className="font-medium">
+                      <TableCell className="font-medium whitespace-nowrap">
                         <Link
                           href={`/dashboard/campaigns/${lead.campaign.id}`}
                           className="text-primary underline-offset-4 hover:underline"
@@ -160,10 +215,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                           {lead.campaign.name}
                         </Link>
                       </TableCell>
-                      <TableCell className="font-medium">
+                      <TableCell className="font-medium whitespace-nowrap">
                         {lead.recipientName}
                       </TableCell>
-                      <TableCell>{lead.recipientEmail}</TableCell>
+                      <TableCell className="whitespace-nowrap">{lead.recipientEmail}</TableCell>
                       <TableCell className="max-w-[120px] truncate text-xs text-muted-foreground" title={lead.websiteUrl ?? undefined}>
                         {lead.websiteUrl || "—"}
                       </TableCell>
@@ -191,10 +246,21 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>{formatDate(lead.sentAt)}</TableCell>
-                      <TableCell>{formatDate(lead.createdAt)}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2 flex-wrap">
+                      <TableCell className="max-w-[120px] truncate text-xs font-mono whitespace-nowrap" title={lead.gmailThreadId ?? undefined}>
+                        {lead.gmailThreadId ? `${lead.gmailThreadId.substring(0, 12)}...` : "—"}
+                      </TableCell>
+                      <TableCell className="min-w-[120px] text-center">
+                        <div className="flex items-center justify-center">
+                          <LeadMessagePreviewButton
+                            subject={lead.sentSubject}
+                            body={lead.sentBody}
+                          />
+                        </div>
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">{formatDate(lead.sentAt)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{formatDate(lead.createdAt)}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        <div className="flex items-center gap-2 whitespace-nowrap">
                           <LeadSendButton leadId={lead.id} status={lead.status} />
                           <LeadFollowupButton
                             leadId={lead.id}
@@ -203,6 +269,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                             nextFollowup={lead.nextFollowup}
                             followup1={lead.campaign.followup1}
                             followup2={lead.campaign.followup2}
+                          />
+                          <LeadCheckReplyButton
+                            leadId={lead.id}
+                            status={lead.status}
+                            threadId={lead.gmailThreadId}
+                            recipientEmail={lead.recipientEmail}
                           />
                           <LeadEditButton
                             lead={{
@@ -223,9 +295,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                 )}
               </TableBody>
             </Table>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </main>
   );
 }

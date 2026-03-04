@@ -1,3 +1,0 @@
--- AlterTable
-ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "websiteUrl" TEXT;
-ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "niche" TEXT;

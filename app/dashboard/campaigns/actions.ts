@@ -14,8 +14,8 @@ export async function createCampaign(formData: FormData) {
   const body = trim(formData.get("body") as string | null);
   const followup1 = trim(formData.get("followup1") as string | null) || null;
   const followup2 = trim(formData.get("followup2") as string | null) || null;
-  const delay1Days = parseInt(String(formData.get("delay1Days") ?? "3"), 10) || 3;
-  const delay2Days = parseInt(String(formData.get("delay2Days") ?? "5"), 10) || 5;
+  const delay1Days = (() => { const d = parseInt(String(formData.get("delay1Days") ?? "3"), 10); return Number.isNaN(d) || d < 0 ? 3 : d; })();
+  const delay2Days = (() => { const d = parseInt(String(formData.get("delay2Days") ?? "5"), 10); return Number.isNaN(d) || d < 0 ? 5 : d; })();
 
   if (!name || !subject || !body) {
     throw new Error("Name, subject, and body are required.");
@@ -43,8 +43,8 @@ export async function updateCampaign(id: string, formData: FormData) {
   const body = trim(formData.get("body") as string | null);
   const followup1 = trim(formData.get("followup1") as string | null) || null;
   const followup2 = trim(formData.get("followup2") as string | null) || null;
-  const delay1Days = parseInt(String(formData.get("delay1Days") ?? "3"), 10) || 3;
-  const delay2Days = parseInt(String(formData.get("delay2Days") ?? "5"), 10) || 5;
+  const delay1Days = (() => { const d = parseInt(String(formData.get("delay1Days") ?? "3"), 10); return Number.isNaN(d) || d < 0 ? 3 : d; })();
+  const delay2Days = (() => { const d = parseInt(String(formData.get("delay2Days") ?? "5"), 10); return Number.isNaN(d) || d < 0 ? 5 : d; })();
 
   if (!name || !subject || !body) {
     throw new Error("Name, subject, and body are required.");

@@ -68,23 +68,23 @@ export default function NewCampaignPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="delay1Days">Delay 1 (days)</Label>
+                <Label htmlFor="delay1Days">Delay 1 (days, 0 = due immediately for testing)</Label>
                 <Input
                   id="delay1Days"
                   name="delay1Days"
                   type="number"
-                  min={1}
+                  min={0}
                   defaultValue={3}
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="delay2Days">Delay 2 (days)</Label>
+                <Label htmlFor="delay2Days">Delay 2 (days, 0 = due immediately for testing)</Label>
                 <Input
                   id="delay2Days"
                   name="delay2Days"
                   type="number"
-                  min={1}
+                  min={0}
                   defaultValue={5}
                   required
                 />

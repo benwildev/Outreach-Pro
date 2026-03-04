@@ -43,6 +43,31 @@ To support `https://yourdomain.com/dashboard`, ensure the dashboard URL is cover
 - **ChatGPT / Gmail**: DevTools on the ChatGPT or Gmail tab; logs prefixed `[Leads Extension ChatGPT]` or `[Leads Extension Gmail]`.
 - **Background**: `chrome://extensions/` → your extension → **Service worker** → Inspect; logs and errors appear there.
 
+## Common gotcha
+
+## Custom Signature Fallback
+
+If Gmail's native signature is not detected in compose, the extension can append a stored fallback signature.
+
+Set it once from any page DevTools console:
+
+```js
+chrome.runtime.sendMessage({
+  action: "setCustomSignature",
+  data: {
+    customSignature: "--\nDavid Tully\nMarket Analyst\nRE/MAX"
+  }
+});
+```
+
+Read current value:
+
+```js
+chrome.runtime.sendMessage({ action: "getCustomSignature" }, console.log);
+```
+
+If you reload the extension in `chrome://extensions/`, also refresh any already-open dashboard, ChatGPT, or Gmail tabs. Chrome does not replace old injected content scripts in tabs that stay open, so an old dashboard script can throw `Cannot read properties of undefined (reading 'sendMessage')` until the tab is refreshed.
+
 ## Files
 
 | File | Role |

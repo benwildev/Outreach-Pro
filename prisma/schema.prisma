@@ -33,6 +33,8 @@ model Lead {
   step            Int       @default(1)
   replied         Boolean   @default(false)
   sentAt          DateTime?
+  sentSubject     String?   // Subject line that was actually sent (captured from extension)
+  sentBody        String?   // Email body that was actually sent (captured from extension)
   nextFollowup    DateTime?
   gmailThreadId   String?   // Set when sending via Gmail API; used for reply-in-thread and reply detection
   opened          Boolean   @default(false)

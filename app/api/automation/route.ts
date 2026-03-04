@@ -29,6 +29,7 @@ export async function GET(request: Request) {
   });
 
   for (const lead of leads) {
+    const followupSentAt = new Date();
     let body = "";
     let nextDelay: number | null = null;
 
@@ -75,8 +76,9 @@ export async function GET(request: Request) {
       where: { id: lead.id },
       data: {
         step: lead.step + 1,
+        sentAt: followupSentAt,
         nextFollowup: nextDelay != null
-          ? new Date(Date.now() + nextDelay * 86400000)
+          ? new Date(followupSentAt.getTime() + nextDelay * 86400000)
           : null,
       },
     });

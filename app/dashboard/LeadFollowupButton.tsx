@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { sendFollowup } from "./followupActions";
+import { Clock3, CornerUpLeft, Loader2 } from "lucide-react";
 
 interface LeadFollowupButtonProps {
   leadId: string;
@@ -53,20 +54,34 @@ export function LeadFollowupButton({
 
   if (!isDue) {
     return (
-      <Button size="sm" variant="outline" disabled>
-        Not Due
+      <Button
+        type="button"
+        size="icon"
+        variant="outline"
+        className="h-9 w-9"
+        data-action="followup"
+        disabled
+        aria-label="Follow-up not due"
+        title="Follow-up not due"
+      >
+        <Clock3 className="h-4 w-4" />
       </Button>
     );
   }
 
   return (
     <Button
-      size="sm"
+      type="button"
+      size="icon"
       variant="outline"
+      className="h-9 w-9"
+      data-action="followup"
       onClick={handleFollowup}
       disabled={loading}
+      aria-label="Send follow-up"
+      title="Send follow-up"
     >
-      {loading ? "..." : "Send Follow-up"}
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CornerUpLeft className="h-4 w-4" />}
     </Button>
   );
 }

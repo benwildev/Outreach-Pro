@@ -5,17 +5,29 @@
  */
 
 var HUMAN_TONE_INSTRUCTION =
-  "\n\nStyle: Write like a real person, not AI. Use short, clear sentences. Do not use em-dashes (—); use commas or full stops instead. Keep the tone conversational and natural. Avoid stiff or overly formal phrasing.";
+  "\n\nStyle: Write like a real person, not AI. Use short, clear sentences. Do not use em-dashes (—); use commas or full stops instead. Keep the tone conversational and natural. Avoid stiff or overly formal phrasing. Avoid generic flattery, avoid sounding salesy, and avoid lines that feel copied from a template.";
 
 var EMAIL_STRUCTURE_INSTRUCTION =
   "\n\nStructure the email exactly like a human would:\n" +
-  "- Start with a short greeting (Hi [Name],).\n" +
-  "- One or two short intro paragraphs: who you are and why you're reaching out, then why this platform is a good fit.\n" +
-  "- A clear transition line before the list, e.g. \"Here are three topic ideas that...\" or \"Here are a few angles I can cover:\".\n" +
+  "- Start with a short greeting using the recipient's real first name.\n" +
+  "- Skip filler like \"I hope you are doing well\" unless there is a specific reason.\n" +
+  "- One or two short intro paragraphs: who you are and the concrete reason you're reaching out.\n" +
+  "- Mention one specific fit point tied to the recipient's site, niche, or audience. If you do not know one, keep it neutral instead of inventing details.\n" +
+  "- A clear transition line before the list, e.g. \"A few angles that may fit your audience:\".\n" +
   "- A bullet list (3 items), each one line and specific. Use a single dash or bullet character (- or •) at the start of each list item.\n" +
-  "- A short closing line offering next steps, e.g. \"If any of these sound like a good fit, I'd be happy to send over an outline.\"\n" +
-  "- Then: \"Thank you for your time. I'd love to collaborate!\"\n" +
-  "- Sign off with \"Best regards,\" followed by a name or signature line.";
+  "- A short closing line offering next steps, e.g. \"If any of these are a fit, I can send over an outline.\"\n" +
+  "- Then a simple thank-you line.\n" +
+  "- Sign off with \"Best,\" or \"Best regards,\" followed by a simple signature line.\n" +
+  "- Do not use placeholders such as [Your Name], {{topic}}, [Company Name], or bracketed template text anywhere in the final email.";
+
+var ANTI_AI_PHRASES_INSTRUCTION =
+  "\n\nAvoid these phrases unless the user explicitly wrote them in the campaign template:\n" +
+  "- I hope you are doing well\n" +
+  "- I have been reading through your site\n" +
+  "- It is clear you focus on real value\n" +
+  "- I would love to collaborate\n" +
+  "- genuinely helps your audience\n" +
+  "- well researched guest article";
 
 function buildPrompt(data) {
   const campaignBody = (data.campaignBody || "").trim();
@@ -45,6 +57,7 @@ function buildPromptFromCampaignBody(data, template) {
   prompt += "\n\nRecipient Name: " + name + "\nRecipient Email: " + email;
   prompt += HUMAN_TONE_INSTRUCTION;
   prompt += EMAIL_STRUCTURE_INSTRUCTION;
+  prompt += ANTI_AI_PHRASES_INSTRUCTION;
   prompt += "\n\nReturn output EXACTLY in this format:\n\nSubject: <single line subject>\nBody:\n<email body only>";
   return prompt;
 }
@@ -61,6 +74,7 @@ function buildColdOutreachPrompt(data) {
     "Recipient Name: " + name + "\nRecipient Email: " + email + "\nCampaign: " + campaign + "\nWebsite: " + website + "\nStep: " + step +
     HUMAN_TONE_INSTRUCTION +
     EMAIL_STRUCTURE_INSTRUCTION +
+    ANTI_AI_PHRASES_INSTRUCTION +
     "\n\nReturn output EXACTLY in this format:\n\nSubject: <single line subject>\nBody:\n<email body only>"
   );
 }
@@ -75,9 +89,10 @@ function buildGuestPostPrompt(data) {
   return (
     "Deeply browse this website: " + websiteUrl + " and write a short and personalized guest post request focusing on " + niche + ".\n\n" +
     "Recipient Name: " + name + "\nRecipient Email: " + email + "\n\n" +
-    "Suggest two subject lines and 3 content topics; include them in the email. Use bullet points for the topics.\n" +
+    "Suggest one subject line and 3 content topics; include them in the email. Use bullet points for the topics.\n" +
     HUMAN_TONE_INSTRUCTION +
     EMAIL_STRUCTURE_INSTRUCTION +
+    ANTI_AI_PHRASES_INSTRUCTION +
     "\n\nReturn output EXACTLY in this format:\n\nSubject: <single line subject>\nBody:\n<email body only>"
   );
 }
@@ -96,6 +111,44 @@ function parseEmailResponse(text) {
   const bodyMatch = trimmed.match(/Body:\s*([\s\S]*)/im);
   const body = bodyMatch ? bodyMatch[1].trim() : "";
   return { subject, body };
+}
+
+function cleanEmailBody(text, data) {
+  if (!text || typeof text !== "string") {
+    return "";
+  }
+
+  const recipientName = (data && data.recipientName ? String(data.recipientName) : "").trim();
+  const firstName = recipientName.split(/\s+/)[0] || "there";
+
+  let cleaned = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+  cleaned = cleaned.replace(/\[Your Name\]|\[YourCompany\]|\[Company Name\]/gi, "");
+  cleaned = cleaned.replace(/\{\{[^}]+\}\}/g, "");
+  cleaned = cleaned.replace(/\[[^[\]]+\]/g, function(match) {
+    if (/^\[(?:your name|yourcompany|company name)\]$/i.test(match)) {
+      return "";
+    }
+    return match;
+  });
+
+  cleaned = cleaned.replace(/^Hi\s+[^,\n]+,/im, "Hi " + firstName + ",");
+  cleaned = cleaned.replace(/^Hello\s+[^,\n]+,/im, "Hi " + firstName + ",");
+
+  cleaned = cleaned.replace(/\bI hope you are doing well\.?\s*/i, "");
+  cleaned = cleaned.replace(/\bI have been reading through your site and really enjoyed the way you break down complex topics into practical advice\.?\s*/i, "");
+  cleaned = cleaned.replace(/\bIt is clear you focus on real value for your readers\.?\s*/i, "");
+  cleaned = cleaned.replace(/\bI'd love to collaborate!?\s*/i, "Thanks for your time.\n");
+
+  cleaned = cleaned
+    .split("\n")
+    .map(function(line) {
+      return line.replace(/[ \t]+$/g, "");
+    })
+    .join("\n");
+
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
+  return cleaned;
 }
 
 function delay(ms) {

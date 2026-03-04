@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { EditLeadDialog } from "./EditLeadDialog";
+import { Pencil } from "lucide-react";
 
 type Campaign = { id: string; name: string };
 
@@ -26,8 +27,17 @@ export function LeadEditButton({
 
   return (
     <>
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
-        Edit
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className="h-9 w-9"
+        data-action="edit"
+        onClick={() => setOpen(true)}
+        aria-label="Edit lead"
+        title="Edit lead"
+      >
+        <Pencil className="h-4 w-4" />
       </Button>
       <EditLeadDialog
         lead={lead}

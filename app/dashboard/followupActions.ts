@@ -33,6 +33,7 @@ export async function sendFollowup(leadId: string): Promise<SendFollowupResult> 
   }
 
   const { campaign } = lead;
+  const followupSentAt = new Date();
   let body: string;
   let stepUpdate: number;
   let nextFollowupUpdate: Date | null;
@@ -44,7 +45,7 @@ export async function sendFollowup(leadId: string): Promise<SendFollowupResult> 
     }
     stepUpdate = 2;
     const delay2Ms = (campaign.delay2Days ?? 3) * 24 * 60 * 60 * 1000;
-    nextFollowupUpdate = new Date(Date.now() + delay2Ms);
+    nextFollowupUpdate = new Date(followupSentAt.getTime() + delay2Ms);
   } else if (lead.step === 2) {
     body = (campaign.followup2 ?? "").trim();
     if (!body) {
@@ -94,6 +95,7 @@ export async function sendFollowup(leadId: string): Promise<SendFollowupResult> 
     where: { id: leadId },
     data: {
       step: stepUpdate,
+      sentAt: followupSentAt,
       nextFollowup: nextFollowupUpdate,
     },
   });
