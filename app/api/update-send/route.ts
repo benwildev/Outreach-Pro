@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { leadId, subject, body: emailBody, threadId, recipientEmail } = body;
+    const { leadId, subject, body: emailBody, threadId, recipientEmail, sentGmailAuthUser } = body;
 
     if (!leadId) {
       return NextResponse.json(
@@ -14,7 +14,9 @@ export async function POST(request: Request) {
     }
 
     // Log the email details for debugging
-    console.log(`[Email Sent] Lead: ${leadId} | Recipient: ${recipientEmail} | ThreadId: ${threadId}`);
+    console.log(
+      `[Email Sent] Lead: ${leadId} | Recipient: ${recipientEmail} | ThreadId: ${threadId} | AuthUser: ${sentGmailAuthUser ?? ""}`
+    );
     if (subject) console.log(`[Email Subject] ${subject}`);
     if (emailBody) console.log(`[Email Body Preview] ${emailBody.substring(0, 100)}...`);
 
@@ -43,6 +45,7 @@ export async function POST(request: Request) {
         sentAt: new Date(),
         nextFollowup: new Date(Date.now() + delay1Ms),
         ...(threadId ? { gmailThreadId: threadId } : {}),
+        ...(sentGmailAuthUser ? { sentGmailAuthUser: String(sentGmailAuthUser).trim() } : {}),
         ...(subject ? { sentSubject: subject } : {}),
         ...(emailBody ? { sentBody: emailBody } : {}),
       },

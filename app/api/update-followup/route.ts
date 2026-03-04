@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { leadId } = body;
+    const { leadId, sentGmailAuthUser } = body;
 
     if (!leadId) {
       return NextResponse.json(
@@ -60,6 +60,7 @@ export async function POST(request: Request) {
         step: stepUpdate,
         sentAt: followupSentAt,
         nextFollowup: nextFollowupUpdate,
+        ...(sentGmailAuthUser ? { sentGmailAuthUser: String(sentGmailAuthUser).trim() } : {}),
       },
     });
 

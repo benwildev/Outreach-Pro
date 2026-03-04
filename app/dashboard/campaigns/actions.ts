@@ -8,10 +8,67 @@ function trim(s: string | null | undefined): string {
   return s?.trim() ?? "";
 }
 
+function normalizeChatGptChatId(value: string): string {
+  const raw = trim(value);
+  if (!raw) return "";
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const url = new URL(raw);
+      const host = url.hostname.toLowerCase();
+      if (host !== "chatgpt.com" && host !== "chat.openai.com") {
+        return "";
+      }
+      const segments = url.pathname.split("/").filter(Boolean);
+      if (segments[0]?.toLowerCase() === "c" && segments[1]) {
+        return trim(segments[1]);
+      }
+      if (segments[0]?.toLowerCase() === "g" && segments[1]) {
+        return url.toString();
+      }
+      if (segments[0]?.toLowerCase() === "projects" || segments[0]?.toLowerCase() === "project") {
+        return url.toString();
+      }
+      return url.toString();
+    } catch {
+      return "";
+    }
+  }
+
+  const prefixed = raw.match(/^c\/(.+)$/i);
+  if (prefixed?.[1]) {
+    return trim(prefixed[1]);
+  }
+
+  return raw;
+}
+
+function normalizeGmailAuthUser(value: string): string {
+  const raw = trim(value);
+  if (!raw) return "";
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const url = new URL(raw);
+      const parts = url.pathname.split("/").filter(Boolean);
+      const mailIdx = parts.findIndex((p) => p.toLowerCase() === "mail");
+      if (mailIdx !== -1 && parts[mailIdx + 1]?.toLowerCase() === "u" && parts[mailIdx + 2]) {
+        return trim(parts[mailIdx + 2]);
+      }
+    } catch {
+      return "";
+    }
+  }
+
+  return raw;
+}
+
 export async function createCampaign(formData: FormData) {
   const name = trim(formData.get("name") as string | null);
   const subject = trim(formData.get("subject") as string | null);
   const body = trim(formData.get("body") as string | null);
+  const chatGptChatId = normalizeChatGptChatId(String(formData.get("chatGptChatId") ?? ""));
+  const gmailAuthUser = normalizeGmailAuthUser(String(formData.get("gmailAuthUser") ?? ""));
   const followup1 = trim(formData.get("followup1") as string | null) || null;
   const followup2 = trim(formData.get("followup2") as string | null) || null;
   const delay1Days = (() => { const d = parseInt(String(formData.get("delay1Days") ?? "3"), 10); return Number.isNaN(d) || d < 0 ? 3 : d; })();
@@ -26,6 +83,8 @@ export async function createCampaign(formData: FormData) {
       name,
       subject,
       body,
+      chatGptChatId: chatGptChatId || undefined,
+      gmailAuthUser: gmailAuthUser || undefined,
       followup1: followup1 || undefined,
       followup2: followup2 || undefined,
       delay1Days,
@@ -41,6 +100,8 @@ export async function updateCampaign(id: string, formData: FormData) {
   const name = trim(formData.get("name") as string | null);
   const subject = trim(formData.get("subject") as string | null);
   const body = trim(formData.get("body") as string | null);
+  const chatGptChatId = normalizeChatGptChatId(String(formData.get("chatGptChatId") ?? ""));
+  const gmailAuthUser = normalizeGmailAuthUser(String(formData.get("gmailAuthUser") ?? ""));
   const followup1 = trim(formData.get("followup1") as string | null) || null;
   const followup2 = trim(formData.get("followup2") as string | null) || null;
   const delay1Days = (() => { const d = parseInt(String(formData.get("delay1Days") ?? "3"), 10); return Number.isNaN(d) || d < 0 ? 3 : d; })();
@@ -56,6 +117,8 @@ export async function updateCampaign(id: string, formData: FormData) {
       name,
       subject,
       body,
+      chatGptChatId: chatGptChatId || null,
+      gmailAuthUser: gmailAuthUser || null,
       followup1: followup1 || undefined,
       followup2: followup2 || undefined,
       delay1Days,

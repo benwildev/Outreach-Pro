@@ -58,6 +58,24 @@ export default async function CampaignEditorPage({
               />
             </div>
             <div className="space-y-2">
+              <Label htmlFor="chatGptChatId">ChatGPT Chat ID or URL (optional)</Label>
+              <Input
+                id="chatGptChatId"
+                name="chatGptChatId"
+                defaultValue={campaign.chatGptChatId ?? ""}
+                placeholder="e.g. c69a83496... or https://chatgpt.com/g/.../project"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="gmailAuthUser">Gmail Auth User (optional)</Label>
+              <Input
+                id="gmailAuthUser"
+                name="gmailAuthUser"
+                defaultValue={campaign.gmailAuthUser ?? ""}
+                placeholder="e.g. 0, 1, 2 (or full Gmail URL with /mail/u/{authuser})"
+              />
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="body">Email Body</Label>
               <Textarea
                 id="body"

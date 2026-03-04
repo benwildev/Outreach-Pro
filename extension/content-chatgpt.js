@@ -20,6 +20,46 @@
   let pendingRecipientEmail = null;
   let pendingLeadId = null;
 
+  function isPromptEchoText(text) {
+    const value = String(text || "").toLowerCase();
+    if (!value) return false;
+    return (
+      value.indexOf("return output exactly in this format") !== -1 ||
+      value.indexOf("<single line subject>") !== -1 ||
+      value.indexOf("<email body only>") !== -1
+    );
+  }
+
+  function isPlaceholderOnlyValue(value, kind) {
+    const v = String(value || "").trim().toLowerCase();
+    if (!v) return false;
+    if (kind === "subject") {
+      return /^<\s*single\s+line\s+subject\s*>$/.test(v);
+    }
+    if (kind === "body") {
+      return /^<\s*email\s+body\s+only\s*>$/.test(v);
+    }
+    return false;
+  }
+
+  function templateHasSignatureBlock(template) {
+    const text = String(template || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+    if (!text) return false;
+    const lines = text.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const line = String(lines[i] || "").trim();
+      if (!/^(best|best regards|kind regards|warm regards|regards|thanks|thank you|sincerely)[,!]?$/i.test(line)) {
+        continue;
+      }
+      for (let j = i + 1; j < lines.length; j++) {
+        if (String(lines[j] || "").trim()) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message.action !== "pasteAndSend") return;
 
@@ -29,7 +69,17 @@
     const recipientName = message.recipientName;
     pendingRecipientEmail = message.recipientEmail;
     pendingLeadId = message.leadId;
-    runPasteAndSend(message.prompt, recipientName, message.recipientEmail, message.leadId)
+    const campaignBodyText = message.campaignBody || "";
+    const templateHasSignature = templateHasSignatureBlock(campaignBodyText);
+    const signatureBlock = extractTemplateSignatureBlock(campaignBodyText);
+    runPasteAndSend(
+      message.prompt,
+      recipientName,
+      message.recipientEmail,
+      message.leadId,
+      templateHasSignature,
+      signatureBlock
+    )
       .then((result) => {
         pendingPrompt = null;
         pendingRecipientEmail = null;
@@ -43,7 +93,7 @@
       });
   });
 
-  async function runPasteAndSend(prompt, recipientName, recipientEmail, leadId) {
+  async function runPasteAndSend(prompt, recipientName, recipientEmail, leadId, templateHasSignature, signatureBlock) {
     log("ChatGPT", "pasteAndSend started, prompt length:", prompt?.length, "leadId:", leadId ? "***" : "");
     const textarea = await waitForSelector('textarea[data-id="root"], textarea, [contenteditable="true"]', 20000);
     if (!textarea) {
@@ -65,11 +115,16 @@
       log("ChatGPT", "Send clicked");
     } else {
       const submitBtn = document.querySelector('form button[type="submit"]') || document.querySelector('button[type="submit"]');
-      if (submitBtn) submitBtn.click();
+      if (submitBtn) {
+        submitBtn.click();
+      } else {
+        textarea.focus();
+        textarea.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true }));
+      }
     }
     await delay(500);
 
-    const responseText = await waitForResponse(120000);
+    const responseText = await waitForResponse(240000);
     if (!responseText) return { success: false, error: "No response or timeout" };
 
     const parsed = parseEmailResponse(responseText);
@@ -81,13 +136,21 @@
       responseText ||
       "";
     const subject = fallbackSubject;
-    const body = cleanEmailBody(fallbackBody, { recipientName });
+    const body = cleanEmailBody(fallbackBody, {
+      recipientName,
+      templateHasSignature,
+      signatureBlock,
+    });
+
+    if (isPlaceholderOnlyValue(subject, "subject") || isPlaceholderOnlyValue(body, "body")) {
+      logError("ChatGPT", "Placeholder template output detected; skipping handoff to Gmail");
+      return { success: false, error: "Model returned placeholder template text" };
+    }
+
     log("ChatGPT", "Parsed subject length:", subject.length, "body length:", body.length);
     
     if (!subject || !body) {
-      logError("ChatGPT", "Failed to parse email - subject or body is empty");
-      logError("ChatGPT", "Raw response (first 500 chars):", responseText.substring(0, 500));
-      return { success: false, error: "Failed to parse ChatGPT response - no subject or body found" };
+      log("ChatGPT", "Using fallback parse result. Subject length:", subject.length, "Body length:", body.length);
     }
 
     let sentToBackground = false;
@@ -95,7 +158,7 @@
       try {
         const ack = await chrome.runtime.sendMessage({
           action: "chatgptDone",
-          data: { subject, body, recipientEmail, leadId },
+          data: { subject, body, recipientEmail, leadId, templateHasSignature: !!templateHasSignature },
         });
         sentToBackground = !!(ack && ack.success);
         if (sentToBackground) {
@@ -189,14 +252,35 @@
   }
 
   function getLastAssistantText() {
+    function sanitizeExtractedText(raw) {
+      const cleaned = String(raw || "")
+        .replace(/\r\n/g, "\n")
+        .replace(/\r/g, "\n")
+        .split("\n")
+        .filter((line) => {
+          const v = String(line || "").trim();
+          if (!v) return true;
+          if (/window\.__oai_/i.test(v)) return false;
+          if (/__oai_(?:logHTML|SSR_HTML|logTTI|SSR_TTI)/i.test(v)) return false;
+          if (/requestAnimationFrame\s*\(/i.test(v)) return false;
+          return true;
+        })
+        .join("\n")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+      return cleaned;
+    }
+
     const nodes = document.querySelectorAll('[data-message-author-role="assistant"]');
     if (nodes.length > 0) {
       const last = nodes[nodes.length - 1];
-      return (last.textContent || "").trim();
+      const visibleText = String(last.innerText || "").trim();
+      const fallbackText = String(last.textContent || "").trim();
+      return sanitizeExtractedText(visibleText || fallbackText);
     }
     const prose = document.querySelectorAll(".markdown, [class*='prose'], [class*='message'], [class*='markdown']");
     for (let i = prose.length - 1; i >= 0; i--) {
-      const t = (prose[i].textContent || "").trim();
+      const t = sanitizeExtractedText(String(prose[i].innerText || prose[i].textContent || "").trim());
       if (t.length > 30) return t;
     }
     return "";
@@ -220,11 +304,17 @@
       const interval = setInterval(() => {
         if (Date.now() - start > timeoutMs) {
           clearInterval(interval);
-          resolve(getLastAssistantText() || null);
+          const fallback = getLastAssistantText() || null;
+          resolve(isPromptEchoText(fallback) ? null : fallback);
           return;
         }
         const generating = isStillGenerating();
         const text = getLastAssistantText();
+        if (!text || isPromptEchoText(text)) {
+          stableCount = 0;
+          lastText = "";
+          return;
+        }
         const hasEmailShape = looksLikeEmailOutput(text);
         if (hasEmailShape) {
           if (text === lastText) {
@@ -306,6 +396,20 @@
         return !/^\*{0,2}(subject|body)\*{0,2}\s*[:\-]/i.test(line);
       });
       body = filtered.join("\n").trim();
+    }
+
+    if (isPromptEchoText(body)) {
+      body = body
+        .replace(/return output exactly in this format:[\s\S]*$/i, "")
+        .replace(/<\s*email body only\s*>/ig, "")
+        .trim();
+    }
+
+    if (isPlaceholderOnlyValue(subject, "subject")) {
+      subject = "";
+    }
+    if (isPlaceholderOnlyValue(body, "body")) {
+      body = "";
     }
 
     if (!subject && body) {

@@ -35,11 +35,10 @@ import { Settings } from "lucide-react";
 const VALID_STATUSES = ["pending", "sent", "replied"] as const;
 const PAGE_SIZE = 50;
 
-type LeadRow = Awaited<ReturnType<typeof prisma.lead.findMany>>[number] & {
-  sentSubject: string | null;
-  sentBody: string | null;
-  gmailThreadId: string | null;
-  sentAt: Date | null;
+type LeadRow = Prisma.LeadGetPayload<{
+  include: { campaign: true };
+}> & {
+  sentGmailAuthUser?: string | null;
 };
 
 function formatDate(date: Date | null): string {
@@ -109,7 +108,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     orderBy: { createdAt: "desc" },
     take: PAGE_SIZE,
     include: {
-      campaign: { select: { id: true, name: true, subject: true, body: true, followup1: true, followup2: true } },
+      campaign: true,
     },
   })) as LeadRow[];
 
@@ -169,20 +168,21 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <Table className="min-w-[1400px]">
+            <Table className="w-full table-fixed text-xs [&_th]:px-2 [&_th]:py-2 [&_td]:px-2 [&_td]:py-2">
               <TableHeader>
                 <TableRow className="border-b border-gray-200 bg-gray-50 hover:bg-gray-50">
-                  <TableHead className="font-semibold text-gray-700">Campaign</TableHead>
-                  <TableHead className="font-semibold text-gray-700">Recipient Name</TableHead>
-                  <TableHead className="font-semibold text-gray-700">Recipient Email</TableHead>
-                  <TableHead className="font-semibold text-gray-700">Website</TableHead>
-                  <TableHead className="font-semibold text-gray-700">Niche</TableHead>
-                  <TableHead className="font-semibold text-gray-700">Status</TableHead>
-                  <TableHead className="font-semibold text-gray-700">Thread ID</TableHead>
-                  <TableHead className="font-semibold text-gray-700">Mail Data</TableHead>
-                  <TableHead className="font-semibold text-gray-700">Sent At</TableHead>
-                  <TableHead className="font-semibold text-gray-700">Created At</TableHead>
-                  <TableHead className="w-[280px] font-semibold text-gray-700">Actions</TableHead>
+                  <TableHead className="w-[9%] font-semibold leading-tight text-gray-700">Campaign</TableHead>
+                  <TableHead className="w-[10%] font-semibold leading-tight text-gray-700">Recipient Name</TableHead>
+                  <TableHead className="w-[13%] font-semibold leading-tight text-gray-700">Recipient Email</TableHead>
+                  <TableHead className="w-[7%] font-semibold leading-tight text-gray-700">Website</TableHead>
+                  <TableHead className="w-[6%] font-semibold leading-tight text-gray-700">Niche</TableHead>
+                  <TableHead className="w-[8%] font-semibold leading-tight text-gray-700">Status</TableHead>
+                  <TableHead className="w-[9%] font-semibold leading-tight text-gray-700">Thread ID</TableHead>
+                  <TableHead className="w-[6%] font-semibold leading-tight text-gray-700">Mail Data</TableHead>
+                  <TableHead className="w-[10%] font-semibold leading-tight text-gray-700">Sent Gmail</TableHead>
+                  <TableHead className="w-[7%] font-semibold leading-tight text-gray-700">Sent At</TableHead>
+                  <TableHead className="w-[7%] font-semibold leading-tight text-gray-700">Created At</TableHead>
+                  <TableHead className="w-[8%] font-semibold leading-tight text-gray-700">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -200,6 +200,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                     <TableRow
                       key={lead.id}
                       data-lead-id={lead.id}
+                      data-campaign-id={lead.campaign.id}
+                      data-campaign-chat-id={lead.campaign.chatGptChatId ?? ""}
+                      data-campaign-gmail-auth-user={lead.campaign.gmailAuthUser ?? ""}
                       data-campaign-body={lead.campaign.body ?? ""}
                       data-campaign-subject={lead.campaign.subject ?? ""}
                       data-followup1={lead.campaign.followup1 ?? ""}
@@ -207,18 +210,18 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                       data-gmail-thread-id={lead.gmailThreadId ?? ""}
                       className="border-b border-gray-100 hover:bg-blue-50 transition-colors duration-150"
                     >
-                      <TableCell className="font-medium whitespace-nowrap">
+                      <TableCell className="font-medium break-words">
                         <Link
                           href={`/dashboard/campaigns/${lead.campaign.id}`}
-                          className="text-primary underline-offset-4 hover:underline"
+                          className="text-primary underline-offset-4 hover:underline break-words"
                         >
                           {lead.campaign.name}
                         </Link>
                       </TableCell>
-                      <TableCell className="font-medium whitespace-nowrap">
+                      <TableCell className="font-medium break-words">
                         {lead.recipientName}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">{lead.recipientEmail}</TableCell>
+                      <TableCell className="break-all">{lead.recipientEmail}</TableCell>
                       <TableCell className="max-w-[120px] truncate text-xs text-muted-foreground" title={lead.websiteUrl ?? undefined}>
                         {lead.websiteUrl || "—"}
                       </TableCell>
@@ -246,10 +249,10 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="max-w-[120px] truncate text-xs font-mono whitespace-nowrap" title={lead.gmailThreadId ?? undefined}>
+                      <TableCell className="max-w-[120px] truncate text-xs font-mono" title={lead.gmailThreadId ?? undefined}>
                         {lead.gmailThreadId ? `${lead.gmailThreadId.substring(0, 12)}...` : "—"}
                       </TableCell>
-                      <TableCell className="min-w-[120px] text-center">
+                      <TableCell className="text-center">
                         <div className="flex items-center justify-center">
                           <LeadMessagePreviewButton
                             subject={lead.sentSubject}
@@ -257,10 +260,16 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                           />
                         </div>
                       </TableCell>
+                      <TableCell
+                        className="max-w-[140px] truncate whitespace-nowrap font-mono text-[11px]"
+                        title={lead.sentGmailAuthUser ?? undefined}
+                      >
+                        {lead.sentGmailAuthUser || "—"}
+                      </TableCell>
                       <TableCell className="whitespace-nowrap">{formatDate(lead.sentAt)}</TableCell>
                       <TableCell className="whitespace-nowrap">{formatDate(lead.createdAt)}</TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        <div className="flex items-center gap-2 whitespace-nowrap">
+                      <TableCell>
+                        <div className="flex flex-wrap items-center gap-1">
                           <LeadSendButton leadId={lead.id} status={lead.status} />
                           <LeadFollowupButton
                             leadId={lead.id}

@@ -12,6 +12,8 @@ model Campaign {
   name        String
   subject     String
   body        String
+  chatGptChatId String?
+  gmailAuthUser String?
   followup1   String?
   followup2   String?
   delay1Days  Int      @default(3)
@@ -33,6 +35,7 @@ model Lead {
   step            Int       @default(1)
   replied         Boolean   @default(false)
   sentAt          DateTime?
+  sentGmailAuthUser String?
   sentSubject     String?   // Subject line that was actually sent (captured from extension)
   sentBody        String?   // Email body that was actually sent (captured from extension)
   nextFollowup    DateTime?

@@ -16,19 +16,24 @@ export async function GET(request: Request) {
           { gmailThreadId: { not: "" } },
         ],
       },
-      select: {
-        id: true,
-        recipientEmail: true,
-        gmailThreadId: true,
+      include: {
+        campaign: true,
       },
       orderBy: [{ sentAt: "desc" }, { createdAt: "desc" }],
       take: limit,
     });
 
+    const normalizedLeads = leads.map((lead) => ({
+      id: lead.id,
+      recipientEmail: lead.recipientEmail,
+      gmailThreadId: lead.gmailThreadId,
+      campaignGmailAuthUser: lead.campaign?.gmailAuthUser ?? "",
+    }));
+
     return NextResponse.json({
       success: true,
-      count: leads.length,
-      leads,
+      count: normalizedLeads.length,
+      leads: normalizedLeads,
     });
   } catch (error) {
     console.error("Error building reply-check queue:", error);

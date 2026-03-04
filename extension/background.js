@@ -15,7 +15,8 @@ const EMAIL_STRUCTURE_INSTRUCTION =
   "- A bullet list (3 items), each one line and specific. Use a single dash or bullet character (- or •) at the start of each list item.\n" +
   "- A short closing line offering next steps, e.g. \"If any of these are a fit, I can send over an outline.\"\n" +
   "- Then a simple thank-you line.\n" +
-  "- Sign off with \"Best,\" or \"Best regards,\" followed by a simple signature line.\n" +
+  "- End with \"Best regards,\" only.\n" +
+  "- Do not add any sender name or signature line unless that exact line already exists in the campaign template.\n" +
   "- Do not use placeholders such as [Your Name], {{topic}}, [Company Name], or bracketed template text anywhere in the final email.";
 
 const ANTI_AI_PHRASES_INSTRUCTION =
@@ -27,11 +28,15 @@ const ANTI_AI_PHRASES_INSTRUCTION =
   "- genuinely helps your audience\n" +
   "- well researched guest article";
 
-// Keep extension automation from stealing focus while user is working.
-const RUN_TABS_IN_BACKGROUND = true;
+// Reliability-first mode: keep automation tabs active so ChatGPT/Gmail UIs initialize fully.
+const RUN_TABS_IN_BACKGROUND = false;
 const REPLY_CHECK_ALARM = "dailyReplyCheck";
 const REPLY_CHECK_PERIOD_MINUTES = 24 * 60;
+const CHATGPT_HANDOFF_TIMEOUT_MS = 90000;
+const CHATGPT_DEFAULT_URL = "https://chatgpt.com/";
+const CAMPAIGN_CHAT_URLS_KEY = "campaignChatUrls";
 let replySweepRunning = false;
+const pendingWorkflows = new Map();
 
 chrome.runtime.onInstalled.addListener(() => {
   ensureReplyCheckAlarm().catch((err) => {
@@ -144,11 +149,78 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true;
   }
+  if (message.action === "setCampaignChatUrl") {
+    handleSetCampaignChatUrl(message.data)
+      .then(sendResponse)
+      .catch((err) => {
+        console.error("[Leads Extension Background]", err);
+        sendResponse({ success: false, error: String(err.message) });
+      });
+    return true;
+  }
+  if (message.action === "getCampaignChatUrl") {
+    handleGetCampaignChatUrl(message.data)
+      .then(sendResponse)
+      .catch((err) => {
+        console.error("[Leads Extension Background]", err);
+        sendResponse({ success: false, error: String(err.message) });
+      });
+    return true;
+  }
 });
 
 async function handleStartWorkflow(data) {
   const prompt = buildPrompt(data);
-  const tab = await chrome.tabs.create({ url: "https://chatgpt.com/", active: !RUN_TABS_IN_BACKGROUND });
+  const campaignId = data && data.campaignId ? String(data.campaignId).trim() : "";
+  const campaignChatRaw = data && data.campaignChatId ? String(data.campaignChatId) : "";
+  const campaignChatUrl = resolveCampaignChatUrl(campaignChatRaw);
+
+  let mappedChatUrl = campaignChatUrl || "";
+  if (!mappedChatUrl) {
+    mappedChatUrl = await getCampaignChatUrl(campaignId);
+  }
+  if (!mappedChatUrl) {
+    const recentChatUrl = await findMostRecentOpenChatUrl();
+    if (recentChatUrl) {
+      mappedChatUrl = recentChatUrl;
+      if (campaignId) {
+        const save = await setCampaignChatUrl(campaignId, recentChatUrl);
+        if (save && save.success) {
+          console.log("[Leads Extension] Initial campaign mapping set from recent chat tab:", campaignId, recentChatUrl);
+        }
+      }
+    }
+  }
+  const chatUrlToOpen = mappedChatUrl || CHATGPT_DEFAULT_URL;
+  const tab = await chrome.tabs.create({ url: chatUrlToOpen, active: !RUN_TABS_IN_BACKGROUND });
+  if (campaignId && campaignChatUrl && mappedChatUrl) {
+    const save = await setCampaignChatUrl(campaignId, mappedChatUrl);
+    if (save && save.success) {
+      console.log("[Leads Extension] Campaign mapped from configured chat target:", campaignId, mappedChatUrl);
+    }
+  }
+  if (mappedChatUrl) {
+    console.log("[Leads Extension] Using mapped ChatGPT URL for campaign:", campaignId, mappedChatUrl);
+  }
+  console.log("[Leads Extension] Workflow started for lead:", data && data.leadId ? data.leadId : "(no lead id)");
+  const workflowKey = getWorkflowKey(data);
+  pendingWorkflows.set(workflowKey, {
+    data: data,
+    chatTabId: tab.id,
+    startedAt: Date.now(),
+    completed: false,
+  });
+  setTimeout(() => {
+    const pending = pendingWorkflows.get(workflowKey);
+    if (!pending || pending.completed) {
+      return;
+    }
+    pending.completed = true;
+    pendingWorkflows.set(workflowKey, pending);
+    openGmailFromFallback(pending.data, pending.chatTabId).catch((err) => {
+      console.error("[Leads Extension] Fallback Gmail open failed:", err);
+    });
+  }, CHATGPT_HANDOFF_TIMEOUT_MS);
   await waitForTabReady(tab.id);
   await delay(2500);
   const sent = await sendMessageToTabWithRetry(tab.id, {
@@ -157,25 +229,56 @@ async function handleStartWorkflow(data) {
     recipientName: data.recipientName,
     recipientEmail: data.recipientEmail,
     leadId: data.leadId,
+    campaignBody: data.campaignBody || "",
   }, 5, 700);
   if (!sent) {
-    console.error("[Leads Extension] Send message to ChatGPT tab failed after retries");
+    console.error("[Leads Extension] Send message to ChatGPT tab failed after retries (tab:", tab.id, ")");
   }
   return { success: true, tabId: tab.id };
 }
 
 async function handleChatGptDone(data, chatTabId) {
-  const { subject, body, recipientEmail, leadId } = data;
+  const { subject, body, recipientEmail, leadId, templateHasSignature } = data;
+  const workflowKey = getWorkflowKey({ leadId, recipientEmail });
+  const pending = pendingWorkflows.get(workflowKey);
+  const campaignGmailAuthUser =
+    pending && pending.data && pending.data.campaignGmailAuthUser
+      ? String(pending.data.campaignGmailAuthUser).trim()
+      : "";
+  const campaignId =
+    pending && pending.data && pending.data.campaignId
+      ? String(pending.data.campaignId).trim()
+      : "";
+
+  if (campaignId && chatTabId) {
+    await captureCampaignChatUrlFromTab(campaignId, chatTabId);
+  }
+
+  if (pending && pending.completed) {
+    if (chatTabId) {
+      try {
+        await chrome.tabs.remove(chatTabId);
+      } catch (_) {
+        // Ignore if already closed.
+      }
+    }
+    return { success: true, skipped: true, reason: "already-processed-by-fallback" };
+  }
+  if (pending) {
+    pending.completed = true;
+    pendingWorkflows.set(workflowKey, pending);
+  }
   const customSignature = await getCustomSignatureSetting();
   const encodedTo = encodeURIComponent(recipientEmail || "");
   const encodedSu = encodeURIComponent(subject || "");
+  const gmailBaseUrl = getGmailBaseUrl(campaignGmailAuthUser);
   // Open Gmail compose in the normal inbox context so Gmail does not exit a standalone compose route after send.
   // Do NOT put body in URL - it gets truncated. Content script will fill body.
-  const gmailUrl = `https://mail.google.com/mail/u/0/#inbox?compose=new&to=${encodedTo}&su=${encodedSu}`;
+  const gmailUrl = `${gmailBaseUrl}/#inbox?compose=new&to=${encodedTo}&su=${encodedSu}`;
   const tab = await chrome.tabs.create({ url: gmailUrl, active: !RUN_TABS_IN_BACKGROUND });
   await waitForTabReady(tab.id);
   await delay(2000);
-  const sentToGmail = await sendMessageToTabWithRetry(tab.id, {
+  let sentToGmail = await sendMessageToTabWithRetry(tab.id, {
     action: "fillAndSend",
     data: {
       to: recipientEmail || "",
@@ -183,12 +286,37 @@ async function handleChatGptDone(data, chatTabId) {
       body: body || "",
       customSignature: customSignature || "",
       leadId: leadId || "",
+      expectedGmailAuthUser: normalizeGmailAuthUser(campaignGmailAuthUser || ""),
+      templateHasSignature: !!templateHasSignature,
       isFollowup: false,
       autoSend: true,
     },
   }, 7, 900);
   if (!sentToGmail) {
-    console.error("[Leads Extension] Send message to Gmail tab failed after retries");
+    console.warn("[Leads Extension] Initial Gmail handoff failed, forcing active tab retry:", tab.id);
+    try {
+      await chrome.tabs.update(tab.id, { active: true });
+      await delay(1200);
+    } catch (_) {
+      // Ignore and retry anyway.
+    }
+    sentToGmail = await sendMessageToTabWithRetry(tab.id, {
+      action: "fillAndSend",
+      data: {
+        to: recipientEmail || "",
+        subject: subject || "",
+        body: body || "",
+        customSignature: customSignature || "",
+        leadId: leadId || "",
+        expectedGmailAuthUser: normalizeGmailAuthUser(campaignGmailAuthUser || ""),
+        templateHasSignature: !!templateHasSignature,
+        isFollowup: false,
+        autoSend: true,
+      },
+    }, 10, 1000);
+    if (!sentToGmail) {
+      console.error("[Leads Extension] Send message to Gmail tab failed after active retry (tab:", tab.id, ")");
+    }
   }
   if (chatTabId) {
     try {
@@ -200,21 +328,310 @@ async function handleChatGptDone(data, chatTabId) {
   return { success: true };
 }
 
-async function handleStartFollowupWorkflow(data) {
-  const { to, subject, body, leadId, threadId } = data;
+function getWorkflowKey(data) {
+  const leadId = data && data.leadId ? String(data.leadId).trim() : "";
+  if (leadId) return "lead:" + leadId;
+  const recipientEmail = data && data.recipientEmail ? String(data.recipientEmail).trim().toLowerCase() : "";
+  if (recipientEmail) return "email:" + recipientEmail;
+  return "unknown:" + Date.now();
+}
+
+function normalizeGmailAuthUser(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "0";
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      if (String(parsed.hostname || "").toLowerCase() !== "mail.google.com") {
+        return "0";
+      }
+      const parts = parsed.pathname.split("/").filter(Boolean);
+      const mailIdx = parts.findIndex((p) => p.toLowerCase() === "mail");
+      if (mailIdx !== -1 && parts[mailIdx + 1]?.toLowerCase() === "u" && parts[mailIdx + 2]) {
+        return String(parts[mailIdx + 2]).trim() || "0";
+      }
+    } catch (_) {
+      return "0";
+    }
+  }
+
+  return raw;
+}
+
+function getGmailBaseUrl(authUserValue) {
+  const authUser = normalizeGmailAuthUser(authUserValue);
+  return "https://mail.google.com/mail/u/" + encodeURIComponent(authUser);
+}
+
+function normalizeChatGptUrl(rawUrl) {
+  const value = String(rawUrl || "").trim();
+  if (!value) return "";
+  try {
+    const parsed = new URL(value);
+    const host = String(parsed.hostname || "").toLowerCase();
+    if (parsed.protocol !== "https:") return "";
+    if (host !== "chatgpt.com" && host !== "chat.openai.com") return "";
+    return parsed.toString();
+  } catch (_) {
+    return "";
+  }
+}
+
+function normalizeCampaignChatId(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  if (/^https?:\/\//i.test(raw)) {
+    try {
+      const parsed = new URL(raw);
+      const host = String(parsed.hostname || "").toLowerCase();
+      if (host !== "chatgpt.com" && host !== "chat.openai.com") {
+        return "";
+      }
+      const segments = parsed.pathname.split("/").filter(Boolean);
+      if (segments[0] && segments[0].toLowerCase() === "c" && segments[1]) {
+        return String(segments[1]).trim();
+      }
+      return "";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  const prefixed = raw.match(/^c\/(.+)$/i);
+  if (prefixed && prefixed[1]) {
+    return String(prefixed[1]).trim();
+  }
+
+  return raw;
+}
+
+function resolveCampaignChatUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+
+  // Allow direct project/chat URLs.
+  if (/^https?:\/\//i.test(raw)) {
+    const normalizedUrl = normalizeChatGptUrl(raw);
+    if (normalizedUrl && isAllocatableChatUrl(normalizedUrl)) {
+      return normalizedUrl;
+    }
+    return "";
+  }
+
+  // Allow chat id formats (c/<id> or plain id).
+  const id = normalizeCampaignChatId(raw);
+  if (!id) return "";
+  return "https://chatgpt.com/c/" + encodeURIComponent(id);
+}
+
+function isAllocatableChatUrl(url) {
+  const normalized = normalizeChatGptUrl(url);
+  if (!normalized) return false;
+  try {
+    const parsed = new URL(normalized);
+    const path = String(parsed.pathname || "").toLowerCase();
+    if (/^\/c\/[^/]+/.test(path)) return true;
+    if (/^\/g\/[^/]+/.test(path)) return true;
+    if (path === "/projects" || path === "/project" || path.indexOf("/projects/") === 0) return true;
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function getCampaignChatUrl(campaignId) {
+  const key = String(campaignId || "").trim();
+  if (!key) return "";
+  try {
+    const stored = await chrome.storage.local.get({ [CAMPAIGN_CHAT_URLS_KEY]: {} });
+    const map = stored && typeof stored[CAMPAIGN_CHAT_URLS_KEY] === "object" && stored[CAMPAIGN_CHAT_URLS_KEY]
+      ? stored[CAMPAIGN_CHAT_URLS_KEY]
+      : {};
+    const mapped = normalizeChatGptUrl(map[key] || "");
+    return mapped && isAllocatableChatUrl(mapped) ? mapped : "";
+  } catch (_) {
+    return "";
+  }
+}
+
+async function setCampaignChatUrl(campaignId, chatUrl) {
+  const key = String(campaignId || "").trim();
+  if (!key) return { success: false, error: "campaignId is required" };
+  const normalized = normalizeChatGptUrl(chatUrl);
+  if (!normalized || !isAllocatableChatUrl(normalized)) {
+    return { success: false, error: "Invalid ChatGPT chat/project URL" };
+  }
+
+  const stored = await chrome.storage.local.get({ [CAMPAIGN_CHAT_URLS_KEY]: {} });
+  const map = stored && typeof stored[CAMPAIGN_CHAT_URLS_KEY] === "object" && stored[CAMPAIGN_CHAT_URLS_KEY]
+    ? stored[CAMPAIGN_CHAT_URLS_KEY]
+    : {};
+  map[key] = normalized;
+  await chrome.storage.local.set({ [CAMPAIGN_CHAT_URLS_KEY]: map });
+  return { success: true, campaignId: key, chatUrl: normalized };
+}
+
+async function captureCampaignChatUrlFromTab(campaignId, tabId) {
+  const key = String(campaignId || "").trim();
+  if (!key || !tabId) return;
+  try {
+    const tab = await chrome.tabs.get(tabId);
+    const tabUrl = normalizeChatGptUrl(tab && tab.url ? tab.url : "");
+    if (!tabUrl || !isAllocatableChatUrl(tabUrl)) {
+      return;
+    }
+    const save = await setCampaignChatUrl(key, tabUrl);
+    if (save && save.success) {
+      console.log("[Leads Extension] Saved campaign ChatGPT mapping:", key, tabUrl);
+    }
+  } catch (_) {
+    // Ignore.
+  }
+}
+
+async function findMostRecentOpenChatUrl() {
+  try {
+    const tabs = await chrome.tabs.query({});
+    let best = null;
+    for (let i = 0; i < tabs.length; i++) {
+      const tab = tabs[i];
+      const url = normalizeChatGptUrl(tab && tab.url ? tab.url : "");
+      if (!url || !isAllocatableChatUrl(url)) {
+        continue;
+      }
+      const score = typeof tab.lastAccessed === "number" ? tab.lastAccessed : 0;
+      if (!best || score > best.score) {
+        best = { url, score };
+      }
+    }
+    return best ? best.url : "";
+  } catch (_) {
+    return "";
+  }
+}
+
+async function handleSetCampaignChatUrl(data) {
+  const campaignId = data && data.campaignId ? String(data.campaignId).trim() : "";
+  const chatUrl = data && data.chatUrl ? String(data.chatUrl).trim() : "";
+  return setCampaignChatUrl(campaignId, chatUrl);
+}
+
+async function handleGetCampaignChatUrl(data) {
+  const campaignId = data && data.campaignId ? String(data.campaignId).trim() : "";
+  if (!campaignId) {
+    return { success: false, error: "campaignId is required" };
+  }
+  const chatUrl = await getCampaignChatUrl(campaignId);
+  return { success: true, campaignId, chatUrl };
+}
+
+function fillCampaignPlaceholders(template, data) {
+  const text = String(template || "");
+  const websiteUrl = (data && (data.websiteUrl || data.website) ? String(data.websiteUrl || data.website) : "").trim();
+  const niche = (data && data.niche ? String(data.niche) : "").trim();
+  const recipientName = (data && data.recipientName ? String(data.recipientName) : "").trim();
+  const firstName = recipientName.split(/\s+/)[0] || "there";
+
+  return text
+    .replace(/\(Website\)/gi, websiteUrl || "N/A")
+    .replace(/\(Niche\)/gi, niche || "N/A")
+    .replace(/\{websiteurl\}/gi, websiteUrl || "N/A")
+    .replace(/\{website\}/gi, websiteUrl || "N/A")
+    .replace(/\{niche\}/gi, niche || "N/A")
+    .replace(/\{\{\s*FirstName\s*\}\}/gi, firstName)
+    .replace(/\{firstname\}/gi, firstName);
+}
+
+async function openGmailFromFallback(data, chatTabId) {
+  const recipientEmail = data && data.recipientEmail ? String(data.recipientEmail).trim() : "";
+  const leadId = data && data.leadId ? String(data.leadId).trim() : "";
+  const campaignSubject = data && data.campaignSubject ? String(data.campaignSubject).trim() : "";
+  const campaignBody = data && data.campaignBody ? String(data.campaignBody) : "";
+  const campaignGmailAuthUser = data && data.campaignGmailAuthUser ? String(data.campaignGmailAuthUser).trim() : "";
+  const subject = campaignSubject || "Quick note";
+  const body = fillCampaignPlaceholders(campaignBody, data) || "Hi,\n\nBest regards,";
   const customSignature = await getCustomSignatureSetting();
+
+  const encodedTo = encodeURIComponent(recipientEmail || "");
+  const encodedSu = encodeURIComponent(subject || "");
+  const gmailBaseUrl = getGmailBaseUrl(campaignGmailAuthUser);
+  const gmailUrl = `${gmailBaseUrl}/#inbox?compose=new&to=${encodedTo}&su=${encodedSu}`;
+  if (!recipientEmail) {
+    throw new Error("Fallback workflow missing recipient email");
+  }
+
+  const tab = await chrome.tabs.create({ url: gmailUrl, active: !RUN_TABS_IN_BACKGROUND });
+  await waitForTabReady(tab.id);
+  await delay(2000);
+  let sentToGmail = await sendMessageToTabWithRetry(tab.id, {
+    action: "fillAndSend",
+    data: {
+      to: recipientEmail || "",
+      subject: subject || "",
+      body: body || "",
+      customSignature: customSignature || "",
+      leadId: leadId || "",
+      expectedGmailAuthUser: normalizeGmailAuthUser(campaignGmailAuthUser || ""),
+      templateHasSignature: true,
+      isFollowup: false,
+      autoSend: true,
+    },
+  }, 7, 900);
+
+  if (!sentToGmail) {
+    console.warn("[Leads Extension] Fallback Gmail handoff failed, forcing active tab retry:", tab.id);
+    try {
+      await chrome.tabs.update(tab.id, { active: true });
+      await delay(1200);
+    } catch (_) {
+      // Ignore and retry anyway.
+    }
+    sentToGmail = await sendMessageToTabWithRetry(tab.id, {
+      action: "fillAndSend",
+      data: {
+        to: recipientEmail || "",
+        subject: subject || "",
+        body: body || "",
+        customSignature: customSignature || "",
+        leadId: leadId || "",
+        expectedGmailAuthUser: normalizeGmailAuthUser(campaignGmailAuthUser || ""),
+        templateHasSignature: true,
+        isFollowup: false,
+        autoSend: true,
+      },
+    }, 10, 1000);
+    if (!sentToGmail) {
+      console.error("[Leads Extension] Fallback Gmail handoff failed after active retry (tab:", tab.id, ")");
+    }
+  }
+
+  if (chatTabId) {
+    try {
+      await chrome.tabs.remove(chatTabId);
+    } catch (_) {
+      // Ignore.
+    }
+  }
+}
+
+async function handleStartFollowupWorkflow(data) {
+  const { to, subject, body, leadId, threadId, campaignGmailAuthUser } = data;
+  const customSignature = await getCustomSignatureSetting();
+  const gmailBaseUrl = getGmailBaseUrl(campaignGmailAuthUser || "");
   let gmailUrl;
   let openReply = false;
   const tid = threadId ? String(threadId).trim().replace(/^#+/, "") : "";
   if (tid) {
     // Try opening the thread first (works with alphanumeric ID; numeric may show "no longer exists").
-    gmailUrl = "https://mail.google.com/mail/u/0/#sent/" + tid;
+    gmailUrl = gmailBaseUrl + "/#sent/" + tid;
     openReply = true;
   } else {
     // No thread ID: open new compose (e.g. first email was sent outside extension)
     const encodedTo = encodeURIComponent(to || "");
     const encodedSu = encodeURIComponent(subject || "");
-    gmailUrl = "https://mail.google.com/mail/u/0/#inbox?compose=new&to=" + encodedTo + "&su=" + encodedSu;
+    gmailUrl = gmailBaseUrl + "/#inbox?compose=new&to=" + encodedTo + "&su=" + encodedSu;
   }
   const tab = await chrome.tabs.create({ url: gmailUrl, active: !RUN_TABS_IN_BACKGROUND });
   await waitForTabReady(tab.id);
@@ -227,6 +644,7 @@ async function handleStartFollowupWorkflow(data) {
       body: body || "",
       customSignature: customSignature || "",
       leadId: leadId || "",
+      expectedGmailAuthUser: normalizeGmailAuthUser(campaignGmailAuthUser || ""),
       isFollowup: true,
       openReply: openReply,
       threadIdForUrl: threadId ? String(threadId).trim().replace(/^#+/, "") : "",
@@ -316,6 +734,7 @@ async function runDailyReplySweep(trigger) {
       const leadId = lead.id ? String(lead.id) : "";
       const threadId = lead.gmailThreadId ? String(lead.gmailThreadId).trim() : "";
       const recipientEmail = lead.recipientEmail ? String(lead.recipientEmail).trim().toLowerCase() : "";
+      const campaignGmailAuthUser = lead.campaignGmailAuthUser ? String(lead.campaignGmailAuthUser).trim() : "";
 
       if (!leadId || !threadId || !recipientEmail) {
         continue;
@@ -327,6 +746,7 @@ async function runDailyReplySweep(trigger) {
           leadId: leadId,
           threadId: threadId,
           recipientEmail: recipientEmail,
+          campaignGmailAuthUser: campaignGmailAuthUser,
         });
         if (result && result.success && result.replied) {
           marked += 1;
@@ -354,12 +774,14 @@ async function handleCheckReplyByThread(data) {
   const leadId = data && data.leadId ? String(data.leadId) : "";
   const threadId = data && data.threadId ? String(data.threadId).trim().replace(/^#+/, "") : "";
   const recipientEmail = data && data.recipientEmail ? String(data.recipientEmail).trim().toLowerCase() : "";
+  const campaignGmailAuthUser = data && data.campaignGmailAuthUser ? String(data.campaignGmailAuthUser).trim() : "";
 
   if (!threadId || !recipientEmail) {
     return { success: false, error: "threadId and recipientEmail are required" };
   }
 
-  const gmailUrl = "https://mail.google.com/mail/u/0/#all/" + encodeURIComponent(threadId);
+  const gmailBaseUrl = getGmailBaseUrl(campaignGmailAuthUser);
+  const gmailUrl = gmailBaseUrl + "/#all/" + encodeURIComponent(threadId);
   const tab = await chrome.tabs.create({ url: gmailUrl, active: !RUN_TABS_IN_BACKGROUND });
   await waitForTabReady(tab.id);
   await delay(2200);
@@ -528,13 +950,25 @@ function delay(ms) {
 
 async function sendMessageToTabWithRetry(tabId, payload, retries, delayMs) {
   const attempts = retries || 5;
+  let lastError = null;
   for (let i = 0; i < attempts; i++) {
     try {
       await chrome.tabs.sendMessage(tabId, payload);
       return true;
-    } catch (_) {
+    } catch (err) {
+      lastError = err;
+      if (i === Math.floor(attempts / 2)) {
+        try {
+          await chrome.tabs.update(tabId, { active: true });
+        } catch (_) {
+          // Ignore.
+        }
+      }
       await delay(delayMs || 600);
     }
+  }
+  if (lastError) {
+    console.warn("[Leads Extension] sendMessageToTabWithRetry failed for tab", tabId, "payload action:", payload && payload.action, "error:", lastError && lastError.message ? lastError.message : lastError);
   }
   return false;
 }

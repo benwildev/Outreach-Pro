@@ -19,6 +19,11 @@ import { DeleteCampaignButton } from "./DeleteCampaignButton";
 
 export const dynamic = "force-dynamic";
 
+type CampaignRow = Awaited<ReturnType<typeof prisma.campaign.findMany>>[number] & {
+  chatGptChatId?: string | null;
+  gmailAuthUser?: string | null;
+};
+
 function formatDate(date: Date): string {
   return new Intl.DateTimeFormat("en-US", {
     dateStyle: "short",
@@ -33,10 +38,10 @@ function subjectPreview(subject: string, maxLen = 40): string {
 
 export default async function DashboardCampaignsPage() {
   const [campaigns, totalLeads, sentCount, pendingCount, repliedCount] = await Promise.all([
-    prisma.campaign.findMany({
+    (prisma.campaign.findMany({
       orderBy: { createdAt: "desc" },
       include: { _count: { select: { leads: true } } },
-    }),
+    }) as Promise<CampaignRow[]>),
     prisma.lead.count(),
     prisma.lead.count({ where: { status: "sent" } }),
     prisma.lead.count({ where: { status: "pending" } }),
@@ -111,6 +116,8 @@ export default async function DashboardCampaignsPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Subject</TableHead>
+                  <TableHead>Chat ID</TableHead>
+                  <TableHead>Gmail Auth</TableHead>
                   <TableHead>Total Leads</TableHead>
                   <TableHead>Created At</TableHead>
                   <TableHead className="w-[220px]">Actions</TableHead>
@@ -120,7 +127,7 @@ export default async function DashboardCampaignsPage() {
                 {campaigns.length === 0 ? (
                   <TableRow>
                     <TableCell
-                      colSpan={5}
+                      colSpan={7}
                       className="h-24 text-center text-muted-foreground"
                     >
                       No campaigns yet.
@@ -132,6 +139,12 @@ export default async function DashboardCampaignsPage() {
                       <TableCell className="font-medium">{c.name}</TableCell>
                       <TableCell className="max-w-[200px] truncate text-muted-foreground">
                         {subjectPreview(c.subject)}
+                      </TableCell>
+                      <TableCell className="max-w-[220px] truncate text-xs font-mono text-muted-foreground">
+                        {c.chatGptChatId || "—"}
+                      </TableCell>
+                      <TableCell className="text-xs font-mono text-muted-foreground">
+                        {c.gmailAuthUser || "0"}
                       </TableCell>
                       <TableCell>{c._count.leads}</TableCell>
                       <TableCell>{formatDate(c.createdAt)}</TableCell>

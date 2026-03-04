@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const SCRIPT_VERSION = "gmail-content-2026-03-04-signaturefix-v12";
+  const SCRIPT_VERSION = "gmail-content-2026-03-04-auth-lock-v16";
   const LOG_PREFIX = "[Gmail Extension]";
   let LAST_KNOWN_SIGNATURE_HTML = "";
 
@@ -48,6 +48,77 @@
 
   function normalizeEmailValue(value) {
     return String(value || "").trim().toLowerCase();
+  }
+
+  function extractEmailFromText(value) {
+    const text = String(value || "");
+    const match = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    return match ? match[0].trim().toLowerCase() : "";
+  }
+
+  function extractAuthUserFromUrl(value) {
+    const text = String(value || "");
+    const match = text.match(/\/mail\/u\/([^/]+)/i);
+    if (!match || !match[1]) {
+      return "";
+    }
+    try {
+      return decodeURIComponent(match[1]).trim();
+    } catch (_) {
+      return String(match[1]).trim();
+    }
+  }
+
+  function getCurrentAuthUser() {
+    return extractAuthUserFromUrl(window.location.href) || extractAuthUserFromUrl(window.location.pathname);
+  }
+
+  function getCurrentAccountEmail() {
+    const selectors = [
+      'a[aria-label*="Google Account"][aria-label*="@"]',
+      'button[aria-label*="Google Account"][aria-label*="@"]',
+      'a[href*="SignOutOptions"][aria-label*="@"]',
+      '[data-email]'
+    ];
+
+    for (let i = 0; i < selectors.length; i++) {
+      const nodes = document.querySelectorAll(selectors[i]);
+      for (let j = 0; j < nodes.length; j++) {
+        const node = nodes[j];
+        const emailFromData = extractEmailFromText(node.getAttribute("data-email") || "");
+        if (emailFromData) return emailFromData;
+        const emailFromAria = extractEmailFromText(node.getAttribute("aria-label") || "");
+        if (emailFromAria) return emailFromAria;
+        const emailFromText = extractEmailFromText(node.textContent || "");
+        if (emailFromText) return emailFromText;
+      }
+    }
+
+    return "";
+  }
+
+  function getSenderIdentityForStorage() {
+    const email = getCurrentAccountEmail();
+    if (email) return email;
+    return getCurrentAuthUser() || "";
+  }
+
+  function normalizeAuthUser(value) {
+    return String(value || "").trim();
+  }
+
+  function getGmailBaseUrl(authUser) {
+    const user = normalizeAuthUser(authUser) || "0";
+    return "https://mail.google.com/mail/u/" + encodeURIComponent(user);
+  }
+
+  function isExpectedAuthUser(currentAuthUser, expectedAuthUser) {
+    const expected = normalizeAuthUser(expectedAuthUser);
+    if (!expected) {
+      return true;
+    }
+    const current = normalizeAuthUser(currentAuthUser);
+    return !!current && current === expected;
   }
 
   function getComposeRoots(doc) {
@@ -317,6 +388,65 @@
       .replace(/>/g, "&gt;");
   }
 
+  function escapeHtmlAttribute(text) {
+    return String(text)
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function splitTrailingPunctuation(token) {
+    let core = String(token || "");
+    let trailing = "";
+    while (core && /[),.;!?]$/.test(core)) {
+      trailing = core.slice(-1) + trailing;
+      core = core.slice(0, -1);
+    }
+    return { core, trailing };
+  }
+
+  function linkifyInlineText(text) {
+    const source = String(text || "");
+    const pattern = /(\[([^\]]+)\]\((https?:\/\/[^\s)]+)\))|(\bhttps?:\/\/[^\s<>"']+|\bwww\.[^\s<>"']+|\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b)/gi;
+    let out = "";
+    let lastIndex = 0;
+    let match;
+
+    while ((match = pattern.exec(source)) !== null) {
+      const full = match[0];
+      const start = match.index;
+      out += escapeHtml(source.slice(lastIndex, start));
+
+      if (match[1] && match[2] && match[3]) {
+        const label = match[2].trim();
+        const href = match[3].trim();
+        out += '<a href="' + escapeHtmlAttribute(href) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(label || href) + "</a>";
+      } else {
+        const split = splitTrailingPunctuation(full);
+        const core = split.core;
+        const trailing = split.trailing;
+        let href = core;
+
+        if (core.indexOf("@") !== -1) {
+          href = "mailto:" + core;
+        } else if (/^www\./i.test(core)) {
+          href = "https://" + core;
+        }
+
+        out += '<a href="' + escapeHtmlAttribute(href) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(core) + "</a>";
+        if (trailing) {
+          out += escapeHtml(trailing);
+        }
+      }
+
+      lastIndex = start + full.length;
+    }
+
+    out += escapeHtml(source.slice(lastIndex));
+    return out;
+  }
+
   function normalizeBodyForRendering(text) {
     let normalized = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
     if (!normalized) {
@@ -386,6 +516,14 @@
 
     flushBufferedList(false);
 
+    let trailingSignoffIndex = -1;
+    for (let i = output.length - 1; i >= 0; i--) {
+      if (isSignoffLine(output[i])) {
+        trailingSignoffIndex = i;
+        break;
+      }
+    }
+
     // If AI returns single-line "paragraphs" separated by one newline,
     // expand them to blank-line-separated paragraphs for Gmail compose readability.
     const expanded = [];
@@ -406,9 +544,15 @@
       const currentIsBullet = /^-\s+/.test(currentTrim);
       const nextIsBullet = /^-\s+/.test(nextTrim);
       const currentLooksHeading = /:\s*$/.test(currentTrim);
+      const currentLooksClosing = /^(if |thanks|thank you|best|regards|sincerely|let me know)/i.test(currentTrim);
       const nextLooksClosing = /^(if |thanks|thank you|best|regards|sincerely|let me know)/i.test(nextTrim);
 
-      if (!currentIsBullet && !nextIsBullet && !currentLooksHeading && !nextLooksClosing) {
+      // Keep signature block compact: no auto extra blank lines after sign-off.
+      if (trailingSignoffIndex !== -1 && i >= trailingSignoffIndex) {
+        continue;
+      }
+
+      if (!currentIsBullet && !nextIsBullet && !currentLooksHeading && !currentLooksClosing && !nextLooksClosing) {
         expanded.push("");
       }
     }
@@ -445,9 +589,9 @@
     return /^[A-Za-z][A-Za-z0-9 .'-]*$/.test(value);
   }
 
-  function removeTrailingNameAfterSignoff(text, hasGmailSignature) {
+  function removeTrailingNameAfterSignoff(text, preserveTemplateSignature) {
     const raw = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-    if (!hasGmailSignature) {
+    if (preserveTemplateSignature) {
       return raw;
     }
 
@@ -555,13 +699,13 @@
           closeParagraph();
           openList();
           const itemText = line.replace(/^\s*[-*•]\s/, "");
-          parts.push('<li style="margin: 0 0 8px 0;">' + escapeHtml(itemText) + "</li>");
+          parts.push('<li style="margin: 0 0 8px 0;">' + linkifyInlineText(itemText) + "</li>");
           continue;
         }
 
         closeList();
         openParagraph();
-        parts.push("<div>" + escapeHtml(line) + "</div>");
+        parts.push("<div>" + linkifyInlineText(line) + "</div>");
       }
 
       closeParagraph();
@@ -592,7 +736,7 @@
       if (!line) {
         parts.push("<div><br></div>");
       } else {
-        parts.push("<div>" + escapeHtml(line) + "</div>");
+        parts.push("<div>" + linkifyInlineText(line) + "</div>");
       }
     }
     parts.push("</div>");
@@ -800,7 +944,7 @@
     }
 
     await delay(2800);
-    let composeRoot = await ensureComposeReady(15000, to, subject, false);
+    let composeRoot = await ensureComposeReady(18000, to, subject, true);
     if (!composeRoot) {
       return { filled: false, composeRoot: null };
     }
@@ -1270,31 +1414,79 @@
     return /[?&]compose=/.test(hash);
   }
 
+  function buildComposeHash(email, subject) {
+    const to = String(email || "").trim();
+    const su = String(subject || "").trim();
+    let hash = "#inbox?compose=new";
+    if (to) {
+      hash += "&to=" + encodeURIComponent(to);
+    }
+    if (su) {
+      hash += "&su=" + encodeURIComponent(su);
+    }
+    return hash;
+  }
+
+  async function triggerComposeShortcutAndWait() {
+    try {
+      document.dispatchEvent(new KeyboardEvent("keydown", { key: "c", code: "KeyC", bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent("keyup", { key: "c", code: "KeyC", bubbles: true }));
+      await delay(1200);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   async function ensureComposeReady(maxWait, email, subject, allowComposeClick) {
-    let composeRoot = pickComposeRoot(email, subject);
-    if (composeRoot) {
-      return composeRoot;
-    }
+    const totalWait = Math.max(maxWait || 12000, 12000);
+    const perAttemptWait = Math.max(Math.floor(totalWait / 3), 4000);
 
-    const composeRoute = isComposeHashRoute();
-    if (allowComposeClick !== false && !composeRoute) {
-      const composeBtn = findComposeButton();
-      if (composeBtn) {
-        try {
-          composeBtn.click();
-          log("Clicked Compose to open draft");
-        } catch (e) {
-          logError("Compose click failed:", e.message);
-        }
-        await delay(1000);
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      let composeRoot = pickComposeRoot(email, subject);
+      if (composeRoot) {
+        return composeRoot;
       }
-    } else if (composeRoute) {
-      log("Compose route detected; skipping extra Compose click");
+
+      const composeRoute = isComposeHashRoute();
+      if (allowComposeClick !== false) {
+        const composeBtn = findComposeButton();
+        if (composeBtn) {
+          try {
+            composeBtn.click();
+            log("Clicked Compose to open draft (attempt " + attempt + ")");
+          } catch (e) {
+            logError("Compose click failed:", e.message);
+          }
+        }
+
+        if (!composeRoute) {
+          const targetHash = buildComposeHash(email, subject);
+          if ((window.location.hash || "") !== targetHash) {
+            window.location.hash = targetHash;
+            log("Navigated to compose hash (attempt " + attempt + ")");
+          }
+        }
+
+        await triggerComposeShortcutAndWait();
+      } else if (!composeRoute) {
+        const targetHash = buildComposeHash(email, subject);
+        if ((window.location.hash || "") !== targetHash) {
+          window.location.hash = targetHash;
+          log("Navigated to compose hash without click (attempt " + attempt + ")");
+        }
+      } else {
+        log("Compose route detected; waiting for draft UI (attempt " + attempt + ")");
+      }
+
+      await waitForBodyElement(perAttemptWait, null);
+      composeRoot = pickComposeRoot(email, subject);
+      if (composeRoot) {
+        return composeRoot;
+      }
     }
 
-    await waitForBodyElement(maxWait || 12000, null);
-    composeRoot = pickComposeRoot(email, subject);
-    return composeRoot;
+    return null;
   }
 
   function findViewMessageControl() {
@@ -2055,7 +2247,7 @@
     return null;
   }
 
-  async function updateLead(leadId, to, subject, body, threadId) {
+  async function updateLead(leadId, to, subject, body, threadId, sentGmailAuthUser) {
     try {
       log("=== UPDATING LEAD ===");
       log("LeadId:", leadId);
@@ -2073,7 +2265,8 @@
         leadId: leadId,
         recipientEmail: to,
         subject: subject || "",
-        body: body || ""
+        body: body || "",
+        sentGmailAuthUser: sentGmailAuthUser || ""
       };
       if (threadId) {
         payload.threadId = threadId;
@@ -2112,16 +2305,33 @@
     const body = data.body || "";
     const customSignatureText = String(data.customSignature || "");
     const customSignatureHtml = formatCustomSignatureHtml(customSignatureText);
+    const templateHasSignature = !!data.templateHasSignature;
     const leadId = data.leadId || "";
     const isFollowup = !!data.isFollowup;
     const openReply = !!data.openReply;
     const threadIdForUrl = (data.threadIdForUrl || "").trim();
+    const expectedGmailAuthUser = normalizeAuthUser(data.expectedGmailAuthUser || "");
+    const gmailBaseUrl = getGmailBaseUrl(expectedGmailAuthUser || getCurrentAuthUser() || "0");
     const autoSend = data.autoSend !== false;
     const requireThreadReply = isFollowup && openReply;
 
     log("Starting fill and send", isFollowup ? "(follow-up)" : "", openReply ? "(reply in thread)" : "");
     
     await delay(openReply ? 2500 : 1500);
+
+    let currentAuthUser = getCurrentAuthUser();
+    if (!isExpectedAuthUser(currentAuthUser, expectedGmailAuthUser)) {
+      log("Authuser mismatch detected, redirecting to expected account:", currentAuthUser, "->", expectedGmailAuthUser);
+      const hash = window.location.hash || "";
+      window.location.href = gmailBaseUrl + (hash || "/#inbox");
+      await delay(4200);
+      currentAuthUser = getCurrentAuthUser();
+    }
+
+    if (!isExpectedAuthUser(currentAuthUser, expectedGmailAuthUser)) {
+      logError("Blocked send: Gmail account mismatch. Expected authuser:", expectedGmailAuthUser, "Current:", currentAuthUser || "(none)");
+      return;
+    }
 
     function hasConversationNoLongerExistsError() {
       const text = (document.body && document.body.innerText) || "";
@@ -2131,7 +2341,7 @@
     if (openReply) {
       if (hasConversationNoLongerExistsError()) {
         log("Thread not found (conversation no longer exists); opening new compose");
-        const composeUrl = "https://mail.google.com/mail/u/0/#inbox?compose=new" +
+        const composeUrl = gmailBaseUrl + "/#inbox?compose=new" +
           "&to=" + encodeURIComponent(to || "") +
           "&su=" + encodeURIComponent(subject || "");
         window.location.href = composeUrl;
@@ -2145,7 +2355,7 @@
           await delay(3500);
           if (hasConversationNoLongerExistsError()) {
             log("Thread not found after navigation; opening new compose");
-            const composeUrl = "https://mail.google.com/mail/u/0/#inbox?compose=new" +
+            const composeUrl = gmailBaseUrl + "/#inbox?compose=new" +
               "&to=" + encodeURIComponent(to || "") +
               "&su=" + encodeURIComponent(subject || "");
             window.location.href = composeUrl;
@@ -2196,14 +2406,26 @@
       }
     }
 
-    let composeRoot = await ensureComposeReady(12000, to, subject, !requireThreadReply);
+    let composeRoot = await ensureComposeReady(22000, to, subject, !requireThreadReply);
+    let recoveredViaComposeUrl = false;
+    if (!composeRoot && !requireThreadReply) {
+      log("Compose window not ready; trying explicit compose URL recovery");
+      const recovered = await reopenComposeWithPrefilledRecipient(to, subject);
+      if (recovered && recovered.composeRoot) {
+        composeRoot = recovered.composeRoot;
+        recoveredViaComposeUrl = !!recovered.filled;
+      }
+    }
+    if (!composeRoot) {
+      composeRoot = await ensureComposeReady(30000, to, subject, true);
+    }
     if (!composeRoot) {
       logError("Compose window is not ready");
       return;
     }
     
     // Fill To
-    let toFilled = requireThreadReply;
+    let toFilled = requireThreadReply || recoveredViaComposeUrl;
     if (to && !requireThreadReply) {
       const recipientResult = await setRecipientValue(to, composeRoot);
       toFilled = !!recipientResult.filled;
@@ -2249,8 +2471,7 @@
       if (!signatureHtml) {
         signatureHtml = await tryInsertGmailSignature(composeRoot, bodyEl);
       }
-      const shouldTrimAiNameAfterSignoff = !!signatureHtml || !!customSignatureHtml;
-      const cleanedBody = removeTrailingNameAfterSignoff(body, shouldTrimAiNameAfterSignoff);
+      const cleanedBody = removeTrailingNameAfterSignoff(body, templateHasSignature);
       const formatted = formatBody(cleanedBody);
       setBodyContent(bodyEl, formatted, signatureHtml || customSignatureHtml);
       if (!signatureHtml && customSignatureHtml) {
@@ -2307,9 +2528,10 @@
 
     if (isFollowup && leadId) {
       try {
+        const sentAuthUser = getSenderIdentityForStorage();
         const response = await chrome.runtime.sendMessage({
           action: "updateFollowup",
-          data: { leadId: leadId },
+          data: { leadId: leadId, sentGmailAuthUser: sentAuthUser || "" },
         });
         if (response && response.success) {
           log("Follow-up recorded");
@@ -2350,7 +2572,7 @@
     }
 
     if (leadId) {
-      await updateLead(leadId, to, subject, body, threadId);
+      await updateLead(leadId, to, subject, body, threadId, getSenderIdentityForStorage());
     }
 
     log("Manual send flow completed");

@@ -6,7 +6,8 @@
 (function () {
   "use strict";
 
-  // Table columns: 1=Campaign, 2=Recipient Name, 3=Recipient Email, 4=Website, 5=Niche, 6=Status (merged with step), 7=Sent At, 8=Created At, 9=Actions
+  // Table columns: 1=Campaign, 2=Recipient Name, 3=Recipient Email, 4=Website, 5=Niche,
+  // 6=Status, 7=Thread ID, 8=Mail Data, 9=Sent Gmail, 10=Sent At, 11=Created At, 12=Actions
   const boundButtons = new WeakSet();
   let delegatedCheckReplyBound = false;
 
@@ -65,6 +66,9 @@
   function extractRowData(row) {
     const campaignEl = row.querySelector("td:first-child a");
     const campaignName = campaignEl ? (campaignEl.textContent || "").trim() : getCellText(row, "td:nth-child(1)");
+    const campaignId = (row.getAttribute("data-campaign-id") || "").trim();
+    const campaignChatId = (row.getAttribute("data-campaign-chat-id") || "").trim();
+    const campaignGmailAuthUser = (row.getAttribute("data-campaign-gmail-auth-user") || "").trim();
     const recipientName = getCellText(row, "td:nth-child(2)");
     const recipientEmail = getCellText(row, "td:nth-child(3)");
     const websiteUrl = getCellText(row, "td:nth-child(4)");
@@ -78,6 +82,9 @@
     const leadId = (row.getAttribute("data-lead-id") || "").trim();
     return {
       leadId,
+      campaignId,
+      campaignChatId,
+      campaignGmailAuthUser,
       gmailThreadId,
       campaignName,
       recipientName,
@@ -139,6 +146,7 @@
           leadId: leadId,
           threadId: threadId,
           recipientEmail: recipientEmail,
+          campaignGmailAuthUser: data.campaignGmailAuthUser || "",
         },
       });
 
@@ -181,7 +189,8 @@
     const statusCell = row.querySelector("td:nth-child(6)");
     const threadCell = row.querySelector("td:nth-child(7)");
     const mailDataCell = row.querySelector("td:nth-child(8)");
-    const sentAtCell = row.querySelector("td:nth-child(9)");
+    const sentGmailCell = row.querySelector("td:nth-child(9)");
+    const sentAtCell = row.querySelector("td:nth-child(10)");
     const sendBtn = row.querySelector('button[data-action="send"]');
     const followupBtn = row.querySelector('button[data-action="followup"]');
     const checkReplyBtn = row.querySelector('button[data-action="check-reply"]');
@@ -232,6 +241,10 @@
         ? sentAt.toLocaleString("en-US", { dateStyle: "short", timeStyle: "short" })
         : "-";
       sentAtCell.classList.add("whitespace-nowrap");
+    }
+
+    if (sentGmailCell) {
+      sentGmailCell.textContent = lead.sentGmailAuthUser || "-";
     }
 
     if (lead.replied || lead.status === "replied") {
@@ -319,6 +332,7 @@
                 subject: "Re: " + (data.campaignSubject || ""),
                 body: body,
                 threadId: data.gmailThreadId || null,
+                campaignGmailAuthUser: data.campaignGmailAuthUser || "",
               },
             });
           } catch (err) {

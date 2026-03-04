@@ -17,7 +17,8 @@ var EMAIL_STRUCTURE_INSTRUCTION =
   "- A bullet list (3 items), each one line and specific. Use a single dash or bullet character (- or •) at the start of each list item.\n" +
   "- A short closing line offering next steps, e.g. \"If any of these are a fit, I can send over an outline.\"\n" +
   "- Then a simple thank-you line.\n" +
-  "- Sign off with \"Best,\" or \"Best regards,\" followed by a simple signature line.\n" +
+  "- End with \"Best regards,\" only.\n" +
+  "- Do not add any sender name or signature line unless that exact line already exists in the campaign template.\n" +
   "- Do not use placeholders such as [Your Name], {{topic}}, [Company Name], or bracketed template text anywhere in the final email.";
 
 var ANTI_AI_PHRASES_INSTRUCTION =
@@ -122,6 +123,7 @@ function cleanEmailBody(text, data) {
   const firstName = recipientName.split(/\s+/)[0] || "there";
 
   let cleaned = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  cleaned = stripExtensionNoise(cleaned);
 
   cleaned = cleaned.replace(/\[Your Name\]|\[YourCompany\]|\[Company Name\]/gi, "");
   cleaned = cleaned.replace(/\{\{[^}]+\}\}/g, "");
@@ -147,8 +149,126 @@ function cleanEmailBody(text, data) {
     })
     .join("\n");
 
+  const preserveTemplateSignature = !!(data && data.templateHasSignature);
+  if (!preserveTemplateSignature) {
+    cleaned = stripGeneratedNameAfterSignoff(cleaned);
+  }
+
+  const signatureBlock =
+    data && typeof data.signatureBlock === "string" ? data.signatureBlock.trim() : "";
+  if (signatureBlock) {
+    cleaned = enforceTemplateSignatureBlock(cleaned, signatureBlock);
+  }
+
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
   return cleaned;
+}
+
+function extractTemplateSignatureBlock(templateText) {
+  const raw = String(templateText || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  if (!raw) return "";
+
+  const lines = raw.split("\n");
+  let signoffIndex = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = String(lines[i] || "").trim();
+    if (/^(best|best regards|kind regards|warm regards|regards|thanks|thank you|sincerely)[,!]?$/i.test(line)) {
+      signoffIndex = i;
+      break;
+    }
+  }
+  if (signoffIndex === -1) return "";
+
+  const tail = lines.slice(signoffIndex).map(function(line) {
+    return String(line || "").replace(/[ \t]+$/g, "");
+  });
+  const hasNameLikeLine = tail.slice(1).some(function(line) {
+    return !!String(line || "").trim();
+  });
+  if (!hasNameLikeLine) return "";
+
+  return tail.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function enforceTemplateSignatureBlock(bodyText, signatureBlock) {
+  const body = String(bodyText || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  const signature = String(signatureBlock || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  if (!body || !signature) return body;
+
+  const lines = body.split("\n");
+  let signoffIndex = -1;
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = String(lines[i] || "").trim();
+    if (/^(best|best regards|kind regards|warm regards|regards|thanks|thank you|sincerely)[,!]?$/i.test(line)) {
+      signoffIndex = i;
+      break;
+    }
+  }
+
+  const prefix = signoffIndex === -1
+    ? body
+    : lines.slice(0, signoffIndex).join("\n").replace(/\n{3,}/g, "\n\n").trim();
+
+  if (!prefix) return signature;
+  return (prefix + "\n\n" + signature).replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function stripExtensionNoise(text) {
+  const lines = String(text || "").split("\n");
+  const filtered = lines.filter(function(line) {
+    const value = String(line || "").trim();
+    if (!value) return true;
+    if (/window\.__oai_/i.test(value)) return false;
+    if (/__oai_(?:logHTML|SSR_HTML|logTTI|SSR_TTI)/i.test(value)) return false;
+    if (/requestAnimationFrame\s*\(/i.test(value)) return false;
+    if (/Date\.now\(\)/i.test(value) && /__oai_/i.test(value)) return false;
+    return true;
+  });
+  return filtered.join("\n");
+}
+
+function stripGeneratedNameAfterSignoff(text) {
+  const raw = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = raw.split("\n");
+  let end = lines.length - 1;
+  while (end >= 0 && !String(lines[end] || "").trim()) end -= 1;
+  if (end < 0) return raw;
+
+  const isSignoff = function(line) {
+    return /^(best|best regards|kind regards|warm regards|regards|thanks|thank you|sincerely)[,!]?$/i.test(String(line || "").trim());
+  };
+
+  const looksLikeName = function(line) {
+    const value = String(line || "").trim();
+    if (!value || value.length > 48) return false;
+    if (/[.!?:]/.test(value) || /@|https?:\/\//i.test(value)) return false;
+    const words = value.split(/\s+/).filter(Boolean);
+    if (words.length === 0 || words.length > 4) return false;
+    return /^[A-Za-z][A-Za-z0-9 .'-]*$/.test(value);
+  };
+
+  let signoffIndex = -1;
+  for (let i = end; i >= 0; i--) {
+    const line = String(lines[i] || "").trim();
+    if (!line) continue;
+    if (isSignoff(line)) {
+      signoffIndex = i;
+      break;
+    }
+    if (end - i > 6) break;
+  }
+  if (signoffIndex === -1) return raw;
+
+  let hasNameLine = false;
+  for (let i = signoffIndex + 1; i <= end; i++) {
+    const line = String(lines[i] || "").trim();
+    if (!line) continue;
+    if (!looksLikeName(line)) return raw;
+    hasNameLine = true;
+  }
+  if (!hasNameLine) return raw;
+
+  return lines.slice(0, signoffIndex + 1).join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function delay(ms) {
