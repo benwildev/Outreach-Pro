@@ -10,6 +10,23 @@
   // 6=Status, 7=Thread ID, 8=Mail Data, 9=Sent Gmail, 10=Sent At, 11=Created At, 12=Actions
   const boundButtons = new WeakSet();
   let delegatedCheckReplyBound = false;
+  const AUTOMATION_PANEL_ID = "leads-extension-automation-panel";
+  const AUTOMATION_DELAY_MIN_KEY = "leadsExtensionBulkDelayMinMs";
+  const AUTOMATION_DELAY_MAX_KEY = "leadsExtensionBulkDelayMaxMs";
+  const AUTOMATION_LIMIT_KEY = "leadsExtensionBulkLimit";
+  const AUTOMATION_AUTO_FOLLOWUP_KEY = "leadsExtensionBulkAutoFollowup";
+  const AUTOMATION_WINDOW_ENABLED_KEY = "leadsExtensionBulkWindowEnabled";
+  const AUTOMATION_WINDOW_START_KEY = "leadsExtensionBulkWindowStart";
+  const AUTOMATION_WINDOW_END_KEY = "leadsExtensionBulkWindowEnd";
+  const DEFAULT_BULK_DELAY_MS = 45000;
+  const DEFAULT_BULK_LIMIT = 50;
+  const DEFAULT_WINDOW_START = "09:00";
+  const DEFAULT_WINDOW_END = "18:00";
+  const BRIDGE_REQUEST_TYPE = "LEADS_EXTENSION_BRIDGE_REQUEST";
+  const BRIDGE_RESPONSE_TYPE = "LEADS_EXTENSION_BRIDGE_RESPONSE";
+  const BRIDGE_READY_TYPE = "LEADS_EXTENSION_BRIDGE_READY";
+  let automationPollTimer = null;
+  let bridgeListenerBound = false;
 
   function hasRuntimeMessaging() {
     return (
@@ -34,6 +51,645 @@
 
     logError("Dashboard", new Error(reason));
     return false;
+  }
+
+  function sendRuntimeMessage(payload) {
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.runtime.sendMessage(payload, (response) => {
+          const err = chrome.runtime.lastError;
+          if (err) {
+            reject(new Error(err.message || "Runtime messaging failed"));
+            return;
+          }
+          resolve(response || null);
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  }
+
+  function clampNumber(value, min, max, fallback) {
+    const parsed = parseInt(String(value), 10);
+    if (isNaN(parsed)) return fallback;
+    return Math.max(min, Math.min(parsed, max));
+  }
+
+  function normalizeTimeValue(value, fallback) {
+    const raw = String(value || "").trim();
+    const match = raw.match(/^([0-1]?\d|2[0-3]):([0-5]\d)$/);
+    if (!match) return fallback;
+    return String(match[1]).padStart(2, "0") + ":" + String(match[2]).padStart(2, "0");
+  }
+
+  function getStoredBulkDelayMinMs() {
+    try {
+      const raw = localStorage.getItem(AUTOMATION_DELAY_MIN_KEY);
+      return clampNumber(raw, 5000, 600000, DEFAULT_BULK_DELAY_MS);
+    } catch (_) {
+      return DEFAULT_BULK_DELAY_MS;
+    }
+  }
+
+  function getStoredBulkDelayMaxMs() {
+    try {
+      const raw = localStorage.getItem(AUTOMATION_DELAY_MAX_KEY);
+      return clampNumber(raw, 5000, 600000, DEFAULT_BULK_DELAY_MS);
+    } catch (_) {
+      return DEFAULT_BULK_DELAY_MS;
+    }
+  }
+
+  function setStoredBulkDelayMinMs(value) {
+    try {
+      localStorage.setItem(AUTOMATION_DELAY_MIN_KEY, String(value));
+    } catch (_) {
+      // Ignore storage errors.
+    }
+  }
+
+  function setStoredBulkDelayMaxMs(value) {
+    try {
+      localStorage.setItem(AUTOMATION_DELAY_MAX_KEY, String(value));
+    } catch (_) {
+      // Ignore storage errors.
+    }
+  }
+
+  function getStoredBulkLimit() {
+    try {
+      const raw = localStorage.getItem(AUTOMATION_LIMIT_KEY);
+      return clampNumber(raw, 1, 500, DEFAULT_BULK_LIMIT);
+    } catch (_) {
+      return DEFAULT_BULK_LIMIT;
+    }
+  }
+
+  function setStoredBulkLimit(value) {
+    try {
+      localStorage.setItem(AUTOMATION_LIMIT_KEY, String(value));
+    } catch (_) {
+      // Ignore storage errors.
+    }
+  }
+
+  function getStoredAutoFollowupEnabled() {
+    try {
+      return localStorage.getItem(AUTOMATION_AUTO_FOLLOWUP_KEY) === "1";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function setStoredAutoFollowupEnabled(value) {
+    try {
+      localStorage.setItem(AUTOMATION_AUTO_FOLLOWUP_KEY, value ? "1" : "0");
+    } catch (_) {
+      // Ignore storage errors.
+    }
+  }
+
+  function getStoredWindowEnabled() {
+    try {
+      return localStorage.getItem(AUTOMATION_WINDOW_ENABLED_KEY) === "1";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function setStoredWindowEnabled(value) {
+    try {
+      localStorage.setItem(AUTOMATION_WINDOW_ENABLED_KEY, value ? "1" : "0");
+    } catch (_) {
+      // Ignore storage errors.
+    }
+  }
+
+  function getStoredWindowStart() {
+    try {
+      return normalizeTimeValue(localStorage.getItem(AUTOMATION_WINDOW_START_KEY), DEFAULT_WINDOW_START);
+    } catch (_) {
+      return DEFAULT_WINDOW_START;
+    }
+  }
+
+  function getStoredWindowEnd() {
+    try {
+      return normalizeTimeValue(localStorage.getItem(AUTOMATION_WINDOW_END_KEY), DEFAULT_WINDOW_END);
+    } catch (_) {
+      return DEFAULT_WINDOW_END;
+    }
+  }
+
+  function setStoredWindowStart(value) {
+    try {
+      localStorage.setItem(AUTOMATION_WINDOW_START_KEY, normalizeTimeValue(value, DEFAULT_WINDOW_START));
+    } catch (_) {
+      // Ignore storage errors.
+    }
+  }
+
+  function setStoredWindowEnd(value) {
+    try {
+      localStorage.setItem(AUTOMATION_WINDOW_END_KEY, normalizeTimeValue(value, DEFAULT_WINDOW_END));
+    } catch (_) {
+      // Ignore storage errors.
+    }
+  }
+
+  function getCurrentCampaignFilterId() {
+    const params = new URLSearchParams(window.location.search || "");
+    const fromQuery = String(params.get("campaign") || "").trim();
+    if (fromQuery) return fromQuery;
+    return "";
+  }
+
+  function postBridgeResponse(id, success, payload) {
+    try {
+      window.postMessage(
+        {
+          type: BRIDGE_RESPONSE_TYPE,
+          id: String(id || ""),
+          success: !!success,
+          payload: payload || null,
+        },
+        window.location.origin
+      );
+    } catch (_) {
+      // Ignore.
+    }
+  }
+
+  function initRuntimeBridge() {
+    if (bridgeListenerBound) {
+      return;
+    }
+    bridgeListenerBound = true;
+
+    window.addEventListener("message", async (event) => {
+      if (event.source !== window) {
+        return;
+      }
+      const message = event.data || {};
+      if (!message || message.type !== BRIDGE_REQUEST_TYPE) {
+        return;
+      }
+
+      const id = String(message.id || "").trim();
+      if (!id) {
+        return;
+      }
+
+      const action = message.action ? String(message.action) : "";
+      const data = message.data || {};
+      if (!action) {
+        postBridgeResponse(id, false, { error: "Action is required" });
+        return;
+      }
+
+      if (!hasRuntimeMessaging()) {
+        postBridgeResponse(id, false, { error: "Extension runtime unavailable" });
+        return;
+      }
+
+      try {
+        const response = await sendRuntimeMessage({ action, data });
+        postBridgeResponse(id, true, response || null);
+      } catch (error) {
+        postBridgeResponse(id, false, {
+          error: error && error.message ? error.message : "Runtime bridge request failed",
+        });
+      }
+    });
+
+    try {
+      window.postMessage({ type: BRIDGE_READY_TYPE }, window.location.origin);
+    } catch (_) {
+      // Ignore.
+    }
+  }
+
+  function getAutomationPanelNodes() {
+    const panel = document.getElementById(AUTOMATION_PANEL_ID);
+    if (!panel) return null;
+    return {
+      panel,
+      status: panel.querySelector('[data-role="status"]'),
+      progress: panel.querySelector('[data-role="progress"]'),
+      error: panel.querySelector('[data-role="error"]'),
+      delayMinInput: panel.querySelector('input[name="bulkDelayMinSeconds"]'),
+      delayMaxInput: panel.querySelector('input[name="bulkDelayMaxSeconds"]'),
+      limitInput: panel.querySelector('input[name="bulkLimit"]'),
+      autoFollowupInput: panel.querySelector('input[name="bulkAutoFollowup"]'),
+      windowEnabledInput: panel.querySelector('input[name="bulkWindowEnabled"]'),
+      windowStartInput: panel.querySelector('input[name="bulkWindowStart"]'),
+      windowEndInput: panel.querySelector('input[name="bulkWindowEnd"]'),
+      startBtn: panel.querySelector('button[data-action="bulk-start"]'),
+      pauseBtn: panel.querySelector('button[data-action="bulk-pause"]'),
+      resumeBtn: panel.querySelector('button[data-action="bulk-resume"]'),
+      stopBtn: panel.querySelector('button[data-action="bulk-stop"]'),
+      refreshBtn: panel.querySelector('button[data-action="bulk-refresh"]'),
+    };
+  }
+
+  function formatBulkStatus(status) {
+    const value = String(status || "idle").toLowerCase();
+    if (value === "running") return "Running";
+    if (value === "paused") return "Paused";
+    if (value === "waiting-window") return "Waiting for window";
+    if (value === "stopping") return "Stopping";
+    if (value === "completed") return "Completed";
+    if (value === "failed") return "Failed";
+    if (value === "stopped") return "Stopped";
+    return "Idle";
+  }
+
+  function renderBulkState(state, errorText) {
+    const nodes = getAutomationPanelNodes();
+    if (!nodes) return;
+
+    const s = state || {};
+    const statusValue = String(s.status || "idle").toLowerCase();
+    const total = Number(s.total || 0);
+    const processed = Number(s.processed || 0);
+    const sent = Number(s.sent || 0);
+    const followups = Number(s.followups || 0);
+    const failed = Number(s.failed || 0);
+    const skipped = Number(s.skipped || 0);
+    const remaining = Math.max(total - processed, 0);
+
+    if (nodes.status) {
+      const phaseText = s.phase ? String(s.phase) : "send";
+      nodes.status.textContent = "Status: " + formatBulkStatus(statusValue) + " • Phase: " + phaseText;
+    }
+    if (nodes.progress) {
+      let text = "Processed " + processed + "/" + total + " • Sent " + sent + " • Follow-ups " + followups + " • Failed " + failed;
+      if (skipped > 0) {
+        text += " • Skipped " + skipped;
+      }
+      if (statusValue === "running" || statusValue === "paused" || statusValue === "stopping" || statusValue === "waiting-window") {
+        text += " • Remaining " + remaining;
+      }
+      if (s.currentRecipientEmail) {
+        text += " • Current " + String(s.currentRecipientEmail);
+      }
+      const minSec = Math.max(5, Math.round(Number(s.delayMinMs || getStoredBulkDelayMinMs()) / 1000));
+      const maxSec = Math.max(minSec, Math.round(Number(s.delayMaxMs || getStoredBulkDelayMaxMs()) / 1000));
+      text += " • Delay " + minSec + "-" + maxSec + "s";
+      if (s.windowEnabled) {
+        text += " • Window " + String(s.sendWindowStart || DEFAULT_WINDOW_START) + "-" + String(s.sendWindowEnd || DEFAULT_WINDOW_END);
+      }
+      nodes.progress.textContent = text;
+    }
+
+    if (nodes.error) {
+      const message = errorText || (s.lastError ? String(s.lastError) : "");
+      nodes.error.textContent = message;
+      nodes.error.classList.toggle("hidden", !message);
+    }
+
+    if (nodes.delayMinInput && !nodes.delayMinInput.matches(":focus")) {
+      const delayMinSeconds = Math.max(5, Math.round(Number(s.delayMinMs || getStoredBulkDelayMinMs()) / 1000));
+      nodes.delayMinInput.value = String(delayMinSeconds);
+    }
+
+    if (nodes.delayMaxInput && !nodes.delayMaxInput.matches(":focus")) {
+      const delayMaxSeconds = Math.max(5, Math.round(Number(s.delayMaxMs || getStoredBulkDelayMaxMs()) / 1000));
+      nodes.delayMaxInput.value = String(delayMaxSeconds);
+    }
+
+    if (nodes.limitInput && !nodes.limitInput.matches(":focus")) {
+      const limit = clampNumber(s.limit, 1, 500, getStoredBulkLimit());
+      nodes.limitInput.value = String(limit);
+    }
+
+    if (nodes.autoFollowupInput) {
+      nodes.autoFollowupInput.checked = !!s.followupEnabled;
+    }
+    if (nodes.windowEnabledInput) {
+      nodes.windowEnabledInput.checked = !!s.windowEnabled;
+    }
+    if (nodes.windowStartInput && !nodes.windowStartInput.matches(":focus")) {
+      nodes.windowStartInput.value = normalizeTimeValue(s.sendWindowStart, getStoredWindowStart());
+    }
+    if (nodes.windowEndInput && !nodes.windowEndInput.matches(":focus")) {
+      nodes.windowEndInput.value = normalizeTimeValue(s.sendWindowEnd, getStoredWindowEnd());
+    }
+
+    const isActive = statusValue === "running" || statusValue === "paused" || statusValue === "stopping" || statusValue === "waiting-window";
+    const canStart = !isActive;
+    if (nodes.startBtn) nodes.startBtn.disabled = !canStart;
+    if (nodes.pauseBtn) nodes.pauseBtn.disabled = !(statusValue === "running" || statusValue === "waiting-window");
+    if (nodes.resumeBtn) nodes.resumeBtn.disabled = statusValue !== "paused";
+    if (nodes.stopBtn) nodes.stopBtn.disabled = !isActive || statusValue === "stopping";
+  }
+
+  async function refreshBulkState(errorText) {
+    if (!hasRuntimeMessaging()) {
+      return;
+    }
+    try {
+      const response = await sendRuntimeMessage({ action: "getBulkAutomationState" });
+      if (response && response.success) {
+        renderBulkState(response.state || {}, errorText || "");
+      } else {
+        renderBulkState({}, errorText || (response && response.error ? response.error : "Failed to fetch automation state"));
+      }
+    } catch (error) {
+      renderBulkState({}, errorText || (error && error.message ? error.message : "Failed to fetch automation state"));
+    }
+  }
+
+  function ensureAutomationPolling() {
+    if (automationPollTimer) {
+      return;
+    }
+    automationPollTimer = setInterval(() => {
+      refreshBulkState();
+    }, 1800);
+  }
+
+  function readBulkFormValues() {
+    const nodes = getAutomationPanelNodes();
+    const minDelaySeconds = clampNumber(
+      nodes && nodes.delayMinInput ? nodes.delayMinInput.value : "",
+      5,
+      600,
+      Math.round(getStoredBulkDelayMinMs() / 1000)
+    );
+    const maxDelaySecondsRaw = clampNumber(
+      nodes && nodes.delayMaxInput ? nodes.delayMaxInput.value : "",
+      5,
+      600,
+      Math.round(getStoredBulkDelayMaxMs() / 1000)
+    );
+    const maxDelaySeconds = Math.max(minDelaySeconds, maxDelaySecondsRaw);
+    const limit = clampNumber(
+      nodes && nodes.limitInput ? nodes.limitInput.value : "",
+      1,
+      500,
+      getStoredBulkLimit()
+    );
+    const autoFollowupEnabled = !!(nodes && nodes.autoFollowupInput && nodes.autoFollowupInput.checked);
+    const windowEnabled = !!(nodes && nodes.windowEnabledInput && nodes.windowEnabledInput.checked);
+    const sendWindowStart = normalizeTimeValue(
+      nodes && nodes.windowStartInput ? nodes.windowStartInput.value : "",
+      getStoredWindowStart()
+    );
+    const sendWindowEnd = normalizeTimeValue(
+      nodes && nodes.windowEndInput ? nodes.windowEndInput.value : "",
+      getStoredWindowEnd()
+    );
+    const delayMinMs = minDelaySeconds * 1000;
+    const delayMaxMs = maxDelaySeconds * 1000;
+    return {
+      delayMinMs,
+      delayMaxMs,
+      minDelaySeconds,
+      maxDelaySeconds,
+      limit,
+      autoFollowupEnabled,
+      windowEnabled,
+      sendWindowStart,
+      sendWindowEnd,
+    };
+  }
+
+  async function handleBulkAction(action) {
+    if (!hasRuntimeMessaging()) {
+      recoverRuntime("Extension runtime unavailable");
+      return;
+    }
+
+    try {
+      if (action === "start") {
+        const values = readBulkFormValues();
+        setStoredBulkDelayMinMs(values.delayMinMs);
+        setStoredBulkDelayMaxMs(values.delayMaxMs);
+        setStoredBulkLimit(values.limit);
+        setStoredAutoFollowupEnabled(values.autoFollowupEnabled);
+        setStoredWindowEnabled(values.windowEnabled);
+        setStoredWindowStart(values.sendWindowStart);
+        setStoredWindowEnd(values.sendWindowEnd);
+        const response = await sendRuntimeMessage({
+          action: "startBulkAutomation",
+          data: {
+            campaignId: getCurrentCampaignFilterId(),
+            delayMinMs: values.delayMinMs,
+            delayMaxMs: values.delayMaxMs,
+            limit: values.limit,
+            followupEnabled: values.autoFollowupEnabled,
+            windowEnabled: values.windowEnabled,
+            sendWindowStart: values.sendWindowStart,
+            sendWindowEnd: values.sendWindowEnd,
+          },
+        });
+        if (!response || !response.success) {
+          const message = response && response.error ? response.error : "Failed to start automation";
+          await refreshBulkState(message);
+          return;
+        }
+        await refreshBulkState("");
+        return;
+      }
+
+      if (action === "pause") {
+        const response = await sendRuntimeMessage({ action: "pauseBulkAutomation" });
+        const message = response && !response.success ? (response.error || "Failed to pause") : "";
+        await refreshBulkState(message);
+        return;
+      }
+
+      if (action === "resume") {
+        const response = await sendRuntimeMessage({ action: "resumeBulkAutomation" });
+        const message = response && !response.success ? (response.error || "Failed to resume") : "";
+        await refreshBulkState(message);
+        return;
+      }
+
+      if (action === "stop") {
+        const response = await sendRuntimeMessage({ action: "stopBulkAutomation" });
+        const message = response && !response.success ? (response.error || "Failed to stop") : "";
+        await refreshBulkState(message);
+        return;
+      }
+
+      if (action === "refresh") {
+        await refreshBulkState("");
+      }
+    } catch (error) {
+      const message = error && error.message ? error.message : "Automation action failed";
+      await refreshBulkState(message);
+    }
+  }
+
+  function bindAutomationPanelEvents() {
+    const nodes = getAutomationPanelNodes();
+    if (!nodes) return;
+    if (nodes.startBtn && !nodes.startBtn.dataset.bound) {
+      nodes.startBtn.dataset.bound = "1";
+      nodes.startBtn.addEventListener("click", () => handleBulkAction("start"));
+    }
+    if (nodes.pauseBtn && !nodes.pauseBtn.dataset.bound) {
+      nodes.pauseBtn.dataset.bound = "1";
+      nodes.pauseBtn.addEventListener("click", () => handleBulkAction("pause"));
+    }
+    if (nodes.resumeBtn && !nodes.resumeBtn.dataset.bound) {
+      nodes.resumeBtn.dataset.bound = "1";
+      nodes.resumeBtn.addEventListener("click", () => handleBulkAction("resume"));
+    }
+    if (nodes.stopBtn && !nodes.stopBtn.dataset.bound) {
+      nodes.stopBtn.dataset.bound = "1";
+      nodes.stopBtn.addEventListener("click", () => handleBulkAction("stop"));
+    }
+    if (nodes.refreshBtn && !nodes.refreshBtn.dataset.bound) {
+      nodes.refreshBtn.dataset.bound = "1";
+      nodes.refreshBtn.addEventListener("click", () => handleBulkAction("refresh"));
+    }
+    if (nodes.delayMinInput && !nodes.delayMinInput.dataset.bound) {
+      nodes.delayMinInput.dataset.bound = "1";
+      nodes.delayMinInput.addEventListener("change", () => {
+        const minDelaySeconds = clampNumber(nodes.delayMinInput.value, 5, 600, 45);
+        nodes.delayMinInput.value = String(minDelaySeconds);
+        setStoredBulkDelayMinMs(minDelaySeconds * 1000);
+      });
+    }
+    if (nodes.delayMaxInput && !nodes.delayMaxInput.dataset.bound) {
+      nodes.delayMaxInput.dataset.bound = "1";
+      nodes.delayMaxInput.addEventListener("change", () => {
+        const maxDelaySeconds = clampNumber(nodes.delayMaxInput.value, 5, 600, 45);
+        nodes.delayMaxInput.value = String(maxDelaySeconds);
+        setStoredBulkDelayMaxMs(maxDelaySeconds * 1000);
+      });
+    }
+    if (nodes.limitInput && !nodes.limitInput.dataset.bound) {
+      nodes.limitInput.dataset.bound = "1";
+      nodes.limitInput.addEventListener("change", () => {
+        const limit = clampNumber(nodes.limitInput.value, 1, 500, 50);
+        nodes.limitInput.value = String(limit);
+        setStoredBulkLimit(limit);
+      });
+    }
+    if (nodes.autoFollowupInput && !nodes.autoFollowupInput.dataset.bound) {
+      nodes.autoFollowupInput.dataset.bound = "1";
+      nodes.autoFollowupInput.addEventListener("change", () => {
+        setStoredAutoFollowupEnabled(!!nodes.autoFollowupInput.checked);
+      });
+    }
+    if (nodes.windowEnabledInput && !nodes.windowEnabledInput.dataset.bound) {
+      nodes.windowEnabledInput.dataset.bound = "1";
+      nodes.windowEnabledInput.addEventListener("change", () => {
+        setStoredWindowEnabled(!!nodes.windowEnabledInput.checked);
+      });
+    }
+    if (nodes.windowStartInput && !nodes.windowStartInput.dataset.bound) {
+      nodes.windowStartInput.dataset.bound = "1";
+      nodes.windowStartInput.addEventListener("change", () => {
+        const value = normalizeTimeValue(nodes.windowStartInput.value, DEFAULT_WINDOW_START);
+        nodes.windowStartInput.value = value;
+        setStoredWindowStart(value);
+      });
+    }
+    if (nodes.windowEndInput && !nodes.windowEndInput.dataset.bound) {
+      nodes.windowEndInput.dataset.bound = "1";
+      nodes.windowEndInput.addEventListener("change", () => {
+        const value = normalizeTimeValue(nodes.windowEndInput.value, DEFAULT_WINDOW_END);
+        nodes.windowEndInput.value = value;
+        setStoredWindowEnd(value);
+      });
+    }
+  }
+
+  function ensureAutomationPanel() {
+    // Native React panel now renders in app/dashboard/page.tsx.
+    // Do not inject DOM here, otherwise hydration can mismatch.
+    return;
+
+    const existing = document.getElementById(AUTOMATION_PANEL_ID);
+    if (existing) {
+      bindAutomationPanelEvents();
+      ensureAutomationPolling();
+      return;
+    }
+
+    const table = document.querySelector("table");
+    if (!table || !table.parentElement) {
+      return;
+    }
+
+    const panel = document.createElement("div");
+    panel.id = AUTOMATION_PANEL_ID;
+    panel.className = "mx-3 mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs";
+    panel.innerHTML =
+      '<div class="flex flex-wrap items-center gap-2">' +
+        '<span class="font-semibold text-blue-900">Bulk Automation</span>' +
+        '<label class="inline-flex items-center gap-1">' +
+          '<span class="text-slate-700">Delay Min (sec)</span>' +
+          '<input name="bulkDelayMinSeconds" type="number" min="5" max="600" class="h-8 w-20 rounded border bg-white px-2 text-xs" />' +
+        "</label>" +
+        '<label class="inline-flex items-center gap-1">' +
+          '<span class="text-slate-700">Delay Max (sec)</span>' +
+          '<input name="bulkDelayMaxSeconds" type="number" min="5" max="600" class="h-8 w-20 rounded border bg-white px-2 text-xs" />' +
+        "</label>" +
+        '<label class="inline-flex items-center gap-1">' +
+          '<span class="text-slate-700">Limit</span>' +
+          '<input name="bulkLimit" type="number" min="1" max="500" class="h-8 w-20 rounded border bg-white px-2 text-xs" />' +
+        "</label>" +
+        '<label class="inline-flex items-center gap-1 rounded border bg-white px-2 py-1">' +
+          '<input name="bulkAutoFollowup" type="checkbox" />' +
+          '<span class="text-slate-700">Auto follow-ups</span>' +
+        "</label>" +
+        '<label class="inline-flex items-center gap-1 rounded border bg-white px-2 py-1">' +
+          '<input name="bulkWindowEnabled" type="checkbox" />' +
+          '<span class="text-slate-700">Send window</span>' +
+        "</label>" +
+        '<label class="inline-flex items-center gap-1">' +
+          '<span class="text-slate-700">From</span>' +
+          '<input name="bulkWindowStart" type="time" class="h-8 rounded border bg-white px-2 text-xs" />' +
+        "</label>" +
+        '<label class="inline-flex items-center gap-1">' +
+          '<span class="text-slate-700">To</span>' +
+          '<input name="bulkWindowEnd" type="time" class="h-8 rounded border bg-white px-2 text-xs" />' +
+        "</label>" +
+        '<button type="button" data-action="bulk-start" class="h-8 rounded border px-3 font-medium text-slate-800 hover:bg-white">Start</button>' +
+        '<button type="button" data-action="bulk-pause" class="h-8 rounded border px-3 text-slate-700 hover:bg-white">Pause</button>' +
+        '<button type="button" data-action="bulk-resume" class="h-8 rounded border px-3 text-slate-700 hover:bg-white">Resume</button>' +
+        '<button type="button" data-action="bulk-stop" class="h-8 rounded border px-3 text-slate-700 hover:bg-white">Stop</button>' +
+        '<button type="button" data-action="bulk-refresh" class="h-8 rounded border px-2 text-slate-700 hover:bg-white">↻</button>' +
+      "</div>" +
+      '<div class="mt-2 text-slate-700" data-role="status">Status: Idle</div>' +
+      '<div class="text-slate-600" data-role="progress">Processed 0/0 • Sent 0 • Failed 0</div>' +
+      '<div class="hidden text-red-600" data-role="error"></div>';
+
+    table.parentElement.insertBefore(panel, table);
+
+    const nodes = getAutomationPanelNodes();
+    if (nodes && nodes.delayMinInput) {
+      nodes.delayMinInput.value = String(Math.round(getStoredBulkDelayMinMs() / 1000));
+    }
+    if (nodes && nodes.delayMaxInput) {
+      nodes.delayMaxInput.value = String(Math.round(getStoredBulkDelayMaxMs() / 1000));
+    }
+    if (nodes && nodes.limitInput) {
+      nodes.limitInput.value = String(getStoredBulkLimit());
+    }
+    if (nodes && nodes.autoFollowupInput) {
+      nodes.autoFollowupInput.checked = getStoredAutoFollowupEnabled();
+    }
+    if (nodes && nodes.windowEnabledInput) {
+      nodes.windowEnabledInput.checked = getStoredWindowEnabled();
+    }
+    if (nodes && nodes.windowStartInput) {
+      nodes.windowStartInput.value = getStoredWindowStart();
+    }
+    if (nodes && nodes.windowEndInput) {
+      nodes.windowEndInput.value = getStoredWindowEnd();
+    }
+
+    bindAutomationPanelEvents();
+    ensureAutomationPolling();
+    refreshBulkState();
   }
 
   function getCellText(row, selector) {
@@ -358,6 +1014,7 @@
   }
 
   function init() {
+    initRuntimeBridge();
     if (!hasRuntimeMessaging()) {
       recoverRuntime("Extension runtime unavailable during init");
       return;
@@ -391,10 +1048,14 @@
 
     log("Dashboard", "Content script loaded");
     attachListeners();
+    ensureAutomationPanel();
     setTimeout(attachListeners, 500);
     setTimeout(attachListeners, 1500);
+    setTimeout(ensureAutomationPanel, 500);
+    setTimeout(ensureAutomationPanel, 1500);
     const observer = new MutationObserver(() => {
       attachListeners();
+      ensureAutomationPanel();
     });
     const table = document.querySelector("table tbody");
     if (table) observer.observe(table, { childList: true, subtree: true });

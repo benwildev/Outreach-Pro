@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   Card,
@@ -19,7 +20,9 @@ import { DeleteCampaignButton } from "./DeleteCampaignButton";
 
 export const dynamic = "force-dynamic";
 
-type CampaignRow = Awaited<ReturnType<typeof prisma.campaign.findMany>>[number] & {
+type CampaignRow = Prisma.CampaignGetPayload<{
+  include: { _count: { select: { leads: true } } };
+}> & {
   chatGptChatId?: string | null;
   gmailAuthUser?: string | null;
 };

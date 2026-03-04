@@ -35,8 +35,18 @@ const REPLY_CHECK_PERIOD_MINUTES = 24 * 60;
 const CHATGPT_HANDOFF_TIMEOUT_MS = 90000;
 const CHATGPT_DEFAULT_URL = "https://chatgpt.com/";
 const CAMPAIGN_CHAT_URLS_KEY = "campaignChatUrls";
+const SEND_QUEUE_API_BASE = "http://localhost:3000/api/send-queue";
+const FOLLOWUP_QUEUE_API_BASE = "http://localhost:3000/api/followup-queue";
+const BULK_WORKFLOW_TIMEOUT_MS = 240000;
+const BULK_DELAY_DEFAULT_MS = 45000;
+const BULK_DELAY_MIN_MS = 5000;
+const BULK_DELAY_MAX_MS = 600000;
+const BULK_LIMIT_DEFAULT = 50;
+const BULK_LIMIT_MAX = 500;
 let replySweepRunning = false;
 const pendingWorkflows = new Map();
+const bulkWorkflowWaiters = new Map();
+const bulkAutomationState = createBulkAutomationState();
 
 chrome.runtime.onInstalled.addListener(() => {
   ensureReplyCheckAlarm().catch((err) => {
@@ -160,6 +170,51 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message.action === "getCampaignChatUrl") {
     handleGetCampaignChatUrl(message.data)
+      .then(sendResponse)
+      .catch((err) => {
+        console.error("[Leads Extension Background]", err);
+        sendResponse({ success: false, error: String(err.message) });
+      });
+    return true;
+  }
+  if (message.action === "startBulkAutomation") {
+    handleStartBulkAutomation(message.data)
+      .then(sendResponse)
+      .catch((err) => {
+        console.error("[Leads Extension Background]", err);
+        sendResponse({ success: false, error: String(err.message) });
+      });
+    return true;
+  }
+  if (message.action === "pauseBulkAutomation") {
+    handlePauseBulkAutomation()
+      .then(sendResponse)
+      .catch((err) => {
+        console.error("[Leads Extension Background]", err);
+        sendResponse({ success: false, error: String(err.message) });
+      });
+    return true;
+  }
+  if (message.action === "resumeBulkAutomation") {
+    handleResumeBulkAutomation()
+      .then(sendResponse)
+      .catch((err) => {
+        console.error("[Leads Extension Background]", err);
+        sendResponse({ success: false, error: String(err.message) });
+      });
+    return true;
+  }
+  if (message.action === "stopBulkAutomation") {
+    handleStopBulkAutomation()
+      .then(sendResponse)
+      .catch((err) => {
+        console.error("[Leads Extension Background]", err);
+        sendResponse({ success: false, error: String(err.message) });
+      });
+    return true;
+  }
+  if (message.action === "getBulkAutomationState") {
+    handleGetBulkAutomationState()
       .then(sendResponse)
       .catch((err) => {
         console.error("[Leads Extension Background]", err);
@@ -527,6 +582,613 @@ async function handleGetCampaignChatUrl(data) {
   return { success: true, campaignId, chatUrl };
 }
 
+function createBulkAutomationState() {
+  return {
+    status: "idle",
+    paused: false,
+    stopRequested: false,
+    runnerActive: false,
+    phase: "send",
+    followupEnabled: false,
+    queue: [],
+    total: 0,
+    currentIndex: 0,
+    processed: 0,
+    sent: 0,
+    followups: 0,
+    failed: 0,
+    skipped: 0,
+    delayMinMs: BULK_DELAY_DEFAULT_MS,
+    delayMaxMs: BULK_DELAY_DEFAULT_MS,
+    lastDelayMs: 0,
+    windowEnabled: false,
+    sendWindowStart: "09:00",
+    sendWindowEnd: "18:00",
+    limit: BULK_LIMIT_DEFAULT,
+    campaignId: "",
+    currentLeadId: "",
+    currentRecipientEmail: "",
+    startedAt: null,
+    finishedAt: null,
+    lastError: "",
+  };
+}
+
+function normalizeBulkDelayMs(value) {
+  const parsed = Number.parseInt(String(value ?? BULK_DELAY_DEFAULT_MS), 10);
+  if (Number.isNaN(parsed)) {
+    return BULK_DELAY_DEFAULT_MS;
+  }
+  return Math.max(BULK_DELAY_MIN_MS, Math.min(parsed, BULK_DELAY_MAX_MS));
+}
+
+function normalizeBulkDelayRange(minValue, maxValue) {
+  const minDelayMs = normalizeBulkDelayMs(minValue);
+  const maxDelayMs = normalizeBulkDelayMs(maxValue != null ? maxValue : minDelayMs);
+  return {
+    delayMinMs: Math.min(minDelayMs, maxDelayMs),
+    delayMaxMs: Math.max(minDelayMs, maxDelayMs),
+  };
+}
+
+function normalizeBulkLimit(value) {
+  const parsed = Number.parseInt(String(value ?? BULK_LIMIT_DEFAULT), 10);
+  if (Number.isNaN(parsed)) {
+    return BULK_LIMIT_DEFAULT;
+  }
+  return Math.max(1, Math.min(parsed, BULK_LIMIT_MAX));
+}
+
+function normalizeWindowTime(value, fallback) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return String(fallback || "");
+  }
+  const match = raw.match(/^([0-1]?\d|2[0-3]):([0-5]\d)$/);
+  if (!match) {
+    return String(fallback || "");
+  }
+  const hours = String(match[1]).padStart(2, "0");
+  const minutes = String(match[2]).padStart(2, "0");
+  return hours + ":" + minutes;
+}
+
+function parseWindowMinutes(value) {
+  const normalized = normalizeWindowTime(value, "");
+  if (!normalized) return null;
+  const parts = normalized.split(":");
+  const hours = Number.parseInt(parts[0], 10);
+  const minutes = Number.parseInt(parts[1], 10);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) return null;
+  return (hours * 60) + minutes;
+}
+
+function isWithinSendWindow(now, startWindow, endWindow) {
+  const start = parseWindowMinutes(startWindow);
+  const end = parseWindowMinutes(endWindow);
+  if (start == null || end == null) {
+    return true;
+  }
+
+  const minutesNow = (now.getHours() * 60) + now.getMinutes();
+  if (start === end) {
+    return true;
+  }
+  if (start < end) {
+    return minutesNow >= start && minutesNow < end;
+  }
+  return minutesNow >= start || minutesNow < end;
+}
+
+function getRandomDelayMs(minValue, maxValue) {
+  const minDelayMs = normalizeBulkDelayMs(minValue);
+  const maxDelayMs = normalizeBulkDelayMs(maxValue != null ? maxValue : minDelayMs);
+  const floor = Math.min(minDelayMs, maxDelayMs);
+  const ceil = Math.max(minDelayMs, maxDelayMs);
+  if (floor === ceil) {
+    return floor;
+  }
+  return floor + Math.floor(Math.random() * (ceil - floor + 1));
+}
+
+function toBulkQueueItem(item, workflowType) {
+  const source = item || {};
+  const type = workflowType === "followup" ? "followup" : "send";
+  const followupBody = String(source.followupBody || "").trim();
+  return {
+    workflowType: type,
+    leadId: source.leadId ? String(source.leadId).trim() : "",
+    campaignId: source.campaignId ? String(source.campaignId).trim() : "",
+    campaignName: source.campaignName ? String(source.campaignName).trim() : "",
+    campaignChatId: source.campaignChatId ? String(source.campaignChatId).trim() : "",
+    campaignGmailAuthUser: source.campaignGmailAuthUser ? String(source.campaignGmailAuthUser).trim() : "",
+    gmailThreadId: source.gmailThreadId ? String(source.gmailThreadId).trim() : "",
+    recipientName: source.recipientName ? String(source.recipientName).trim() : "",
+    recipientEmail: source.recipientEmail ? String(source.recipientEmail).trim() : "",
+    websiteUrl: source.websiteUrl ? String(source.websiteUrl).trim() : "",
+    website: source.website ? String(source.website).trim() : "",
+    niche: source.niche ? String(source.niche).trim() : "",
+    step: Number.isFinite(Number(source.step)) ? Number(source.step) : 1,
+    campaignBody: source.campaignBody ? String(source.campaignBody) : "",
+    campaignSubject: source.campaignSubject ? String(source.campaignSubject) : "",
+    followup1: source.followup1 ? String(source.followup1) : "",
+    followup2: source.followup2 ? String(source.followup2) : "",
+    followupBody: followupBody,
+  };
+}
+
+function buildFollowupSubject(subject) {
+  const value = String(subject || "").trim();
+  if (!value) return "Re: Quick note";
+  if (/^re:/i.test(value)) return value;
+  return "Re: " + value;
+}
+
+function getFollowupBodyFromItem(item) {
+  const existing = String(item && item.followupBody ? item.followupBody : "").trim();
+  if (existing) {
+    return existing;
+  }
+  const step = Number(item && item.step ? item.step : 1);
+  if (step === 1) {
+    return String(item && item.followup1 ? item.followup1 : "").trim();
+  }
+  if (step === 2) {
+    return String(item && item.followup2 ? item.followup2 : "").trim();
+  }
+  return "";
+}
+
+function getBulkWaiterKey(leadId) {
+  const key = String(leadId || "").trim();
+  return key ? "lead:" + key : "";
+}
+
+function getBulkAutomationPublicState() {
+  const total = Number(bulkAutomationState.total || 0);
+  const processed = Number(bulkAutomationState.processed || 0);
+  return {
+    status: bulkAutomationState.status,
+    phase: bulkAutomationState.phase || "send",
+    paused: !!bulkAutomationState.paused,
+    stopRequested: !!bulkAutomationState.stopRequested,
+    campaignId: bulkAutomationState.campaignId || "",
+    delayMinMs: Number(bulkAutomationState.delayMinMs || 0),
+    delayMaxMs: Number(bulkAutomationState.delayMaxMs || 0),
+    delayMs: Number(bulkAutomationState.lastDelayMs || 0),
+    followupEnabled: !!bulkAutomationState.followupEnabled,
+    followups: Number(bulkAutomationState.followups || 0),
+    windowEnabled: !!bulkAutomationState.windowEnabled,
+    sendWindowStart: String(bulkAutomationState.sendWindowStart || ""),
+    sendWindowEnd: String(bulkAutomationState.sendWindowEnd || ""),
+    limit: Number(bulkAutomationState.limit || 0),
+    total,
+    currentIndex: Number(bulkAutomationState.currentIndex || 0),
+    processed,
+    sent: Number(bulkAutomationState.sent || 0),
+    failed: Number(bulkAutomationState.failed || 0),
+    skipped: Number(bulkAutomationState.skipped || 0),
+    remaining: Math.max(total - processed, 0),
+    currentLeadId: bulkAutomationState.currentLeadId || "",
+    currentRecipientEmail: bulkAutomationState.currentRecipientEmail || "",
+    startedAt: bulkAutomationState.startedAt,
+    finishedAt: bulkAutomationState.finishedAt,
+    lastError: bulkAutomationState.lastError || "",
+  };
+}
+
+function resetBulkWorkflowWaiters() {
+  const waiters = Array.from(bulkWorkflowWaiters.values());
+  bulkWorkflowWaiters.clear();
+  for (let i = 0; i < waiters.length; i++) {
+    const waiter = waiters[i];
+    if (waiter && waiter.timeoutId) {
+      clearTimeout(waiter.timeoutId);
+    }
+    if (waiter && typeof waiter.reject === "function") {
+      try {
+        waiter.reject(new Error("Bulk automation was reset"));
+      } catch (_) {
+        // Ignore.
+      }
+    }
+  }
+}
+
+function waitForBulkWorkflowCompletion(leadId, timeoutMs) {
+  const key = getBulkWaiterKey(leadId);
+  if (!key) {
+    return Promise.reject(new Error("Lead ID is required for completion tracking"));
+  }
+
+  const existing = bulkWorkflowWaiters.get(key);
+  if (existing) {
+    if (existing.timeoutId) {
+      clearTimeout(existing.timeoutId);
+    }
+    if (typeof existing.reject === "function") {
+      try {
+        existing.reject(new Error("Superseded by a newer workflow"));
+      } catch (_) {
+        // Ignore.
+      }
+    }
+    bulkWorkflowWaiters.delete(key);
+  }
+
+  const timeout = Math.max(15000, Number(timeoutMs || BULK_WORKFLOW_TIMEOUT_MS));
+  return new Promise((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      bulkWorkflowWaiters.delete(key);
+      reject(new Error("Workflow timeout while waiting for lead update"));
+    }, timeout);
+    bulkWorkflowWaiters.set(key, { resolve, reject, timeoutId });
+  });
+}
+
+function resolveBulkWorkflowCompletion(leadId, payload) {
+  const key = getBulkWaiterKey(leadId);
+  if (!key) {
+    return false;
+  }
+  const waiter = bulkWorkflowWaiters.get(key);
+  if (!waiter) {
+    return false;
+  }
+  bulkWorkflowWaiters.delete(key);
+  if (waiter.timeoutId) {
+    clearTimeout(waiter.timeoutId);
+  }
+  try {
+    waiter.resolve(payload || { success: true });
+  } catch (_) {
+    // Ignore.
+  }
+  return true;
+}
+
+async function fetchSendQueue(limit, campaignId) {
+  const maxLeads = normalizeBulkLimit(limit);
+  const params = new URLSearchParams();
+  params.set("limit", String(maxLeads));
+  const normalizedCampaignId = String(campaignId || "").trim();
+  if (normalizedCampaignId) {
+    params.set("campaignId", normalizedCampaignId);
+  }
+
+  const response = await fetch(SEND_QUEUE_API_BASE + "?" + params.toString());
+
+  let result = null;
+  try {
+    result = await response.json();
+  } catch (_) {
+    result = null;
+  }
+
+  if (!response.ok) {
+    const errorMessage =
+      (result && (result.error || result.message)) ||
+      "Send queue fetch failed with status " + response.status;
+    throw new Error(errorMessage);
+  }
+
+  const leads = result && Array.isArray(result.leads) ? result.leads : [];
+  return leads.map((item) => toBulkQueueItem(item, "send"));
+}
+
+async function fetchFollowupQueue(limit, campaignId) {
+  const maxLeads = normalizeBulkLimit(limit);
+  const params = new URLSearchParams();
+  params.set("limit", String(maxLeads));
+  const normalizedCampaignId = String(campaignId || "").trim();
+  if (normalizedCampaignId) {
+    params.set("campaignId", normalizedCampaignId);
+  }
+
+  const response = await fetch(FOLLOWUP_QUEUE_API_BASE + "?" + params.toString());
+
+  let result = null;
+  try {
+    result = await response.json();
+  } catch (_) {
+    result = null;
+  }
+
+  if (!response.ok) {
+    const errorMessage =
+      (result && (result.error || result.message)) ||
+      "Follow-up queue fetch failed with status " + response.status;
+    throw new Error(errorMessage);
+  }
+
+  const leads = result && Array.isArray(result.leads) ? result.leads : [];
+  return leads.map((item) => toBulkQueueItem(item, "followup"));
+}
+
+async function waitWhilePausedOrStopped() {
+  while (bulkAutomationState.paused && !bulkAutomationState.stopRequested) {
+    bulkAutomationState.status = "paused";
+    await delay(350);
+  }
+  return !bulkAutomationState.stopRequested;
+}
+
+async function waitForSendWindowIfNeeded() {
+  if (!bulkAutomationState.windowEnabled) {
+    return true;
+  }
+
+  while (!bulkAutomationState.stopRequested) {
+    const canContinue = await waitWhilePausedOrStopped();
+    if (!canContinue) {
+      return false;
+    }
+
+    if (isWithinSendWindow(new Date(), bulkAutomationState.sendWindowStart, bulkAutomationState.sendWindowEnd)) {
+      return true;
+    }
+
+    bulkAutomationState.status = "waiting-window";
+    await delay(30000);
+  }
+
+  return false;
+}
+
+async function sleepWithBulkControls(ms) {
+  const waitMs = Math.max(0, Number(ms || 0));
+  let elapsed = 0;
+  while (elapsed < waitMs) {
+    const canContinue = await waitWhilePausedOrStopped();
+    if (!canContinue) {
+      return false;
+    }
+    const slice = Math.min(500, waitMs - elapsed);
+    await delay(slice);
+    elapsed += slice;
+  }
+  return !bulkAutomationState.stopRequested;
+}
+
+async function runSingleBulkWorkflow(item) {
+  const current = item || null;
+  const leadId = current && current.leadId ? String(current.leadId).trim() : "";
+  const recipientEmail = current && current.recipientEmail ? String(current.recipientEmail).trim() : "";
+
+  bulkAutomationState.currentLeadId = leadId;
+  bulkAutomationState.currentRecipientEmail = recipientEmail;
+
+  if (!leadId || !recipientEmail) {
+    bulkAutomationState.skipped += 1;
+    return;
+  }
+
+  const workflowType = current && current.workflowType === "followup" ? "followup" : "send";
+  if (workflowType === "followup") {
+    const followupBody = getFollowupBodyFromItem(current);
+    if (!followupBody) {
+      bulkAutomationState.skipped += 1;
+      return;
+    }
+
+    const payload = {
+      leadId: leadId,
+      to: recipientEmail,
+      subject: buildFollowupSubject(current.campaignSubject || ""),
+      body: followupBody,
+      threadId: current.gmailThreadId || null,
+      campaignGmailAuthUser: current.campaignGmailAuthUser || "",
+    };
+    const completionPromise = waitForBulkWorkflowCompletion(leadId, BULK_WORKFLOW_TIMEOUT_MS);
+    await handleStartFollowupWorkflow(payload);
+    await completionPromise;
+    bulkAutomationState.followups += 1;
+    return;
+  }
+
+  const completionPromise = waitForBulkWorkflowCompletion(leadId, BULK_WORKFLOW_TIMEOUT_MS);
+  await handleStartWorkflow(current);
+  await completionPromise;
+  bulkAutomationState.sent += 1;
+}
+
+async function processBulkQueueItems() {
+  while (bulkAutomationState.currentIndex < bulkAutomationState.total) {
+    if (bulkAutomationState.stopRequested) {
+      break;
+    }
+
+    const canContinue = await waitWhilePausedOrStopped();
+    if (!canContinue) {
+      break;
+    }
+
+    const canSendNow = await waitForSendWindowIfNeeded();
+    if (!canSendNow) {
+      break;
+    }
+
+    bulkAutomationState.status = "running";
+    const current = bulkAutomationState.queue[bulkAutomationState.currentIndex] || null;
+
+    try {
+      await runSingleBulkWorkflow(current);
+    } catch (error) {
+      bulkAutomationState.failed += 1;
+      bulkAutomationState.lastError = error && error.message ? String(error.message) : "Unknown workflow error";
+      console.error("[Leads Extension] Bulk workflow failed for lead:", current && current.leadId ? current.leadId : "(unknown)", error);
+    } finally {
+      bulkAutomationState.processed += 1;
+      bulkAutomationState.currentIndex += 1;
+      bulkAutomationState.currentLeadId = "";
+      bulkAutomationState.currentRecipientEmail = "";
+    }
+
+    if (bulkAutomationState.currentIndex < bulkAutomationState.total) {
+      const delayMs = getRandomDelayMs(bulkAutomationState.delayMinMs, bulkAutomationState.delayMaxMs);
+      bulkAutomationState.lastDelayMs = delayMs;
+      const continueRunning = await sleepWithBulkControls(delayMs);
+      if (!continueRunning) {
+        break;
+      }
+    }
+  }
+}
+
+async function runBulkAutomationQueue() {
+  if (bulkAutomationState.runnerActive) {
+    return;
+  }
+
+  bulkAutomationState.runnerActive = true;
+  bulkAutomationState.startedAt = Date.now();
+  bulkAutomationState.finishedAt = null;
+  bulkAutomationState.lastError = "";
+  bulkAutomationState.phase = "send";
+  bulkAutomationState.lastDelayMs = 0;
+
+  try {
+    await processBulkQueueItems();
+
+    if (!bulkAutomationState.stopRequested && bulkAutomationState.followupEnabled) {
+      bulkAutomationState.phase = "followup";
+      const followupQueue = await fetchFollowupQueue(bulkAutomationState.limit, bulkAutomationState.campaignId);
+      if (followupQueue.length > 0) {
+        for (let i = 0; i < followupQueue.length; i++) {
+          bulkAutomationState.queue.push(followupQueue[i]);
+        }
+        bulkAutomationState.total += followupQueue.length;
+        await processBulkQueueItems();
+      }
+    }
+
+    bulkAutomationState.status = bulkAutomationState.stopRequested ? "stopped" : "completed";
+  } finally {
+    bulkAutomationState.runnerActive = false;
+    bulkAutomationState.paused = false;
+    bulkAutomationState.stopRequested = false;
+    bulkAutomationState.currentLeadId = "";
+    bulkAutomationState.currentRecipientEmail = "";
+    bulkAutomationState.finishedAt = Date.now();
+    resetBulkWorkflowWaiters();
+  }
+}
+
+async function handleStartBulkAutomation(data) {
+  if (bulkAutomationState.runnerActive || bulkAutomationState.status === "running" || bulkAutomationState.status === "paused") {
+    return {
+      success: false,
+      error: "Bulk automation is already running",
+      state: getBulkAutomationPublicState(),
+    };
+  }
+
+  const campaignId = data && data.campaignId ? String(data.campaignId).trim() : "";
+  const delayRange = normalizeBulkDelayRange(
+    data && (data.delayMinMs != null ? data.delayMinMs : data.delayMs),
+    data && (data.delayMaxMs != null ? data.delayMaxMs : data.delayMs)
+  );
+  const limit = normalizeBulkLimit(data && data.limit);
+  const followupEnabled = !!(data && data.followupEnabled);
+  const sendWindowStart = normalizeWindowTime(data && data.sendWindowStart, "09:00");
+  const sendWindowEnd = normalizeWindowTime(data && data.sendWindowEnd, "18:00");
+  const windowEnabled = !!(data && data.windowEnabled && sendWindowStart && sendWindowEnd);
+  const queue = await fetchSendQueue(limit, campaignId);
+
+  bulkAutomationState.queue = Array.isArray(queue) ? queue : [];
+  bulkAutomationState.total = bulkAutomationState.queue.length;
+  bulkAutomationState.currentIndex = 0;
+  bulkAutomationState.processed = 0;
+  bulkAutomationState.sent = 0;
+  bulkAutomationState.followups = 0;
+  bulkAutomationState.failed = 0;
+  bulkAutomationState.skipped = 0;
+  bulkAutomationState.delayMinMs = delayRange.delayMinMs;
+  bulkAutomationState.delayMaxMs = delayRange.delayMaxMs;
+  bulkAutomationState.lastDelayMs = 0;
+  bulkAutomationState.followupEnabled = followupEnabled;
+  bulkAutomationState.windowEnabled = windowEnabled;
+  bulkAutomationState.sendWindowStart = sendWindowStart;
+  bulkAutomationState.sendWindowEnd = sendWindowEnd;
+  bulkAutomationState.limit = limit;
+  bulkAutomationState.campaignId = campaignId;
+  bulkAutomationState.phase = "send";
+  bulkAutomationState.currentLeadId = "";
+  bulkAutomationState.currentRecipientEmail = "";
+  bulkAutomationState.startedAt = null;
+  bulkAutomationState.finishedAt = null;
+  bulkAutomationState.lastError = "";
+  bulkAutomationState.paused = false;
+  bulkAutomationState.stopRequested = false;
+  bulkAutomationState.status = (bulkAutomationState.total > 0 || followupEnabled) ? "running" : "idle";
+  resetBulkWorkflowWaiters();
+
+  if (bulkAutomationState.total === 0 && !followupEnabled) {
+    return {
+      success: true,
+      started: false,
+      message: "No pending leads found for automation",
+      state: getBulkAutomationPublicState(),
+    };
+  }
+
+  runBulkAutomationQueue().catch((err) => {
+    bulkAutomationState.status = "failed";
+    bulkAutomationState.lastError = err && err.message ? String(err.message) : "Bulk runner crashed";
+    bulkAutomationState.runnerActive = false;
+    bulkAutomationState.paused = false;
+    bulkAutomationState.stopRequested = false;
+    bulkAutomationState.finishedAt = Date.now();
+    resetBulkWorkflowWaiters();
+    console.error("[Leads Extension] Bulk automation crashed:", err);
+  });
+
+  return {
+    success: true,
+    started: true,
+    state: getBulkAutomationPublicState(),
+  };
+}
+
+async function handlePauseBulkAutomation() {
+  if (!bulkAutomationState.runnerActive) {
+    return { success: false, error: "Bulk automation is not currently running", state: getBulkAutomationPublicState() };
+  }
+  if (bulkAutomationState.status !== "running" && bulkAutomationState.status !== "waiting-window") {
+    return { success: false, error: "Bulk automation is not currently running", state: getBulkAutomationPublicState() };
+  }
+  bulkAutomationState.paused = true;
+  bulkAutomationState.status = "paused";
+  return { success: true, state: getBulkAutomationPublicState() };
+}
+
+async function handleResumeBulkAutomation() {
+  if (!bulkAutomationState.runnerActive || bulkAutomationState.status !== "paused") {
+    return { success: false, error: "Bulk automation is not paused", state: getBulkAutomationPublicState() };
+  }
+  bulkAutomationState.paused = false;
+  bulkAutomationState.status = "running";
+  return { success: true, state: getBulkAutomationPublicState() };
+}
+
+async function handleStopBulkAutomation() {
+  if (!bulkAutomationState.runnerActive &&
+      bulkAutomationState.status !== "paused" &&
+      bulkAutomationState.status !== "running" &&
+      bulkAutomationState.status !== "waiting-window" &&
+      bulkAutomationState.status !== "stopping") {
+    return { success: false, error: "Bulk automation is not active", state: getBulkAutomationPublicState() };
+  }
+  bulkAutomationState.stopRequested = true;
+  bulkAutomationState.paused = false;
+  bulkAutomationState.status = "stopping";
+  return { success: true, state: getBulkAutomationPublicState() };
+}
+
+async function handleGetBulkAutomationState() {
+  return { success: true, state: getBulkAutomationPublicState() };
+}
+
 function fillCampaignPlaceholders(template, data) {
   const text = String(template || "");
   const websiteUrl = (data && (data.websiteUrl || data.website) ? String(data.websiteUrl || data.website) : "").trim();
@@ -870,6 +1532,7 @@ async function handleUpdateFollowup(data) {
 
   const updatedLead = result && result.lead ? result.lead : null;
   if (updatedLead) {
+    resolveBulkWorkflowCompletion(updatedLead.id, { success: true, lead: updatedLead, type: "followup" });
     notifyDashboardTabs(updatedLead);
   }
 
@@ -899,6 +1562,7 @@ async function handleUpdateLeadStatus(data) {
 
   const updatedLead = result && result.lead ? result.lead : null;
   if (updatedLead) {
+    resolveBulkWorkflowCompletion(updatedLead.id, { success: true, lead: updatedLead, type: "send" });
     notifyDashboardTabs(updatedLead);
   }
 

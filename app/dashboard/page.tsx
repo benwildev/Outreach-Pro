@@ -30,6 +30,7 @@ import { DashboardTabs } from "./DashboardTabs";
 import { Badge } from "@/components/ui/badge";
 import { CampaignFilter } from "./CampaignFilter";
 import { StatsCards } from "./StatsCards";
+import { BulkAutomationPanel } from "./BulkAutomationPanel";
 import { Settings } from "lucide-react";
 
 const VALID_STATUSES = ["pending", "sent", "replied"] as const;
@@ -168,6 +169,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             </div>
           </CardHeader>
           <CardContent className="p-0">
+            <BulkAutomationPanel currentCampaignId={campaignId} />
             <Table className="w-full table-fixed text-xs [&_th]:px-2 [&_th]:py-2 [&_td]:px-2 [&_td]:py-2">
               <TableHeader>
                 <TableRow className="border-b border-gray-200 bg-gray-50 hover:bg-gray-50">
@@ -261,7 +263,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                         </div>
                       </TableCell>
                       <TableCell
-                        className="max-w-[140px] truncate whitespace-nowrap font-mono text-[11px]"
+                        className="max-w-[160px] break-all font-mono text-[11px] leading-tight"
                         title={lead.sentGmailAuthUser ?? undefined}
                       >
                         {lead.sentGmailAuthUser || "—"}
