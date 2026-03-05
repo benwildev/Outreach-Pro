@@ -16,6 +16,7 @@ model Campaign {
   gmailAuthUser String?
   followup1   String?
   followup2   String?
+  signature   String?
   delay1Days  Int      @default(3)
   delay2Days  Int      @default(5)
   provider    String   @default("gmail")

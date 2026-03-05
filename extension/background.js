@@ -15,8 +15,8 @@ const EMAIL_STRUCTURE_INSTRUCTION =
   "- A bullet list (3 items), each one line and specific. Use a single dash or bullet character (- or •) at the start of each list item.\n" +
   "- A short closing line offering next steps, e.g. \"If any of these are a fit, I can send over an outline.\"\n" +
   "- Then a simple thank-you line.\n" +
-  "- End with \"Best regards,\" only.\n" +
-  "- Do not add any sender name or signature line unless that exact line already exists in the campaign template.\n" +
+  "- End with \"Best regards,\" only. DO NOT add any name, title, company, or signature line after it.\n" +
+  "- DO NOT add any sender name or signature line anywhere in the email body.\n" +
   "- Do not use placeholders such as [Your Name], {{topic}}, [Company Name], or bracketed template text anywhere in the final email.";
 
 const ANTI_AI_PHRASES_INSTRUCTION =
@@ -136,7 +136,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "closeCurrentTab") {
     const tabId = sender.tab?.id;
     if (tabId) {
-      chrome.tabs.remove(tabId).catch(() => {});
+      chrome.tabs.remove(tabId).catch(() => { });
     }
     sendResponse({ success: true });
     return true;
@@ -285,6 +285,7 @@ async function handleStartWorkflow(data) {
     recipientEmail: data.recipientEmail,
     leadId: data.leadId,
     campaignBody: data.campaignBody || "",
+    campaignSignature: data.campaignSignature || "",
   }, 5, 700);
   if (!sent) {
     console.error("[Leads Extension] Send message to ChatGPT tab failed after retries (tab:", tab.id, ")");
@@ -1173,10 +1174,10 @@ async function handleResumeBulkAutomation() {
 
 async function handleStopBulkAutomation() {
   if (!bulkAutomationState.runnerActive &&
-      bulkAutomationState.status !== "paused" &&
-      bulkAutomationState.status !== "running" &&
-      bulkAutomationState.status !== "waiting-window" &&
-      bulkAutomationState.status !== "stopping") {
+    bulkAutomationState.status !== "paused" &&
+    bulkAutomationState.status !== "running" &&
+    bulkAutomationState.status !== "waiting-window" &&
+    bulkAutomationState.status !== "stopping") {
     return { success: false, error: "Bulk automation is not active", state: getBulkAutomationPublicState() };
   }
   bulkAutomationState.stopRequested = true;

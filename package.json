@@ -7,6 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "db:status": "prisma migrate status",
+    "db:migrate": "prisma migrate deploy",
+    "db:generate": "prisma generate",
+    "db:sync:safe": "node scripts/db-sync-safe.js",
     "postinstall": "prisma generate"
   },
   "dependencies": {

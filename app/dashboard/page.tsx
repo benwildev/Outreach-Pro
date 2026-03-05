@@ -118,7 +118,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const sentLeads = await prisma.lead.count({ where: { status: "sent" } });
   const repliedLeads = await prisma.lead.count({ where: { status: "replied" } });
   const pendingLeads = await prisma.lead.count({ where: { status: "pending" } });
-  
+
   // Count follow-ups due
   const followupDueLeads = await prisma.lead.findMany({
     where: { status: "sent", nextFollowup: { lte: new Date() } },
@@ -126,8 +126,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const followupDueCount = followupDueLeads.length;
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-8 px-4">
-      <div className="container mx-auto max-w-7xl">
+    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-6 px-3">
+      <div className="mx-auto w-full">
         {/* Header */}
         <div className="mb-8">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -170,142 +170,142 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </CardHeader>
           <CardContent className="p-0">
             <BulkAutomationPanel currentCampaignId={campaignId} />
-            <Table className="w-full table-fixed text-xs [&_th]:px-2 [&_th]:py-2 [&_td]:px-2 [&_td]:py-2">
-              <TableHeader>
-                <TableRow className="border-b border-gray-200 bg-gray-50 hover:bg-gray-50">
-                  <TableHead className="w-[9%] font-semibold leading-tight text-gray-700">Campaign</TableHead>
-                  <TableHead className="w-[10%] font-semibold leading-tight text-gray-700">Recipient Name</TableHead>
-                  <TableHead className="w-[13%] font-semibold leading-tight text-gray-700">Recipient Email</TableHead>
-                  <TableHead className="w-[7%] font-semibold leading-tight text-gray-700">Website</TableHead>
-                  <TableHead className="w-[6%] font-semibold leading-tight text-gray-700">Niche</TableHead>
-                  <TableHead className="w-[8%] font-semibold leading-tight text-gray-700">Status</TableHead>
-                  <TableHead className="w-[9%] font-semibold leading-tight text-gray-700">Thread ID</TableHead>
-                  <TableHead className="w-[6%] font-semibold leading-tight text-gray-700">Mail Data</TableHead>
-                  <TableHead className="w-[10%] font-semibold leading-tight text-gray-700">Sent Gmail</TableHead>
-                  <TableHead className="w-[7%] font-semibold leading-tight text-gray-700">Sent At</TableHead>
-                  <TableHead className="w-[7%] font-semibold leading-tight text-gray-700">Created At</TableHead>
-                  <TableHead className="w-[8%] font-semibold leading-tight text-gray-700">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {leads.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={12}
-                      className="h-24 text-center text-muted-foreground"
-                    >
-                      No leads found.
-                    </TableCell>
+            <div className="overflow-x-auto">
+              <Table className="w-full table-fixed text-xs [&_th]:px-2 [&_th]:py-2 [&_td]:px-2 [&_td]:py-2 min-w-[1100px]">
+                <TableHeader>
+                  <TableRow className="border-b border-gray-200 bg-gray-50 hover:bg-gray-50">
+                    <TableHead className="w-[7%] font-semibold text-gray-700">Campaign</TableHead>
+                    <TableHead className="w-[8%] font-semibold text-gray-700">Recipient</TableHead>
+                    <TableHead className="w-[14%] font-semibold text-gray-700">Email</TableHead>
+                    <TableHead className="w-[10%] font-semibold text-gray-700">Website</TableHead>
+                    <TableHead className="w-[10%] font-semibold text-gray-700">Niche</TableHead>
+                    <TableHead className="w-[6%] font-semibold text-gray-700">Status</TableHead>
+                    <TableHead className="w-[6%] font-semibold text-gray-700">Thread ID</TableHead>
+                    <TableHead className="w-[5%] font-semibold text-gray-700">Mail</TableHead>
+                    <TableHead className="w-[8%] font-semibold text-gray-700">Sent Gmail</TableHead>
+                    <TableHead className="w-[8%] font-semibold text-gray-700">Sent At</TableHead>
+                    <TableHead className="w-[8%] font-semibold text-gray-700">Created At</TableHead>
+                    <TableHead className="w-[10%] font-semibold text-gray-700">Actions</TableHead>
                   </TableRow>
-                ) : (
-                  leads.map((lead) => (
-                    <TableRow
-                      key={lead.id}
-                      data-lead-id={lead.id}
-                      data-campaign-id={lead.campaign.id}
-                      data-campaign-chat-id={lead.campaign.chatGptChatId ?? ""}
-                      data-campaign-gmail-auth-user={lead.campaign.gmailAuthUser ?? ""}
-                      data-campaign-body={lead.campaign.body ?? ""}
-                      data-campaign-subject={lead.campaign.subject ?? ""}
-                      data-followup1={lead.campaign.followup1 ?? ""}
-                      data-followup2={lead.campaign.followup2 ?? ""}
-                      data-gmail-thread-id={lead.gmailThreadId ?? ""}
-                      className="border-b border-gray-100 hover:bg-blue-50 transition-colors duration-150"
-                    >
-                      <TableCell className="font-medium break-words">
-                        <Link
-                          href={`/dashboard/campaigns/${lead.campaign.id}`}
-                          className="text-primary underline-offset-4 hover:underline break-words"
-                        >
-                          {lead.campaign.name}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="font-medium break-words">
-                        {lead.recipientName}
-                      </TableCell>
-                      <TableCell className="break-all">{lead.recipientEmail}</TableCell>
-                      <TableCell className="max-w-[120px] truncate text-xs text-muted-foreground" title={lead.websiteUrl ?? undefined}>
-                        {lead.websiteUrl || "—"}
-                      </TableCell>
-                      <TableCell className="max-w-[100px] truncate text-xs">
-                        {lead.niche || "—"}
-                      </TableCell>
-                      <TableCell data-step={lead.step}>
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <Badge
-                            variant={
-                              lead.replied || lead.status === "replied"
-                                ? "replied"
-                                : lead.status === "pending"
-                                  ? "pending"
-                                  : "sent"
-                            }
-                            className="text-[10px] capitalize"
-                          >
-                            {getStepLabel(lead)}
-                          </Badge>
-                          {isFollowUpDue(lead) && (
-                            <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
-                              Due
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="max-w-[120px] truncate text-xs font-mono" title={lead.gmailThreadId ?? undefined}>
-                        {lead.gmailThreadId ? `${lead.gmailThreadId.substring(0, 12)}...` : "—"}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center">
-                          <LeadMessagePreviewButton
-                            subject={lead.sentSubject}
-                            body={lead.sentBody}
-                          />
-                        </div>
-                      </TableCell>
+                </TableHeader>
+                <TableBody>
+                  {leads.length === 0 ? (
+                    <TableRow>
                       <TableCell
-                        className="max-w-[160px] break-all font-mono text-[11px] leading-tight"
-                        title={lead.sentGmailAuthUser ?? undefined}
+                        colSpan={12}
+                        className="h-24 text-center text-muted-foreground"
                       >
-                        {lead.sentGmailAuthUser || "—"}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">{formatDate(lead.sentAt)}</TableCell>
-                      <TableCell className="whitespace-nowrap">{formatDate(lead.createdAt)}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap items-center gap-1">
-                          <LeadSendButton leadId={lead.id} status={lead.status} />
-                          <LeadFollowupButton
-                            leadId={lead.id}
-                            status={lead.status}
-                            step={lead.step}
-                            nextFollowup={lead.nextFollowup}
-                            followup1={lead.campaign.followup1}
-                            followup2={lead.campaign.followup2}
-                          />
-                          <LeadCheckReplyButton
-                            leadId={lead.id}
-                            status={lead.status}
-                            threadId={lead.gmailThreadId}
-                            recipientEmail={lead.recipientEmail}
-                          />
-                          <LeadEditButton
-                            lead={{
-                              id: lead.id,
-                              recipientName: lead.recipientName,
-                              recipientEmail: lead.recipientEmail,
-                              websiteUrl: lead.websiteUrl,
-                              niche: lead.niche,
-                              campaignId: lead.campaign.id,
-                            }}
-                            campaigns={campaigns}
-                          />
-                          <LeadDeleteButton leadId={lead.id} />
-                        </div>
+                        No leads found.
                       </TableCell>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
+                  ) : (
+                    leads.map((lead) => (
+                      <TableRow
+                        key={lead.id}
+                        data-lead-id={lead.id}
+                        data-campaign-id={lead.campaign.id}
+                        data-campaign-chat-id={lead.campaign.chatGptChatId ?? ""}
+                        data-campaign-gmail-auth-user={lead.campaign.gmailAuthUser ?? ""}
+                        data-campaign-body={lead.campaign.body ?? ""}
+                        data-campaign-subject={lead.campaign.subject ?? ""}
+                        data-followup1={lead.campaign.followup1 ?? ""}
+                        data-followup2={lead.campaign.followup2 ?? ""}
+                        data-campaign-signature={lead.campaign.signature ?? ""}
+                        data-gmail-thread-id={lead.gmailThreadId ?? ""}
+                        className="border-b border-gray-100 hover:bg-blue-50 transition-colors duration-150"
+                      >
+                        <TableCell className="font-medium truncate" title={lead.campaign.name}>
+                          <Link
+                            href={`/dashboard/campaigns/${lead.campaign.id}`}
+                            className="text-primary underline-offset-4 hover:underline"
+                          >
+                            {lead.campaign.name}
+                          </Link>
+                        </TableCell>
+                        <TableCell className="font-medium truncate" title={lead.recipientName}>
+                          {lead.recipientName}
+                        </TableCell>
+                        <TableCell className="truncate" title={lead.recipientEmail}>{lead.recipientEmail}</TableCell>
+                        <TableCell className="truncate text-xs text-muted-foreground" title={lead.websiteUrl ?? undefined}>
+                          {lead.websiteUrl || "—"}
+                        </TableCell>
+                        <TableCell className="truncate text-xs" title={lead.niche ?? undefined}>
+                          {lead.niche || "—"}
+                        </TableCell>
+                        <TableCell data-step={lead.step}>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <Badge
+                              variant={
+                                lead.replied || lead.status === "replied"
+                                  ? "replied"
+                                  : lead.status === "pending"
+                                    ? "pending"
+                                    : "sent"
+                              }
+                              className="text-[10px] capitalize"
+                            >
+                              {getStepLabel(lead)}
+                            </Badge>
+                            {isFollowUpDue(lead) && (
+                              <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                Due
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="truncate text-xs font-mono" title={lead.gmailThreadId ?? undefined}>
+                          {lead.gmailThreadId || "—"}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center">
+                            <LeadMessagePreviewButton
+                              subject={lead.sentSubject}
+                              body={lead.sentBody}
+                            />
+                          </div>
+                        </TableCell>
+                        <TableCell className="truncate font-mono text-[11px]" title={lead.sentGmailAuthUser ?? undefined}>
+                          {lead.sentGmailAuthUser || "—"}
+                        </TableCell>
+                        <TableCell className="truncate text-xs">{formatDate(lead.sentAt)}</TableCell>
+                        <TableCell className="truncate text-xs">{formatDate(lead.createdAt)}</TableCell>
+                        <TableCell>
+                          <div className="flex flex-wrap items-center gap-1">
+                            <LeadSendButton leadId={lead.id} status={lead.status} />
+                            <LeadFollowupButton
+                              leadId={lead.id}
+                              status={lead.status}
+                              step={lead.step}
+                              nextFollowup={lead.nextFollowup}
+                              followup1={lead.campaign.followup1}
+                              followup2={lead.campaign.followup2}
+                            />
+                            <LeadCheckReplyButton
+                              leadId={lead.id}
+                              status={lead.status}
+                              threadId={lead.gmailThreadId}
+                              recipientEmail={lead.recipientEmail}
+                            />
+                            <LeadEditButton
+                              lead={{
+                                id: lead.id,
+                                recipientName: lead.recipientName,
+                                recipientEmail: lead.recipientEmail,
+                                websiteUrl: lead.websiteUrl,
+                                niche: lead.niche,
+                                campaignId: lead.campaign.id,
+                              }}
+                              campaigns={campaigns}
+                            />
+                            <LeadDeleteButton leadId={lead.id} />
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </div>

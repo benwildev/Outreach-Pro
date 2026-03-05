@@ -36,3 +36,5 @@ next-env.d.ts
 
 # prisma
 prisma/migrations/**/migration_lock.toml
+prisma/safe-sync.sql
+prisma/backups/

@@ -17,8 +17,8 @@ var EMAIL_STRUCTURE_INSTRUCTION =
   "- A bullet list (3 items), each one line and specific. Use a single dash or bullet character (- or •) at the start of each list item.\n" +
   "- A short closing line offering next steps, e.g. \"If any of these are a fit, I can send over an outline.\"\n" +
   "- Then a simple thank-you line.\n" +
-  "- End with \"Best regards,\" only.\n" +
-  "- Do not add any sender name or signature line unless that exact line already exists in the campaign template.\n" +
+  "- End with \"Best regards,\" only. DO NOT add any name, title, company, or signature line after it.\n" +
+  "- DO NOT add any sender name or signature line anywhere in the email body.\n" +
   "- Do not use placeholders such as [Your Name], {{topic}}, [Company Name], or bracketed template text anywhere in the final email.";
 
 var ANTI_AI_PHRASES_INSTRUCTION =
@@ -127,7 +127,7 @@ function cleanEmailBody(text, data) {
 
   cleaned = cleaned.replace(/\[Your Name\]|\[YourCompany\]|\[Company Name\]/gi, "");
   cleaned = cleaned.replace(/\{\{[^}]+\}\}/g, "");
-  cleaned = cleaned.replace(/\[[^[\]]+\]/g, function(match) {
+  cleaned = cleaned.replace(/\[[^[\]]+\]/g, function (match) {
     if (/^\[(?:your name|yourcompany|company name)\]$/i.test(match)) {
       return "";
     }
@@ -144,7 +144,7 @@ function cleanEmailBody(text, data) {
 
   cleaned = cleaned
     .split("\n")
-    .map(function(line) {
+    .map(function (line) {
       return line.replace(/[ \t]+$/g, "");
     })
     .join("\n");
@@ -154,8 +154,13 @@ function cleanEmailBody(text, data) {
     cleaned = stripGeneratedNameAfterSignoff(cleaned);
   }
 
-  const signatureBlock =
+  let signatureBlock =
     data && typeof data.signatureBlock === "string" ? data.signatureBlock.trim() : "";
+
+  if (data && typeof data.campaignSignature === "string" && data.campaignSignature.trim()) {
+    signatureBlock = "Best regards,\n" + data.campaignSignature.trim();
+  }
+
   if (signatureBlock) {
     cleaned = enforceTemplateSignatureBlock(cleaned, signatureBlock);
   }
@@ -179,13 +184,58 @@ function extractTemplateSignatureBlock(templateText) {
   }
   if (signoffIndex === -1) return "";
 
-  const tail = lines.slice(signoffIndex).map(function(line) {
+  const tail = lines.slice(signoffIndex).map(function (line) {
     return String(line || "").replace(/[ \t]+$/g, "");
   });
-  const hasNameLikeLine = tail.slice(1).some(function(line) {
+  const hasNameLikeLine = tail.slice(1).some(function (line) {
     return !!String(line || "").trim();
   });
   if (!hasNameLikeLine) return "";
+
+  return tail.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
+function looksLikeStandaloneSignatureLine(line) {
+  const value = String(line || "").trim();
+  if (!value) return false;
+  if (value.length > 64) return false;
+  if (/@|https?:\/\//i.test(value)) return false;
+  if (/^[\-*•]/.test(value)) return false;
+  if (/[<>[\]{}]/.test(value)) return false;
+  const words = value.split(/\s+/).filter(Boolean);
+  if (words.length === 0 || words.length > 6) return false;
+  return /^[A-Za-z0-9][A-Za-z0-9 .,'()&/+-]*$/.test(value);
+}
+
+function looksLikePersonNameLine(line) {
+  const value = String(line || "").trim();
+  if (!value) return false;
+  if (value.length > 48) return false;
+  if (/@|https?:\/\//i.test(value)) return false;
+  const words = value.split(/\s+/).filter(Boolean);
+  if (words.length < 2 || words.length > 4) return false;
+  return /^[A-Za-z][A-Za-z .'-]*$/.test(value);
+}
+
+function extractTailSignatureWithoutSignoff(lines) {
+  const tail = [];
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = String(lines[i] || "").trim();
+    if (!line) {
+      if (tail.length === 0) {
+        continue;
+      }
+      break;
+    }
+    tail.unshift(line);
+    if (tail.length >= 4) {
+      break;
+    }
+  }
+
+  if (tail.length < 2) return "";
+  if (!looksLikePersonNameLine(tail[0])) return "";
+  if (!tail.every(looksLikeStandaloneSignatureLine)) return "";
 
   return tail.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
@@ -215,7 +265,7 @@ function enforceTemplateSignatureBlock(bodyText, signatureBlock) {
 
 function stripExtensionNoise(text) {
   const lines = String(text || "").split("\n");
-  const filtered = lines.filter(function(line) {
+  const filtered = lines.filter(function (line) {
     const value = String(line || "").trim();
     if (!value) return true;
     if (/window\.__oai_/i.test(value)) return false;
@@ -234,11 +284,11 @@ function stripGeneratedNameAfterSignoff(text) {
   while (end >= 0 && !String(lines[end] || "").trim()) end -= 1;
   if (end < 0) return raw;
 
-  const isSignoff = function(line) {
+  const isSignoff = function (line) {
     return /^(best|best regards|kind regards|warm regards|regards|thanks|thank you|sincerely)[,!]?$/i.test(String(line || "").trim());
   };
 
-  const looksLikeName = function(line) {
+  const looksLikeName = function (line) {
     const value = String(line || "").trim();
     if (!value || value.length > 48) return false;
     if (/[.!?:]/.test(value) || /@|https?:\/\//i.test(value)) return false;

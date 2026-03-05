@@ -109,6 +109,17 @@ export default async function CampaignEditorPage({
                 className="resize-none"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="signature">Signature (optional)</Label>
+              <Textarea
+                id="signature"
+                name="signature"
+                defaultValue={campaign.signature ?? ""}
+                rows={4}
+                placeholder="Signature to append at the bottom of the email"
+                className="resize-none"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="delay1Days">Delay 1 (days, 0 = due immediately for testing)</Label>

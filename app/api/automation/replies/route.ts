@@ -42,12 +42,13 @@ export async function GET(request: Request) {
   try {
     const list = await gmail.users.messages.list({
       userId: "me",
-      maxResults: 50,
-      q: "in:inbox is:unread",
+      maxResults: 500,
+      // Include read and unread messages; relying on unread-only misses replies once opened.
+      q: "in:anywhere newer_than:180d",
     });
 
     const messages = list.data.messages ?? [];
-    const replyByThread = new Map<string, string>(); // threadId -> senderEmail (lowercase)
+    const replyByThread = new Map<string, Set<string>>(); // threadId -> senderEmail(s) lowercase
     const replyBySender = new Set<string>();
 
     for (const msg of messages) {
@@ -58,19 +59,25 @@ export async function GET(request: Request) {
       if (sender) {
         const lower = sender.trim().toLowerCase();
         replyBySender.add(lower);
-        if (tid) replyByThread.set(tid, lower);
+        if (tid) {
+          const bucket = replyByThread.get(tid) ?? new Set<string>();
+          bucket.add(lower);
+          replyByThread.set(tid, bucket);
+        }
       }
     }
 
     const leads = await prisma.lead.findMany({
-      where: { replied: false },
+      where: { replied: false, status: "sent" },
       select: { id: true, recipientEmail: true, gmailThreadId: true },
     });
     const idsToMark = leads.filter((l) => {
       const recipientLower = l.recipientEmail.trim().toLowerCase();
       if (l.gmailThreadId) {
-        const senderInThread = replyByThread.get(l.gmailThreadId);
-        return senderInThread === recipientLower;
+        const sendersInThread = replyByThread.get(l.gmailThreadId);
+        if (sendersInThread && sendersInThread.has(recipientLower)) {
+          return true;
+        }
       }
       return replyBySender.has(recipientLower);
     }).map((l) => l.id);

@@ -72,13 +72,15 @@
     const campaignBodyText = message.campaignBody || "";
     const templateHasSignature = templateHasSignatureBlock(campaignBodyText);
     const signatureBlock = extractTemplateSignatureBlock(campaignBodyText);
+    const campaignSignature = message.campaignSignature || "";
     runPasteAndSend(
       message.prompt,
       recipientName,
       message.recipientEmail,
       message.leadId,
       templateHasSignature,
-      signatureBlock
+      signatureBlock,
+      campaignSignature
     )
       .then((result) => {
         pendingPrompt = null;
@@ -93,7 +95,7 @@
       });
   });
 
-  async function runPasteAndSend(prompt, recipientName, recipientEmail, leadId, templateHasSignature, signatureBlock) {
+  async function runPasteAndSend(prompt, recipientName, recipientEmail, leadId, templateHasSignature, signatureBlock, campaignSignature) {
     log("ChatGPT", "pasteAndSend started, prompt length:", prompt?.length, "leadId:", leadId ? "***" : "");
     const textarea = await waitForSelector('textarea[data-id="root"], textarea, [contenteditable="true"]', 20000);
     if (!textarea) {
@@ -140,6 +142,7 @@
       recipientName,
       templateHasSignature,
       signatureBlock,
+      campaignSignature,
     });
 
     if (isPlaceholderOnlyValue(subject, "subject") || isPlaceholderOnlyValue(body, "body")) {
@@ -148,7 +151,7 @@
     }
 
     log("ChatGPT", "Parsed subject length:", subject.length, "body length:", body.length);
-    
+
     if (!subject || !body) {
       log("ChatGPT", "Using fallback parse result. Subject length:", subject.length, "Body length:", body.length);
     }
@@ -359,7 +362,7 @@
     if (!text || typeof text !== "string") {
       return { subject: "", body: "" };
     }
-    
+
     const trimmed = text.trim().replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
     const subjectPatterns = [
@@ -418,9 +421,9 @@
         subject = firstLine.replace(/[*_`]/g, "").trim();
       }
     }
-    
+
     log("ChatGPT", "Parsed email - Subject:", subject.substring(0, 50), "| Body length:", body.length);
-    
+
     return { subject, body };
   }
 

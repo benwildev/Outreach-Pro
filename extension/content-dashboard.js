@@ -623,40 +623,40 @@
     panel.className = "mx-3 mt-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs";
     panel.innerHTML =
       '<div class="flex flex-wrap items-center gap-2">' +
-        '<span class="font-semibold text-blue-900">Bulk Automation</span>' +
-        '<label class="inline-flex items-center gap-1">' +
-          '<span class="text-slate-700">Delay Min (sec)</span>' +
-          '<input name="bulkDelayMinSeconds" type="number" min="5" max="600" class="h-8 w-20 rounded border bg-white px-2 text-xs" />' +
-        "</label>" +
-        '<label class="inline-flex items-center gap-1">' +
-          '<span class="text-slate-700">Delay Max (sec)</span>' +
-          '<input name="bulkDelayMaxSeconds" type="number" min="5" max="600" class="h-8 w-20 rounded border bg-white px-2 text-xs" />' +
-        "</label>" +
-        '<label class="inline-flex items-center gap-1">' +
-          '<span class="text-slate-700">Limit</span>' +
-          '<input name="bulkLimit" type="number" min="1" max="500" class="h-8 w-20 rounded border bg-white px-2 text-xs" />' +
-        "</label>" +
-        '<label class="inline-flex items-center gap-1 rounded border bg-white px-2 py-1">' +
-          '<input name="bulkAutoFollowup" type="checkbox" />' +
-          '<span class="text-slate-700">Auto follow-ups</span>' +
-        "</label>" +
-        '<label class="inline-flex items-center gap-1 rounded border bg-white px-2 py-1">' +
-          '<input name="bulkWindowEnabled" type="checkbox" />' +
-          '<span class="text-slate-700">Send window</span>' +
-        "</label>" +
-        '<label class="inline-flex items-center gap-1">' +
-          '<span class="text-slate-700">From</span>' +
-          '<input name="bulkWindowStart" type="time" class="h-8 rounded border bg-white px-2 text-xs" />' +
-        "</label>" +
-        '<label class="inline-flex items-center gap-1">' +
-          '<span class="text-slate-700">To</span>' +
-          '<input name="bulkWindowEnd" type="time" class="h-8 rounded border bg-white px-2 text-xs" />' +
-        "</label>" +
-        '<button type="button" data-action="bulk-start" class="h-8 rounded border px-3 font-medium text-slate-800 hover:bg-white">Start</button>' +
-        '<button type="button" data-action="bulk-pause" class="h-8 rounded border px-3 text-slate-700 hover:bg-white">Pause</button>' +
-        '<button type="button" data-action="bulk-resume" class="h-8 rounded border px-3 text-slate-700 hover:bg-white">Resume</button>' +
-        '<button type="button" data-action="bulk-stop" class="h-8 rounded border px-3 text-slate-700 hover:bg-white">Stop</button>' +
-        '<button type="button" data-action="bulk-refresh" class="h-8 rounded border px-2 text-slate-700 hover:bg-white">↻</button>' +
+      '<span class="font-semibold text-blue-900">Bulk Automation</span>' +
+      '<label class="inline-flex items-center gap-1">' +
+      '<span class="text-slate-700">Delay Min (sec)</span>' +
+      '<input name="bulkDelayMinSeconds" type="number" min="5" max="600" class="h-8 w-20 rounded border bg-white px-2 text-xs" />' +
+      "</label>" +
+      '<label class="inline-flex items-center gap-1">' +
+      '<span class="text-slate-700">Delay Max (sec)</span>' +
+      '<input name="bulkDelayMaxSeconds" type="number" min="5" max="600" class="h-8 w-20 rounded border bg-white px-2 text-xs" />' +
+      "</label>" +
+      '<label class="inline-flex items-center gap-1">' +
+      '<span class="text-slate-700">Limit</span>' +
+      '<input name="bulkLimit" type="number" min="1" max="500" class="h-8 w-20 rounded border bg-white px-2 text-xs" />' +
+      "</label>" +
+      '<label class="inline-flex items-center gap-1 rounded border bg-white px-2 py-1">' +
+      '<input name="bulkAutoFollowup" type="checkbox" />' +
+      '<span class="text-slate-700">Auto follow-ups</span>' +
+      "</label>" +
+      '<label class="inline-flex items-center gap-1 rounded border bg-white px-2 py-1">' +
+      '<input name="bulkWindowEnabled" type="checkbox" />' +
+      '<span class="text-slate-700">Send window</span>' +
+      "</label>" +
+      '<label class="inline-flex items-center gap-1">' +
+      '<span class="text-slate-700">From</span>' +
+      '<input name="bulkWindowStart" type="time" class="h-8 rounded border bg-white px-2 text-xs" />' +
+      "</label>" +
+      '<label class="inline-flex items-center gap-1">' +
+      '<span class="text-slate-700">To</span>' +
+      '<input name="bulkWindowEnd" type="time" class="h-8 rounded border bg-white px-2 text-xs" />' +
+      "</label>" +
+      '<button type="button" data-action="bulk-start" class="h-8 rounded border px-3 font-medium text-slate-800 hover:bg-white">Start</button>' +
+      '<button type="button" data-action="bulk-pause" class="h-8 rounded border px-3 text-slate-700 hover:bg-white">Pause</button>' +
+      '<button type="button" data-action="bulk-resume" class="h-8 rounded border px-3 text-slate-700 hover:bg-white">Resume</button>' +
+      '<button type="button" data-action="bulk-stop" class="h-8 rounded border px-3 text-slate-700 hover:bg-white">Stop</button>' +
+      '<button type="button" data-action="bulk-refresh" class="h-8 rounded border px-2 text-slate-700 hover:bg-white">↻</button>' +
       "</div>" +
       '<div class="mt-2 text-slate-700" data-role="status">Status: Idle</div>' +
       '<div class="text-slate-600" data-role="progress">Processed 0/0 • Sent 0 • Failed 0</div>' +
@@ -734,6 +734,7 @@
     const campaignSubject = (row.getAttribute("data-campaign-subject") || "").trim();
     const followup1 = (row.getAttribute("data-followup1") || "").trim();
     const followup2 = (row.getAttribute("data-followup2") || "").trim();
+    const campaignSignature = (row.getAttribute("data-campaign-signature") || "").trim();
     const gmailThreadId = (row.getAttribute("data-gmail-thread-id") || "").trim();
     const leadId = (row.getAttribute("data-lead-id") || "").trim();
     return {
@@ -751,6 +752,7 @@
       step,
       campaignBody,
       campaignSubject,
+      campaignSignature,
       followup1,
       followup2,
     };
@@ -959,43 +961,43 @@
       if (followupBtn && !boundButtons.has(followupBtn)) {
         boundButtons.add(followupBtn);
         followupBtn.addEventListener(
-        "click",
-        async (e) => {
-          const data = extractRowData(row);
-          const recipientEmail = data.recipientEmail;
-          if (!recipientEmail || !data.leadId) {
-            console.warn("[Leads Extension] No recipient email or lead id in row");
-            return;
-          }
-          const body = data.step === 1 ? data.followup1 : data.followup2;
-          if (!body) {
-            console.warn("[Leads Extension] No follow-up content for this step");
-            return;
-          }
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
-          if (!hasRuntimeMessaging()) {
-            recoverRuntime("Extension runtime unavailable");
-            return;
-          }
-          try {
-            chrome.runtime.sendMessage({
-              action: "startFollowupWorkflow",
-              data: {
-                leadId: data.leadId,
-                to: recipientEmail,
-                subject: "Re: " + (data.campaignSubject || ""),
-                body: body,
-                threadId: data.gmailThreadId || null,
-                campaignGmailAuthUser: data.campaignGmailAuthUser || "",
-              },
-            });
-          } catch (err) {
-            logError("Dashboard", err);
-          }
-        },
-        true
+          "click",
+          async (e) => {
+            const data = extractRowData(row);
+            const recipientEmail = data.recipientEmail;
+            if (!recipientEmail || !data.leadId) {
+              console.warn("[Leads Extension] No recipient email or lead id in row");
+              return;
+            }
+            const body = data.step === 1 ? data.followup1 : data.followup2;
+            if (!body) {
+              console.warn("[Leads Extension] No follow-up content for this step");
+              return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            if (!hasRuntimeMessaging()) {
+              recoverRuntime("Extension runtime unavailable");
+              return;
+            }
+            try {
+              chrome.runtime.sendMessage({
+                action: "startFollowupWorkflow",
+                data: {
+                  leadId: data.leadId,
+                  to: recipientEmail,
+                  subject: "Re: " + (data.campaignSubject || ""),
+                  body: body,
+                  threadId: data.gmailThreadId || null,
+                  campaignGmailAuthUser: data.campaignGmailAuthUser || "",
+                },
+              });
+            } catch (err) {
+              logError("Dashboard", err);
+            }
+          },
+          true
         );
       }
 

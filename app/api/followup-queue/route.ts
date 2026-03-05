@@ -49,6 +49,7 @@ export async function GET(request: Request) {
             body: true,
             followup1: true,
             followup2: true,
+            signature: true,
             chatGptChatId: true,
             gmailAuthUser: true,
           },
@@ -76,6 +77,7 @@ export async function GET(request: Request) {
           campaignSubject: lead.campaign.subject ?? "",
           followup1: lead.campaign.followup1 ?? "",
           followup2: lead.campaign.followup2 ?? "",
+          campaignSignature: lead.campaign.signature ?? "",
           followupBody,
         };
       })
