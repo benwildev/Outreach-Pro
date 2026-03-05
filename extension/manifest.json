@@ -3,31 +3,68 @@
   "name": "Leads Dashboard AI Outreach",
   "version": "1.0.18",
   "description": "Integrates with Leads Dashboard to generate and send AI-powered cold emails via ChatGPT and Gmail",
-  "permissions": ["tabs", "scripting", "activeTab", "alarms", "storage"],
+  "permissions": [
+    "tabs",
+    "scripting",
+    "activeTab",
+    "alarms",
+    "storage"
+  ],
   "host_permissions": [
     "https://chat.openai.com/*",
     "https://chatgpt.com/*",
     "https://mail.google.com/*",
     "http://localhost:3000/*",
+    "https://automation.benwil.store/*",
     "https://*/*"
   ],
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
+  "action": {
+    "default_icon": {
+      "16": "icon.png",
+      "48": "icon.png",
+      "128": "icon.png"
+    }
+  },
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
     {
-      "matches": ["http://localhost:3000/dashboard*", "https://*/*/dashboard*"],
-      "js": ["utils.js", "content-dashboard.js"],
+      "matches": [
+        "http://localhost:3000/dashboard*",
+        "https://automation.benwil.store/dashboard*",
+        "https://*/*/dashboard*"
+      ],
+      "js": [
+        "utils.js",
+        "content-dashboard.js"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://chat.openai.com/*", "https://chatgpt.com/*"],
-      "js": ["utils.js", "content-chatgpt.js"],
+      "matches": [
+        "https://chat.openai.com/*",
+        "https://chatgpt.com/*"
+      ],
+      "js": [
+        "utils.js",
+        "content-chatgpt.js"
+      ],
       "run_at": "document_idle"
     },
     {
-      "matches": ["https://mail.google.com/*"],
-      "js": ["utils.js", "content-gmail.js"],
+      "matches": [
+        "https://mail.google.com/*"
+      ],
+      "js": [
+        "utils.js",
+        "content-gmail.js"
+      ],
       "run_at": "document_idle"
     }
   ]

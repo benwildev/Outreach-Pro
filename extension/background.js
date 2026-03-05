@@ -35,8 +35,11 @@ const REPLY_CHECK_PERIOD_MINUTES = 24 * 60;
 const CHATGPT_HANDOFF_TIMEOUT_MS = 90000;
 const CHATGPT_DEFAULT_URL = "https://chatgpt.com/";
 const CAMPAIGN_CHAT_URLS_KEY = "campaignChatUrls";
-const SEND_QUEUE_API_BASE = "http://localhost:3000/api/send-queue";
-const FOLLOWUP_QUEUE_API_BASE = "http://localhost:3000/api/followup-queue";
+// ── Change this to your production URL when deploying to VPS ──
+const API_BASE_URL = "https://automation.benwil.store";
+
+const SEND_QUEUE_API_BASE = API_BASE_URL + "/api/send-queue";
+const FOLLOWUP_QUEUE_API_BASE = API_BASE_URL + "/api/followup-queue";
 const BULK_WORKFLOW_TIMEOUT_MS = 240000;
 const BULK_DELAY_DEFAULT_MS = 45000;
 const BULK_DELAY_MIN_MS = 5000;
@@ -1360,7 +1363,7 @@ async function ensureReplyCheckAlarm() {
 async function fetchReplyCheckQueue(limit) {
   const maxLeads = Number(limit || 30);
   const response = await fetch(
-    "http://localhost:3000/api/reply-check-queue?limit=" + encodeURIComponent(String(maxLeads))
+    API_BASE_URL + "/api/reply-check-queue?limit=" + encodeURIComponent(String(maxLeads))
   );
 
   let result = null;
@@ -1480,7 +1483,7 @@ async function handleCheckReplyByThread(data) {
 }
 
 async function handleMarkLeadReplied(data) {
-  const baseUrl = "http://localhost:3000";
+  const baseUrl = API_BASE_URL;
   const response = await fetch(baseUrl + "/api/update-replied", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1510,7 +1513,7 @@ async function handleMarkLeadReplied(data) {
 }
 
 async function handleUpdateFollowup(data) {
-  const baseUrl = "http://localhost:3000";
+  const baseUrl = API_BASE_URL;
   const response = await fetch(baseUrl + "/api/update-followup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1541,7 +1544,7 @@ async function handleUpdateFollowup(data) {
 }
 
 async function handleUpdateLeadStatus(data) {
-  const response = await fetch("http://localhost:3000/api/update-send", {
+  const response = await fetch(API_BASE_URL + "/api/update-send", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data || {}),
