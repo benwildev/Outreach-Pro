@@ -31,7 +31,7 @@ function rowToLead(
 
   return {
     campaignId,
-    recipientName: recipientName || recipientEmail,
+    recipientName: recipientName || "", // Don't fallback to email
     recipientEmail,
     websiteUrl: websiteUrl || undefined,
     niche: niche || undefined,

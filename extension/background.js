@@ -225,6 +225,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true;
   }
+  if (message.action === "sendScheduleError") {
+    handleSendScheduleError(message.data)
+      .then(sendResponse)
+      .catch((err) => {
+        console.error("[Leads Extension Background]", err);
+        sendResponse({ success: false, error: String(err.message) });
+      });
+    return true;
+  }
 });
 
 async function handleStartWorkflow(data) {
@@ -349,6 +358,7 @@ async function handleChatGptDone(data, chatTabId) {
       templateHasSignature: !!templateHasSignature,
       isFollowup: false,
       autoSend: true,
+      scheduleSendTime: pending && pending.data && pending.data.scheduleSendTime ? pending.data.scheduleSendTime : "",
     },
   }, 7, 900);
   if (!sentToGmail) {
@@ -371,6 +381,7 @@ async function handleChatGptDone(data, chatTabId) {
         templateHasSignature: !!templateHasSignature,
         isFollowup: false,
         autoSend: true,
+        scheduleSendTime: pending && pending.data && pending.data.scheduleSendTime ? pending.data.scheduleSendTime : "",
       },
     }, 10, 1000);
     if (!sentToGmail) {
@@ -608,6 +619,7 @@ function createBulkAutomationState() {
     windowEnabled: false,
     sendWindowStart: "09:00",
     sendWindowEnd: "18:00",
+    scheduleSendTime: "",
     limit: BULK_LIMIT_DEFAULT,
     campaignId: "",
     currentLeadId: "",
@@ -718,6 +730,7 @@ function toBulkQueueItem(item, workflowType) {
     followup1: source.followup1 ? String(source.followup1) : "",
     followup2: source.followup2 ? String(source.followup2) : "",
     followupBody: followupBody,
+    scheduleSendTime: source.scheduleSendTime || bulkAutomationState.scheduleSendTime || "",
   };
 }
 
@@ -1114,6 +1127,7 @@ async function handleStartBulkAutomation(data) {
   bulkAutomationState.windowEnabled = windowEnabled;
   bulkAutomationState.sendWindowStart = sendWindowStart;
   bulkAutomationState.sendWindowEnd = sendWindowEnd;
+  bulkAutomationState.scheduleSendTime = data && data.scheduleSendTime ? String(data.scheduleSendTime).trim() : "";
   bulkAutomationState.limit = limit;
   bulkAutomationState.campaignId = campaignId;
   bulkAutomationState.phase = "send";
@@ -1243,6 +1257,7 @@ async function openGmailFromFallback(data, chatTabId) {
       templateHasSignature: true,
       isFollowup: false,
       autoSend: true,
+      scheduleSendTime: data.scheduleSendTime || "",
     },
   }, 7, 900);
 
@@ -1266,6 +1281,7 @@ async function openGmailFromFallback(data, chatTabId) {
         templateHasSignature: true,
         isFollowup: false,
         autoSend: true,
+        scheduleSendTime: data.scheduleSendTime || "",
       },
     }, 10, 1000);
     if (!sentToGmail) {
@@ -1510,6 +1526,37 @@ async function handleMarkLeadReplied(data) {
   }
 
   return { success: true, data: result };
+}
+
+async function handleSendScheduleError(data) {
+  const email = String(data.email || "").trim();
+  const errorMsg = String(data.error || "Unknown scheduling error").trim();
+  if (!email) return { success: false, error: "Missing email" };
+
+  try {
+    const baseUrl = API_BASE_URL;
+    const response = await fetch(baseUrl + "/api/update-send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        status: "Failed: Schedule Send (" + errorMsg + ")",
+        timestamp: new Date().toISOString()
+      }),
+    });
+    if (!response.ok) {
+      console.error("[Leads Extension Background] Failed to record schedule error to DB", response.status);
+    }
+  } catch (e) {
+    console.error("[Leads Extension Background] Error hitting update-send for schedule error", e);
+  }
+
+  // Update bulk state if it was part of a bulk run
+  if (bulkAutomationState.status === "running" && bulkAutomationState.currentRecipientEmail === email) {
+    bulkAutomationState.failed = (bulkAutomationState.failed || 0) + 1;
+    bulkAutomationState.lastError = `Schedule Send Failed: ${errorMsg}`;
+  }
+  return { success: true };
 }
 
 async function handleUpdateFollowup(data) {

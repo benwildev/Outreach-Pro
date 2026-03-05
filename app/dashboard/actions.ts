@@ -77,3 +77,16 @@ export async function deleteLead(leadId: string) {
   await prisma.lead.delete({ where: { id: leadId } });
   revalidatePath("/dashboard");
 }
+
+export async function deletePendingLeads(campaignId?: string | null) {
+  const where: any = { status: "pending" };
+  if (campaignId) {
+    where.campaignId = campaignId;
+  }
+
+  await prisma.lead.deleteMany({
+    where
+  });
+
+  revalidatePath("/dashboard");
+}

@@ -4,11 +4,22 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { leadId, subject, body: emailBody, threadId, recipientEmail, sentGmailAuthUser } = body;
+    const { leadId, email, subject, body: emailBody, threadId, recipientEmail, sentGmailAuthUser, status } = body;
 
-    if (!leadId) {
+    let targetLeadId = leadId;
+    if (!targetLeadId && email) {
+      const foundLead = await prisma.lead.findFirst({
+        where: { recipientEmail: email },
+        orderBy: { createdAt: "desc" }
+      });
+      if (foundLead) {
+        targetLeadId = foundLead.id;
+      }
+    }
+
+    if (!targetLeadId) {
       return NextResponse.json(
-        { error: "leadId is required" },
+        { error: "leadId or email is required" },
         { status: 400 }
       );
     }
@@ -22,7 +33,7 @@ export async function POST(request: Request) {
 
     // Get the lead to find the campaign for delay calculation
     const lead = await prisma.lead.findUnique({
-      where: { id: leadId },
+      where: { id: targetLeadId },
       include: { campaign: true },
     });
 
@@ -36,14 +47,18 @@ export async function POST(request: Request) {
     // Calculate next followup delay
     const delay1Ms = (lead.campaign?.delay1Days ?? 3) * 86400000;
 
-    // Update the lead with thread ID, subject, body, AND mark as sent
+    const targetStatus = status || "sent";
+
+    // Update the lead with thread ID, subject, body, AND mark as sent or failed
     const updatedLead = await prisma.lead.update({
-      where: { id: leadId },
+      where: { id: targetLeadId },
       data: {
-        status: "sent",
-        step: 1,
-        sentAt: new Date(),
-        nextFollowup: new Date(Date.now() + delay1Ms),
+        status: targetStatus,
+        step: targetStatus === "sent" ? 1 : lead.step,
+        ...(targetStatus === "sent" ? {
+          sentAt: new Date(),
+          nextFollowup: new Date(Date.now() + delay1Ms)
+        } : {}),
         ...(threadId ? { gmailThreadId: threadId } : {}),
         ...(sentGmailAuthUser ? { sentGmailAuthUser: String(sentGmailAuthUser).trim() } : {}),
         ...(subject ? { sentSubject: subject } : {}),

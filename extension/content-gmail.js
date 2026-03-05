@@ -41,7 +41,7 @@
   });
 
   function delay(ms) {
-    return new Promise(function(resolve) {
+    return new Promise(function (resolve) {
       setTimeout(resolve, ms);
     });
   }
@@ -123,7 +123,7 @@
 
   function getComposeRoots(doc) {
     const doc2 = doc || document;
-    const roots = Array.from(doc2.querySelectorAll('div[role="dialog"]')).filter(function(root) {
+    const roots = Array.from(doc2.querySelectorAll('div[role="dialog"]')).filter(function (root) {
       if (!root || root.offsetParent === null) return false;
       return !!root.querySelector('div[aria-label="Message Body"], div[contenteditable="true"][role="textbox"], div[contenteditable="true"][g_editable="true"], input[name="subjectbox"], div[aria-label*="To recipients"], input[name="to"]');
     });
@@ -329,7 +329,7 @@
 
   function findSubjectInput(doc, composeRoot) {
     const doc2 = doc || document;
-    const composeRoots = composeRoot ? [composeRoot] : Array.from(doc2.querySelectorAll('div[role="dialog"]')).filter(function(root) {
+    const composeRoots = composeRoot ? [composeRoot] : Array.from(doc2.querySelectorAll('div[role="dialog"]')).filter(function (root) {
       return root && root.offsetParent !== null;
     });
     for (let i = 0; i < composeRoots.length; i++) {
@@ -352,7 +352,7 @@
   async function waitForElement(selector, timeoutMs, composeRoot) {
     const timeout = timeoutMs || 15000;
     const start = Date.now();
-    
+
     while (Date.now() - start < timeout) {
       const el = composeRoot
         ? composeRoot.querySelector(selector)
@@ -362,7 +362,7 @@
       }
       await delay(300);
     }
-    
+
     return null;
   }
 
@@ -646,17 +646,17 @@
 
   function formatBody(text) {
     if (!text) return "";
-    
+
     let normalized = normalizeBodyForRendering(text);
-    
+
     // Split into paragraphs (separated by blank lines)
     const paragraphs = normalized.split(/\n\n+/);
     const parts = [];
-    
+
     for (let i = 0; i < paragraphs.length; i++) {
       const para = paragraphs[i].trim();
       if (!para) continue;
-      
+
       const lines = para.split("\n");
       let hasOpenList = false;
       let hasOpenParagraph = false;
@@ -716,7 +716,7 @@
         parts.push("<div><br></div>");
       }
     }
-    
+
     return parts.join("");
   }
 
@@ -1108,7 +1108,7 @@
       return null;
     }
 
-    const candidates = items.filter(function(item) {
+    const candidates = items.filter(function (item) {
       const text = String(item.textContent || "").trim().toLowerCase();
       return text && !/^no signature$/.test(text);
     });
@@ -1263,12 +1263,12 @@
 
   function setBodyContent(bodyEl, html, signatureHtml) {
     bodyEl.focus();
-    
+
     const selection = window.getSelection();
     const range = document.createRange();
     range.selectNodeContents(bodyEl);
     range.deleteContents();
-    
+
     try {
       selection.removeAllRanges();
       selection.addRange(range);
@@ -1281,7 +1281,7 @@
     }
 
     appendSignatureHtml(bodyEl, signatureHtml);
-    
+
     bodyEl.dispatchEvent(new InputEvent("input", { bubbles: true }));
   }
 
@@ -1390,6 +1390,170 @@
 
     log("Send button not found");
     return false;
+  }
+
+  async function clickScheduleSendButton(composeRoot, bodyEl, scheduleTime) {
+    function isVisible(node) {
+      return !!(node && node.offsetParent !== null);
+    }
+
+    const scopes = [];
+    if (composeRoot) scopes.push(composeRoot);
+    if (bodyEl) {
+      const nearScopes = [
+        bodyEl.closest('div[role="dialog"]'),
+        bodyEl.closest("form"),
+        bodyEl.closest('div[aria-label*="Message"]'),
+        bodyEl.parentElement
+      ];
+      for (let i = 0; i < nearScopes.length; i++) {
+        const s = nearScopes[i];
+        if (s && scopes.indexOf(s) === -1) scopes.push(s);
+      }
+    }
+    scopes.push(document);
+
+    // 1. Click "More send options" dropdown arrow
+    let dropdownClicked = false;
+    const arrowSelectors = [
+      'div[aria-label*="More send options" i]',
+      'div[data-tooltip*="More send options" i]'
+    ];
+    for (let s = 0; s < scopes.length; s++) {
+      const scope = scopes[s];
+      for (let i = 0; i < arrowSelectors.length; i++) {
+        const arrowBtn = scope.querySelector(arrowSelectors[i]);
+        if (arrowBtn && isVisible(arrowBtn)) {
+          arrowBtn.click();
+          dropdownClicked = true;
+          log("Schedule Send dropdown arrow clicked.");
+          break;
+        }
+      }
+      if (dropdownClicked) break;
+    }
+
+    if (!dropdownClicked) {
+      logError("Schedule Send dropdown arrow not found.");
+      return { success: false, error: "Dropdown not found" };
+    }
+
+    await delay(500); // Wait for menu
+
+    // 2. Click "Schedule send" in the menu
+    let menuClicked = false;
+    const menuItems = document.querySelectorAll('div[role="menuitem"], div[role="menuitemcheckbox"]');
+    for (let i = 0; i < menuItems.length; i++) {
+      const item = menuItems[i];
+      if (!isVisible(item)) continue;
+      const text = (item.textContent || "").toLowerCase();
+      if (text.includes("schedule send")) {
+        item.click();
+        menuClicked = true;
+        log("Schedule send menu item clicked.");
+        break;
+      }
+    }
+
+    if (!menuClicked) {
+      logError("Schedule send menu item not found.");
+      // Dismiss menu
+      document.body.click();
+      return { success: false, error: "Menu item not found" };
+    }
+
+    await delay(1000); // Wait for Schedule Dialog
+
+    // 3. Click "Pick date & time"
+    let pickDateClicked = false;
+    const dialogs = document.querySelectorAll('div[role="dialog"]');
+    for (let i = 0; i < dialogs.length; i++) {
+      const d = dialogs[i];
+      if (!isVisible(d)) continue;
+      const buttons = d.querySelectorAll('div[role="button"], button');
+      for (let j = 0; j < buttons.length; j++) {
+        const btn = buttons[j];
+        if (!isVisible(btn)) continue;
+        const text = (btn.textContent || "").toLowerCase();
+        if (text.includes("pick date & time")) {
+          btn.click();
+          pickDateClicked = true;
+          log("Pick date & time clicked.");
+          break;
+        }
+      }
+      if (pickDateClicked) break;
+    }
+
+    if (!pickDateClicked) {
+      logError("Pick date & time option not found.");
+      // Just click anywhere to try and dismiss
+      document.body.click();
+      return { success: false, error: "Pick date option not found" };
+    }
+
+    await delay(800);
+
+    // 4. Input Time
+    let timeInputFilled = false;
+    const timeInputs = document.querySelectorAll('input[aria-label="Time" i], input[type="text"]');
+    for (let i = 0; i < timeInputs.length; i++) {
+      const input = timeInputs[i];
+      if (!isVisible(input)) continue;
+      // Check if it's the right input by looking at nearby elements or label
+      const isTimeInput = (input.getAttribute("aria-label") || "").toLowerCase().includes("time") ||
+        input.placeholder.toLowerCase().includes("time");
+      if (isTimeInput || timeInputs.length === 2) { // Usually Date is first, Time is second
+        const timeEl = isTimeInput ? input : timeInputs[1];
+        if (timeEl) {
+          timeEl.focus();
+          timeEl.value = "";
+          document.execCommand("insertText", false, scheduleTime);
+          timeEl.dispatchEvent(new Event("input", { bubbles: true }));
+          timeEl.dispatchEvent(new Event("change", { bubbles: true }));
+          timeEl.blur();
+          timeInputFilled = true;
+          log(`Filled time input with: ${scheduleTime}`);
+          break;
+        }
+      }
+    }
+
+    if (!timeInputFilled) {
+      logError("Time input not found.");
+      return { success: false, error: "Time input not found" };
+    }
+
+    await delay(500);
+
+    // 5. Click final "Schedule send" button
+    let finalScheduleClicked = false;
+    const finalDialogs = document.querySelectorAll('div[role="dialog"]');
+    for (let i = 0; i < finalDialogs.length; i++) {
+      const d = finalDialogs[i];
+      if (!isVisible(d)) continue;
+      const buttons = d.querySelectorAll('div[role="button"], button');
+      for (let j = 0; j < buttons.length; j++) {
+        const btn = buttons[j];
+        if (!isVisible(btn)) continue;
+        const text = (btn.textContent || "").trim().toLowerCase();
+        // Specifically look for the blue confirmation button which usually is the last one or explicitly says schedule send
+        if (text === "schedule send") {
+          btn.click();
+          finalScheduleClicked = true;
+          log("Final Schedule send confirmation clicked.");
+          break;
+        }
+      }
+      if (finalScheduleClicked) break;
+    }
+
+    if (!finalScheduleClicked) {
+      logError("Final schedule send button not found.");
+      return { success: false, error: "Final confirm button not found" };
+    }
+
+    return { success: true };
   }
 
   function findComposeButton() {
@@ -1760,8 +1924,8 @@
     }
     return normalized
       .split(/\s+/)
-      .map(function(token) { return token.trim(); })
-      .filter(function(token) { return token.length >= 4; })
+      .map(function (token) { return token.trim(); })
+      .filter(function (token) { return token.length >= 4; })
       .slice(0, 4);
   }
 
@@ -1992,7 +2156,7 @@
     while (Date.now() - start < timeout) {
       const senders = getThreadSenderEmails();
       if (senders.length > 0) {
-        const matched = senders.some(function(sender) {
+        const matched = senders.some(function (sender) {
           const s = normalizeEmailValue(sender);
           return s === expected || s.indexOf(expected) !== -1;
         });
@@ -2260,7 +2424,7 @@
         logError("CRITICAL: No leadId provided");
         return;
       }
-      
+
       const payload = {
         leadId: leadId,
         recipientEmail: to,
@@ -2271,7 +2435,7 @@
       if (threadId) {
         payload.threadId = threadId;
       }
-      
+
       log("Payload:", JSON.stringify(payload).substring(0, 200));
 
       const response = await chrome.runtime.sendMessage({
@@ -2316,7 +2480,7 @@
     const requireThreadReply = isFollowup && openReply;
 
     log("Starting fill and send", isFollowup ? "(follow-up)" : "", openReply ? "(reply in thread)" : "");
-    
+
     await delay(openReply ? 2500 : 1500);
 
     let currentAuthUser = getCurrentAuthUser();
@@ -2423,7 +2587,7 @@
       logError("Compose window is not ready");
       return;
     }
-    
+
     // Fill To
     let toFilled = requireThreadReply || recoveredViaComposeUrl;
     if (to && !requireThreadReply) {
@@ -2449,7 +2613,7 @@
     } else if (!requireThreadReply) {
       logError("Recipient email is empty before fill");
     }
-    
+
     // Fill Subject
     const subjInput = requireThreadReply ? null : findSubjectInput(document, composeRoot);
     if (subjInput && subject && !requireThreadReply) {
@@ -2457,14 +2621,14 @@
       log("Subject filled");
       await delay(200);
     }
-    
+
     // Wait for body element
     const bodyEl = await waitForBodyElement(12000, composeRoot);
     if (!bodyEl) {
       logError("Body element not found in selected compose");
       return;
     }
-    
+
     // Fill Body
     if (body) {
       let signatureHtml = await captureSignatureHtmlWithWait(bodyEl, 1800);
@@ -2496,12 +2660,38 @@
       log("Body filled");
       await delay(500);
     }
-    
+
     if (autoSend) {
       if (!toFilled) {
         logError("Auto send aborted: recipient not confirmed");
+        try {
+          await chrome.runtime.sendMessage({ action: "sendScheduleError", data: { email: data.to, error: "Recipient not confirmed" } });
+        } catch (e) { }
         return;
       }
+
+      /*
+      if (data.scheduleSendTime) {
+        log(`Attempting Schedule Send at ${data.scheduleSendTime}`);
+        const scheduleResult = await clickScheduleSendButton(composeRoot, bodyEl, data.scheduleSendTime);
+        if (!scheduleResult.success) {
+          const errMsg = scheduleResult.error || "Failed to click schedule send UI";
+          logError(`Schedule Send Failed: ${errMsg}`);
+          // Notify background script about failure
+          try {
+            await chrome.runtime.sendMessage({ action: "sendScheduleError", data: { email: data.to, error: errMsg } });
+          } catch (e) { }
+          return; // Leave as draft
+        }
+        log("Schedule send triggered, waiting 3s to let UI settle");
+        await delay(3000);
+        // We successfully scheduled it, so we must tell the dashboard it's "Sent" (Scheduled)
+        await updateLead(leadId, to, subject, body, null, expectedGmailAuthUser);
+        log("Lead updated after schedule send");
+        await closeCurrentAutomationTab();
+        return;
+      } else {
+      */
       const sendBaseline = {
         hadMessageSent: getSendStatusText() === "message sent",
         viewCount: countViewMessageControls()
@@ -2509,14 +2699,21 @@
       const clicked = clickSendButton(composeRoot, bodyEl);
       if (!clicked) {
         logError("Auto send failed: Send button not found");
+        try {
+          await chrome.runtime.sendMessage({ action: "sendScheduleError", data: { email: data.to, error: "Send button not found" } });
+        } catch (e) { }
         return;
       }
       log("Auto send triggered, waiting for completion");
       const sendCompleted = await waitForSendCompletion(60000, sendBaseline);
       if (!sendCompleted) {
         log("Auto send completion was not detected before timeout");
+        try {
+          await chrome.runtime.sendMessage({ action: "sendScheduleError", data: { email: data.email, error: "Send completion timeout" } });
+        } catch (e) { }
         return;
       }
+      // } // (End of commented-out 'else' for scheduling)
     } else {
       log("Draft ready, waiting for manual send");
       const sendCompleted = await waitForSendCompletion(300000);

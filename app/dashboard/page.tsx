@@ -106,7 +106,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   const leads = (await prisma.lead.findMany({
     where,
-    orderBy: { createdAt: "desc" },
+    orderBy: { createdAt: status === "pending" ? "asc" : "desc" },
     take: PAGE_SIZE,
     include: {
       campaign: true,

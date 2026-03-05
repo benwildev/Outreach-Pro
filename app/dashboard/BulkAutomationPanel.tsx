@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { deletePendingLeads } from "./actions";
+import { Trash2 } from "lucide-react";
 
 type BulkState = {
   status?: string;
@@ -26,6 +28,7 @@ type BulkState = {
   windowEnabled?: boolean;
   sendWindowStart?: string;
   sendWindowEnd?: string;
+  scheduleSendTime?: string;
   lastError?: string;
 };
 
@@ -36,6 +39,7 @@ const K_AUTO_FOLLOWUP = "leadsExtensionBulkAutoFollowup";
 const K_WINDOW_ENABLED = "leadsExtensionBulkWindowEnabled";
 const K_WINDOW_START = "leadsExtensionBulkWindowStart";
 const K_WINDOW_END = "leadsExtensionBulkWindowEnd";
+// const K_SCHEDULE_TIME = "leadsExtensionScheduleTime";
 const BRIDGE_REQUEST_TYPE = "LEADS_EXTENSION_BRIDGE_REQUEST";
 const BRIDGE_RESPONSE_TYPE = "LEADS_EXTENSION_BRIDGE_RESPONSE";
 const BRIDGE_READY_TYPE = "LEADS_EXTENSION_BRIDGE_READY";
@@ -128,6 +132,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
   const [windowEnabled, setWindowEnabled] = useState(false);
   const [windowStart, setWindowStart] = useState("09:00");
   const [windowEnd, setWindowEnd] = useState("18:00");
+  const [scheduleTime, setScheduleTime] = useState("");
   const [state, setState] = useState<BulkState>({});
   const [error, setError] = useState("");
   const [hasRuntime, setHasRuntime] = useState(false);
@@ -141,6 +146,9 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
       setWindowEnabled((window.localStorage.getItem(K_WINDOW_ENABLED) ?? "0") === "1");
       setWindowStart(normalizeTime(window.localStorage.getItem(K_WINDOW_START) ?? "", "09:00"));
       setWindowEnd(normalizeTime(window.localStorage.getItem(K_WINDOW_END) ?? "", "18:00"));
+      // const savedSchedule = window.localStorage.getItem(K_SCHEDULE_TIME) || "";
+      // setScheduleTime(savedSchedule ? normalizeTime(savedSchedule, "") : "");
+      setScheduleTime("");
     }
   }, []);
 
@@ -198,6 +206,13 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
         window.localStorage.setItem(K_WINDOW_ENABLED, windowEnabled ? "1" : "0");
         window.localStorage.setItem(K_WINDOW_START, start);
         window.localStorage.setItem(K_WINDOW_END, end);
+        /*
+        if (scheduleTime) {
+          window.localStorage.setItem(K_SCHEDULE_TIME, normalizeTime(scheduleTime, ""));
+        } else {
+          window.localStorage.removeItem(K_SCHEDULE_TIME);
+        }
+        */
 
         const response = await sendRuntimeMessage({
           action: "startBulkAutomation",
@@ -210,6 +225,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
             windowEnabled,
             sendWindowStart: start,
             sendWindowEnd: end,
+            // scheduleSendTime: scheduleTime ? normalizeTime(scheduleTime, "") : undefined,
           },
         });
         if (!response?.success) {
@@ -312,10 +328,33 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
           <span className="text-slate-700">To</span>
           <input type="time" value={windowEnd} onChange={(e) => setWindowEnd(normalizeTime(e.target.value, "18:00"))} className="h-8 rounded border bg-white px-2 text-xs" />
         </label>
+        {/*
+        <div className="w-px h-6 bg-blue-200 mx-1"></div>
+        <label className="inline-flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded border border-yellow-200" title="Leave blank to send immediately">
+          <span className="text-slate-700 font-medium">Schedule At:</span>
+          <input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value ? normalizeTime(e.target.value, "") : "")} className="h-8 rounded border bg-white px-2 text-xs" />
+        </label>
+        */}
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("start")} disabled={isActive || !hasRuntime}>Start</Button>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("pause")} disabled={!(statusValue === "running" || statusValue === "waiting-window")}>Pause</Button>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("resume")} disabled={statusValue !== "paused"}>Resume</Button>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("stop")} disabled={!isActive || statusValue === "stopping"}>Stop</Button>
+        <div className="flex-1"></div>
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-8 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 gap-1"
+          onClick={async () => {
+            if (window.confirm("Are you sure you want to delete ALL pending leads for this campaign? This cannot be undone.")) {
+              await deletePendingLeads(currentCampaignId);
+              window.location.reload();
+            }
+          }}
+          disabled={isActive}
+        >
+          <Trash2 className="w-3 h-3" />
+          Clear Pending Leads
+        </Button>
       </div>
       <div className="mt-2 text-slate-700">Status: {formatStatus(state.status)} • Phase: {state.phase || "send"}</div>
       <div className="text-slate-600">{progressText}</div>
