@@ -22,6 +22,8 @@ model Campaign {
   provider    String   @default("gmail")
   createdAt   DateTime @default(now())
   leads       Lead[]
+
+  @@map("campaign")
 }
 
 model Lead {
@@ -39,6 +41,9 @@ model Lead {
   sentGmailAuthUser String?
   sentSubject     String?   // Subject line that was actually sent (captured from extension)
   sentBody        String?   // Email body that was actually sent (captured from extension)
+  sentFollowup1Body String?
+  sentFollowup2Body String?
+  replyBody       String?
   nextFollowup    DateTime?
   gmailThreadId   String?   // Set when sending via Gmail API; used for reply-in-thread and reply detection
   opened          Boolean   @default(false)
@@ -46,4 +51,6 @@ model Lead {
   clicked         Boolean   @default(false)
   clickedAt      DateTime?
   createdAt       DateTime  @default(now())
+  
+  @@map("lead")
 }

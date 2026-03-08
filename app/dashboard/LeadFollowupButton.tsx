@@ -27,13 +27,16 @@ export function LeadFollowupButton({
   const [loading, setLoading] = useState(false);
 
   const now = new Date();
-  const isDue =
+  const canFollowup =
     status === "sent" &&
     step < 3 &&
-    nextFollowup != null &&
-    nextFollowup <= now &&
     ((step === 1 && (followup1 ?? "").trim() !== "") ||
       (step === 2 && (followup2 ?? "").trim() !== ""));
+
+  const isDue =
+    canFollowup &&
+    nextFollowup != null &&
+    nextFollowup <= now;
 
   async function handleFollowup() {
     setLoading(true);
@@ -52,7 +55,7 @@ export function LeadFollowupButton({
 
   if (status !== "sent") return null;
 
-  if (!isDue) {
+  if (!canFollowup) {
     return (
       <Button
         type="button"
@@ -64,7 +67,7 @@ export function LeadFollowupButton({
         aria-label="Follow-up not due"
         title="Follow-up not due"
       >
-        <Clock3 className="h-4 w-4" />
+        <Clock3 className="h-4 w-4" opacity={0.5} />
       </Button>
     );
   }
@@ -74,12 +77,12 @@ export function LeadFollowupButton({
       type="button"
       size="icon"
       variant="outline"
-      className="h-9 w-9"
+      className={`h-9 w-9 ${!isDue ? "border-amber-400 text-amber-600 hover:bg-amber-50" : "border-gray-200"}`}
       data-action="followup"
       onClick={handleFollowup}
       disabled={loading}
-      aria-label="Send follow-up"
-      title="Send follow-up"
+      aria-label={isDue ? "Send follow-up" : "Force send early follow-up"}
+      title={isDue ? "Send follow-up" : "Force send early follow-up"}
     >
       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CornerUpLeft className="h-4 w-4" />}
     </Button>

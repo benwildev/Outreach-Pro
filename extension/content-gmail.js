@@ -482,7 +482,25 @@
         if (autoListMode) {
           continue;
         }
-        if (output.length > 0 && output[output.length - 1] !== "") {
+
+        let shouldPushGap = true;
+
+        // Peek backwards and forwards to see if we are between two bullets.
+        // If we are, do not push an empty line, so they group tightly.
+        let prevNonEmpty = "";
+        for (let p = i - 1; p >= 0; p--) {
+          if (lines[p].trim()) { prevNonEmpty = lines[p].trim(); break; }
+        }
+        let nextNonEmpty = "";
+        for (let n = i + 1; n < lines.length; n++) {
+          if (lines[n].trim()) { nextNonEmpty = lines[n].trim(); break; }
+        }
+
+        if (/^\s*[-*•]/.test(prevNonEmpty) && /^\s*[-*•]/.test(nextNonEmpty)) {
+          shouldPushGap = false;
+        }
+
+        if (shouldPushGap && output.length > 0 && output[output.length - 1] !== "") {
           output.push("");
         }
         continue;
@@ -552,7 +570,14 @@
         continue;
       }
 
-      if (!currentIsBullet && !nextIsBullet && !currentLooksHeading && !currentLooksClosing && !nextLooksClosing) {
+      if (currentIsBullet && nextIsBullet) {
+        // Keep consecutive bullets grouped together tightly without gaps
+      } else if (currentLooksHeading && nextIsBullet) {
+        // Do not add a gap between the intro sentence and the first bullet
+      } else if (currentLooksClosing || nextLooksClosing) {
+        // Keep closing sentiments relatively compact
+      } else {
+        // Ensure there is a blank line before or after the list, or between blocks
         expanded.push("");
       }
     }
@@ -677,7 +702,7 @@
 
       function openList() {
         if (!hasOpenList) {
-          parts.push('<div style="margin: 12px 0;"><ul style="margin: 0; padding-left: 22px;">');
+          parts.push('<div style="margin: 6px 0 12px 0;"><ul style="margin: 0; padding-left: 22px;">');
           hasOpenList = true;
         }
       }
@@ -699,22 +724,20 @@
           closeParagraph();
           openList();
           const itemText = line.replace(/^\s*[-*•]\s/, "");
-          parts.push('<li style="margin: 0 0 8px 0;">' + linkifyInlineText(itemText) + "</li>");
+          parts.push('<li style="margin: 0 0 4px 0;"><b>' + linkifyInlineText(itemText) + "</b></li>");
           continue;
         }
 
         closeList();
         openParagraph();
+        if (isSignoffLine(line)) {
+          parts.push("<div><br></div>");
+        }
         parts.push("<div>" + linkifyInlineText(line) + "</div>");
       }
 
       closeParagraph();
       closeList();
-
-      // Keep one empty line between top-level paragraphs/sections.
-      if (i < paragraphs.length - 1) {
-        parts.push("<div><br></div>");
-      }
     }
 
     return parts.join("");
@@ -1690,13 +1713,9 @@
   function findReplyButton() {
     const selectors = [
       'div[role="button"][aria-label="Reply"]',
-      'div[role="button"][aria-label="Reply to all"]',
       'button[aria-label="Reply"]',
-      'button[aria-label="Reply to all"]',
       'button[data-tooltip="Reply"]',
-      'button[data-tooltip="Reply to all"]',
       '[data-tooltip="Reply"]',
-      '[data-tooltip="Reply to all"]',
     ];
     for (let i = 0; i < selectors.length; i++) {
       const el = document.querySelector(selectors[i]);
@@ -1709,7 +1728,7 @@
     for (let j = 0; j < buttons.length; j++) {
       const btn = buttons[j];
       const label = (btn.getAttribute("aria-label") || btn.getAttribute("data-tooltip") || btn.textContent || "").trim().toLowerCase();
-      if (label === "reply" || label === "reply to all" || /^reply\b/.test(label)) {
+      if (label === "reply" || (label.startsWith("reply") && label !== "reply to all")) {
         return btn;
       }
     }
@@ -2148,6 +2167,34 @@
     return Array.from(emails);
   }
 
+  function extractThreadReplyBody(recipientEmail) {
+    const expected = normalizeEmailValue(recipientEmail);
+    const messageNodes = document.querySelectorAll(".adn");
+
+    for (let i = 0; i < messageNodes.length; i++) {
+      const node = messageNodes[i];
+      const senderEl = node.querySelector(".gD[email]");
+      if (!senderEl) continue;
+
+      const senderEmail = (senderEl.getAttribute("email") || senderEl.getAttribute("data-hovercard-id") || "").trim().toLowerCase();
+      const normalizedSender = normalizeEmailValue(senderEmail);
+
+      if (normalizedSender === expected || normalizedSender.indexOf(expected) !== -1) {
+        // Find the actual message payload inside this sender's block
+        const bodyEl = node.querySelector(".ii.gt, .a3s.aiL");
+        if (bodyEl) {
+          // Clone it so we can strip out quoted text blocks to keep it clean
+          const clone = bodyEl.cloneNode(true);
+          const quotes = clone.querySelectorAll(".gmail_quote, .gmail_signature");
+          quotes.forEach(q => q.remove());
+
+          return clone.innerText.trim();
+        }
+      }
+    }
+    return null;
+  }
+
   async function waitForRecipientSender(recipientEmail, timeoutMs) {
     const expected = normalizeEmailValue(recipientEmail);
     const timeout = timeoutMs || 15000;
@@ -2160,7 +2207,11 @@
           const s = normalizeEmailValue(sender);
           return s === expected || s.indexOf(expected) !== -1;
         });
-        return { replied: matched, senders: senders };
+
+        if (matched) {
+          const replyBody = extractThreadReplyBody(recipientEmail);
+          return { replied: true, senders: senders, replyBody: replyBody };
+        }
       }
       await delay(600);
     }
@@ -2173,7 +2224,7 @@
     const recipientEmail = String((data && data.recipientEmail) || "").trim().toLowerCase();
 
     if (!threadId || !recipientEmail) {
-      return { replied: false, senders: [] };
+      return { replied: false, senders: [], replyBody: null };
     }
 
     const currentHash = (window.location.hash || "").replace(/^#+/, "");
@@ -2184,7 +2235,7 @@
 
     const text = (document.body && document.body.innerText) || "";
     if (/conversation that you requested no longer exists/i.test(text)) {
-      return { replied: false, senders: [] };
+      return { replied: false, senders: [], replyBody: null };
     }
 
     const result = await waitForRecipientSender(recipientEmail, 16000);
@@ -2659,6 +2710,61 @@
       }
       log("Body filled");
       await delay(500);
+    }
+
+    if (isFollowup) {
+      log("Validating follow-up eligibility with backend before sending...");
+      try {
+        const validateUrl = API_BASE_URL + "/api/validate-followup?leadId=" + encodeURIComponent(leadId);
+        const res = await fetch(validateUrl);
+        const resData = await res.json();
+
+        if (!res.ok || !resData.success || !resData.eligible) {
+          logError("Pre-send validation failed. Lead is no longer eligible for a follow-up:", resData.error || "Already Followed Up / Replied");
+          try {
+            await chrome.runtime.sendMessage({ action: "sendScheduleError", data: { email: data.to, error: "Follow-up no longer eligible (already sent or replied)" } });
+          } catch (e) { }
+          await closeCurrentAutomationTab();
+          return;
+        }
+        log("Lead validation passed. Eligible for follow-up.");
+      } catch (err) {
+        logError("Failed to reach pre-send validation API, proceeding anyway:", err.message);
+      }
+
+      // Safeguard: Check if we are accidentally replying to a mail-daemon or postmaster bounce email
+      try {
+        const toTags = composeRoot.querySelectorAll(".agP.aFw, .vR .vN");
+        let foundBounceDaemon = false;
+        toTags.forEach(tag => {
+          const emailText = (tag.getAttribute("email") || tag.getAttribute("data-hovercard-id") || tag.textContent || "").toLowerCase();
+          if (emailText.includes("mailer-daemon") || emailText.includes("postmaster") || emailText.includes("no-reply")) {
+            foundBounceDaemon = true;
+          }
+        });
+
+        if (foundBounceDaemon) {
+          logError("Pre-send validation failed. Detected bounce daemon in the 'To' field. Aborting follow-up.");
+          try {
+            await chrome.runtime.sendMessage({ action: "sendScheduleError", data: { email: data.to, error: "Auto-aborted: Attempted to reply to mailer-daemon bounce message" } });
+
+            // Mark the lead as replied or failed on backend so it stops trying
+            await chrome.runtime.sendMessage({
+              action: "updateLeadStatus",
+              data: {
+                leadId: leadId,
+                recipientEmail: data.to,
+                status: "failed",
+                error: "Bounced: mailer-daemon reply prevented"
+              }
+            });
+          } catch (e) { }
+          await closeCurrentAutomationTab();
+          return;
+        }
+      } catch (e) {
+        logError("Error checking 'To' tags for bounce daemon:", e);
+      }
     }
 
     if (autoSend) {

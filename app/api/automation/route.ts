@@ -24,6 +24,7 @@ export async function GET(request: Request) {
       status: "sent",
       replied: false,
       nextFollowup: { lte: now },
+      campaign: { provider: "smtp" }
     },
     include: { campaign: true },
   });
@@ -50,13 +51,6 @@ export async function GET(request: Request) {
     }
 
     const provider = lead.campaign.provider === "smtp" ? "smtp" : "gmail_manual";
-    if (provider === "gmail_manual") {
-      await prisma.lead.update({
-        where: { id: lead.id },
-        data: { nextFollowup: null },
-      });
-      continue;
-    }
 
     const trackedBody = buildTrackedBody(body, lead.id);
     try {

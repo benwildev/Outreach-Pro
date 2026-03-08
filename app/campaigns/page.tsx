@@ -18,12 +18,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(date);
-}
+import { ClientDate } from "../dashboard/ClientDate";
 
 export default async function CampaignsPage() {
   const campaigns = await prisma.campaign.findMany({
@@ -73,7 +68,7 @@ export default async function CampaignsPage() {
                         {c.provider === "smtp" ? "SMTP" : "Gmail Manual"}
                       </TableCell>
                       <TableCell>{c._count.leads}</TableCell>
-                      <TableCell>{formatDate(c.createdAt)}</TableCell>
+                      <TableCell><ClientDate date={c.createdAt} /></TableCell>
                       <TableCell>
                         <Button size="sm" variant="outline" asChild>
                           <Link href={`/dashboard?campaign=${c.id}`}>View</Link>

@@ -90,3 +90,26 @@ export async function deletePendingLeads(campaignId?: string | null) {
 
   revalidatePath("/dashboard");
 }
+
+export async function bulkTriggerFollowup(leadIds: string[]) {
+  if (!leadIds || leadIds.length === 0) return;
+
+  const now = new Date();
+  // We only want to trigger follow-up for leads that are in a state where follow-up makes sense.
+  // Actually, LeadFollowupButton checks if step < 3 and status != 'replied'.
+
+  await prisma.lead.updateMany({
+    where: {
+      id: { in: leadIds },
+      status: { not: "replied" },
+      replied: false,
+      step: { lt: 3 }
+    },
+    data: {
+      nextFollowup: now
+    }
+  });
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/campaigns/[id]", "page");
+}

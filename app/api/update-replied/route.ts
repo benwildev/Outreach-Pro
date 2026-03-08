@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { leadId } = body || {};
+    const { leadId, replyBody } = body || {};
 
     if (!leadId) {
       return NextResponse.json({ error: "leadId is required" }, { status: 400 });
@@ -23,6 +23,7 @@ export async function POST(request: Request) {
         replied: true,
         status: "replied",
         nextFollowup: null,
+        ...(replyBody ? { replyBody: String(replyBody).trim() } : {}),
       },
     });
 

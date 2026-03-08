@@ -125,6 +125,12 @@ function cleanEmailBody(text, data) {
   let cleaned = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   cleaned = stripExtensionNoise(cleaned);
 
+  cleaned = cleaned.replace(/^\s*Email\s*\n+/i, "");
+  cleaned = cleaned.replace(/^\s*Subject[:\s]*[^\n]*\n+/i, "");
+
+  cleaned = cleaned.replace(/\n\s*(?:Alternative|Other|More|Some\s+other)\s+subject\s+(?:idea|ideas|option|options)[\s\S]*$/i, "");
+  cleaned = cleaned.replace(/\s*\*?\*?Alternative Subject[^\n]*\n[\s\S]*$/i, "");
+
   cleaned = cleaned.replace(/\[Your Name\]|\[YourCompany\]|\[Company Name\]/gi, "");
   cleaned = cleaned.replace(/\{\{[^}]+\}\}/g, "");
   cleaned = cleaned.replace(/\[[^[\]]+\]/g, function (match) {

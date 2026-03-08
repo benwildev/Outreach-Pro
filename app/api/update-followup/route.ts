@@ -44,14 +44,20 @@ export async function POST(request: Request) {
     const followupSentAt = new Date();
     let stepUpdate: number;
     let nextFollowupUpdate: Date | null;
+    let followup1BodyUpdate: string | null = null;
+    let followup2BodyUpdate: string | null = null;
 
     if (lead.step === 1) {
       stepUpdate = 2;
-      const delay2Ms = (campaign.delay2Days ?? 5) * 24 * 60 * 60 * 1000;
-      nextFollowupUpdate = new Date(followupSentAt.getTime() + delay2Ms);
+      const delay2Days = campaign.delay2Days ?? 5;
+      nextFollowupUpdate = new Date(followupSentAt);
+      nextFollowupUpdate.setDate(followupSentAt.getDate() + delay2Days);
+      nextFollowupUpdate.setHours(0, 0, 0, 0);
+      followup1BodyUpdate = campaign.followup1 || null;
     } else {
       stepUpdate = 3;
       nextFollowupUpdate = null;
+      followup2BodyUpdate = campaign.followup2 || null;
     }
 
     const updatedLead = await prisma.lead.update({
@@ -60,6 +66,8 @@ export async function POST(request: Request) {
         step: stepUpdate,
         sentAt: followupSentAt,
         nextFollowup: nextFollowupUpdate,
+        ...(followup1BodyUpdate ? { sentFollowup1Body: followup1BodyUpdate } : {}),
+        ...(followup2BodyUpdate ? { sentFollowup2Body: followup2BodyUpdate } : {}),
         ...(sentGmailAuthUser ? { sentGmailAuthUser: String(sentGmailAuthUser).trim() } : {}),
       },
     });

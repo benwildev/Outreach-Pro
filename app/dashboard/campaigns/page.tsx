@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { DeleteCampaignButton } from "./DeleteCampaignButton";
+import { ClientDate } from "../ClientDate";
 
 export const dynamic = "force-dynamic";
 
@@ -27,12 +28,6 @@ type CampaignRow = Prisma.CampaignGetPayload<{
   gmailAuthUser?: string | null;
 };
 
-function formatDate(date: Date): string {
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(date);
-}
 
 function subjectPreview(subject: string, maxLen = 40): string {
   if (subject.length <= maxLen) return subject;
@@ -150,7 +145,7 @@ export default async function DashboardCampaignsPage() {
                         {c.gmailAuthUser || "0"}
                       </TableCell>
                       <TableCell>{c._count.leads}</TableCell>
-                      <TableCell>{formatDate(c.createdAt)}</TableCell>
+                      <TableCell><ClientDate date={c.createdAt} /></TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <Button size="sm" variant="outline" asChild>

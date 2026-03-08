@@ -274,16 +274,52 @@
       return cleaned;
     }
 
+    function extractCleanText(node) {
+      if (!node) return "";
+      const clone = node.cloneNode(true);
+      const noise = clone.querySelectorAll([
+        'sup', 'button',
+        '[class*="citation" i]', '[class*="source" i]', '[class*="reference" i]',
+        'span.flex.items-center.justify-center',
+        '.text-xs', '.rounded-full', '.rounded-md', '.bg-token-main-surface-secondary',
+        '[contenteditable="false"]'
+      ].join(', '));
+      for (let j = 0; j < noise.length; j++) {
+        const el = noise[j];
+        if (el && el.parentNode) {
+          // If the element is purely a tiny icon/pill, kill it completely
+          // Sometimes ChatGPT nests actual good text inside rounded things if we are too broad, 
+          // so we ensure we only completely kill short/pill-like noise or explicit buttons/citations.
+          const isButtonOrCitation = el.tagName === 'BUTTON' || el.tagName === 'SUP' || (el.className && el.className.match(/citation|source|reference/i));
+          const isShortText = (el.innerText || el.textContent || "").length < 40;
+          if (isButtonOrCitation || isShortText || el.getAttribute("contenteditable") === "false") {
+            el.parentNode.removeChild(el);
+          }
+        }
+      }
+      const links = clone.querySelectorAll('a');
+      for (let j = 0; j < links.length; j++) {
+        const textNode = document.createTextNode(links[j].innerText || links[j].textContent || "");
+        if (links[j].parentNode) links[j].parentNode.replaceChild(textNode, links[j]);
+      }
+      let rawText = String(clone.innerText || clone.textContent || "").trim();
+      // Also strip typical markdown patterns like [Immovario](https://...)
+      rawText = rawText.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
+      // Strip isolated domains/pills at the end of paragraphs that might have leaked through
+      rawText = rawText.replace(/(?:^|\n)([ \t]*[a-zA-Z0-9-]+\.[a-zA-Z]{2,}[ \t]*)(?=\n|$)/g, ""); // Matches isolated domain names on their own line
+      // Strip inline domains placed right before a newline (e.g. "...audience. immovario.com\n")
+      rawText = rawText.replace(/\s+[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?=\n|$)/g, "");
+      return rawText;
+    }
+
     const nodes = document.querySelectorAll('[data-message-author-role="assistant"]');
     if (nodes.length > 0) {
       const last = nodes[nodes.length - 1];
-      const visibleText = String(last.innerText || "").trim();
-      const fallbackText = String(last.textContent || "").trim();
-      return sanitizeExtractedText(visibleText || fallbackText);
+      return sanitizeExtractedText(extractCleanText(last));
     }
     const prose = document.querySelectorAll(".markdown, [class*='prose'], [class*='message'], [class*='markdown']");
     for (let i = prose.length - 1; i >= 0; i--) {
-      const t = sanitizeExtractedText(String(prose[i].innerText || prose[i].textContent || "").trim());
+      const t = sanitizeExtractedText(extractCleanText(prose[i]));
       if (t.length > 30) return t;
     }
     return "";

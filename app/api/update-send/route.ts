@@ -44,8 +44,12 @@ export async function POST(request: Request) {
       );
     }
 
-    // Calculate next followup delay
-    const delay1Ms = (lead.campaign?.delay1Days ?? 3) * 86400000;
+    // Calculate next followup delay (using calendar days at midnight)
+    const delay1Days = lead.campaign?.delay1Days ?? 3;
+    const now = new Date();
+    const nextFollowupDate = new Date(now);
+    nextFollowupDate.setDate(now.getDate() + delay1Days);
+    nextFollowupDate.setHours(0, 0, 0, 0);
 
     const targetStatus = status || "sent";
 
@@ -56,8 +60,8 @@ export async function POST(request: Request) {
         status: targetStatus,
         step: targetStatus === "sent" ? 1 : lead.step,
         ...(targetStatus === "sent" ? {
-          sentAt: new Date(),
-          nextFollowup: new Date(Date.now() + delay1Ms)
+          sentAt: now,
+          nextFollowup: nextFollowupDate
         } : {}),
         ...(threadId ? { gmailThreadId: threadId } : {}),
         ...(sentGmailAuthUser ? { sentGmailAuthUser: String(sentGmailAuthUser).trim() } : {}),

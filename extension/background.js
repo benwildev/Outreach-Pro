@@ -1488,7 +1488,7 @@ async function handleCheckReplyByThread(data) {
   }
 
   if (response.replied && leadId) {
-    await handleMarkLeadReplied({ leadId: leadId });
+    await handleMarkLeadReplied({ leadId: leadId, replyBody: response.replyBody || null });
   }
 
   return {
