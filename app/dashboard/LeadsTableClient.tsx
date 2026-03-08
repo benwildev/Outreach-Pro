@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ClientDate } from "./ClientDate";
 import { LeadSendButton } from "./LeadSendButton";
+import { LeadScheduleButton } from "./LeadScheduleButton";
 import { LeadFollowupButton } from "./LeadFollowupButton";
 import { LeadCheckReplyButton } from "./LeadCheckReplyButton";
 import { LeadEditButton } from "./LeadEditButton";
@@ -282,6 +283,7 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                     <TableCell onClick={(e) => e.stopPropagation()}>
                                         <div className="flex flex-wrap items-center gap-1">
                                             <LeadSendButton leadId={lead.id} status={lead.status} />
+                                            <LeadScheduleButton leadId={lead.id} status={lead.status} />
                                             <LeadFollowupButton
                                                 leadId={lead.id}
                                                 status={lead.status}

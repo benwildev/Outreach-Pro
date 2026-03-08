@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const SCRIPT_VERSION = "gmail-content-2026-03-04-auth-lock-v16";
+  const SCRIPT_VERSION = "gmail-content-v21-ROBUST-DOM";
   const LOG_PREFIX = "[Gmail Extension]";
   let LAST_KNOWN_SIGNATURE_HTML = "";
 
@@ -1417,129 +1417,148 @@
 
   async function clickScheduleSendButton(composeRoot, bodyEl, scheduleTime) {
     function isVisible(node) {
-      return !!(node && node.offsetParent !== null);
+      if (!node) return false;
+      const style = window.getComputedStyle(node);
+      const isDisplayNone = style.display === 'none';
+      const isVisibilityHidden = style.visibility === 'hidden';
+      // Gmail menus sometimes have 0 width during animation, allow a bit of leniency
+      return !isDisplayNone && !isVisibilityHidden;
     }
 
-    const scopes = [];
-    if (composeRoot) scopes.push(composeRoot);
-    if (bodyEl) {
-      const nearScopes = [
-        bodyEl.closest('div[role="dialog"]'),
-        bodyEl.closest("form"),
-        bodyEl.closest('div[aria-label*="Message"]'),
-        bodyEl.parentElement
-      ];
-      for (let i = 0; i < nearScopes.length; i++) {
-        const s = nearScopes[i];
-        if (s && scopes.indexOf(s) === -1) scopes.push(s);
-      }
-    }
-    scopes.push(document);
+    log("(v18) clickScheduleSendButton start:", scheduleTime);
 
-    // 1. Click "More send options" dropdown arrow
-    let dropdownClicked = false;
-    const arrowSelectors = [
-      'div[aria-label*="More send options" i]',
-      'div[data-tooltip*="More send options" i]'
-    ];
-    for (let s = 0; s < scopes.length; s++) {
-      const scope = scopes[s];
-      for (let i = 0; i < arrowSelectors.length; i++) {
-        const arrowBtn = scope.querySelector(arrowSelectors[i]);
-        if (arrowBtn && isVisible(arrowBtn)) {
-          arrowBtn.click();
-          dropdownClicked = true;
-          log("Schedule Send dropdown arrow clicked.");
-          break;
+    // 1. Find and click "More send options"
+    let moreOptionsBtn = composeRoot.querySelector('div[aria-label*="More send options" i], div[data-tooltip*="More send options" i], div[aria-haspopup="true"][role="button"]');
+    if (!moreOptionsBtn) {
+      const allBtns = Array.from(composeRoot.querySelectorAll('div[role="button"]'));
+      moreOptionsBtn = allBtns.find(el => {
+        const label = (el.getAttribute("aria-label") || "").toLowerCase();
+        return label.includes("more send options") || label.includes("send options") || (el.innerText || "").includes("▼");
+      });
+      if (!moreOptionsBtn) {
+        // Find the button immediately following the Send button
+        const sendBtnIdx = allBtns.findIndex(el => {
+          const lbl = (el.getAttribute("aria-label") || "").toLowerCase();
+          return lbl.startsWith("send") && !lbl.includes("options");
+        });
+        if (sendBtnIdx !== -1 && allBtns[sendBtnIdx + 1]) {
+          moreOptionsBtn = allBtns[sendBtnIdx + 1];
+          log("Found more options button by siblingship to Send.");
         }
       }
-      if (dropdownClicked) break;
     }
 
-    if (!dropdownClicked) {
-      logError("Schedule Send dropdown arrow not found.");
+    if (!moreOptionsBtn) {
+      logError("More send options button not found.");
       return { success: false, error: "Dropdown not found" };
     }
 
-    await delay(500); // Wait for menu
+    moreOptionsBtn.click();
+    log("Clicked more send options, waiting for menu...");
+    await delay(1500);
 
-    // 2. Click "Schedule send" in the menu
+    // 2. Find "Schedule send" in the menu (with expanded retries)
     let menuClicked = false;
-    const menuItems = document.querySelectorAll('div[role="menuitem"], div[role="menuitemcheckbox"]');
-    for (let i = 0; i < menuItems.length; i++) {
-      const item = menuItems[i];
-      if (!isVisible(item)) continue;
-      const text = (item.textContent || "").toLowerCase();
-      if (text.includes("schedule send")) {
-        item.click();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      // Try roles and everything else
+      const allPossible = document.querySelectorAll('div[role="menuitem"], [role="option"], div, span, b');
+      let scheduleItem = Array.from(allPossible).find(el => {
+        if (!isVisible(el)) return false;
+        const text = (el.textContent || "").trim().toLowerCase();
+        // Look for "schedule send" or just "schedule" if very short
+        return text.includes("schedule send") || (text.includes("schedule") && text.length < 20);
+      });
+
+      if (scheduleItem) {
+        log("Found schedule menu item, clicking.");
+        const clickable = scheduleItem.closest('div[role="menuitem"]') || scheduleItem;
+        clickable.click();
         menuClicked = true;
-        log("Schedule send menu item clicked.");
         break;
       }
+
+      log("(v17) Schedule menu item not found, retrying... (attempt " + (attempt + 1) + ")");
+      await delay(1000);
     }
 
     if (!menuClicked) {
-      logError("Schedule send menu item not found.");
-      // Dismiss menu
-      document.body.click();
+      logError("(v17) Schedule send menu item not found after retries.");
+      document.body.click(); // dismiss
       return { success: false, error: "Menu item not found" };
     }
 
-    await delay(1000); // Wait for Schedule Dialog
+    await delay(3000); // Wait for Schedule send popup (v19: increased)
 
-    // 3. Click "Pick date & time"
+    // 3. Click "Pick date & time" (v19: NO visibility filter, diagnostic logging)
     let pickDateClicked = false;
-    const dialogs = document.querySelectorAll('div[role="dialog"]');
-    for (let i = 0; i < dialogs.length; i++) {
-      const d = dialogs[i];
-      if (!isVisible(d)) continue;
-      const buttons = d.querySelectorAll('div[role="button"], button');
-      for (let j = 0; j < buttons.length; j++) {
-        const btn = buttons[j];
-        if (!isVisible(btn)) continue;
-        const text = (btn.textContent || "").toLowerCase();
-        if (text.includes("pick date & time")) {
-          btn.click();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      // v19 DIAGNOSTIC: Log what is on screen
+      if (attempt === 0) {
+        const allMenu = document.querySelectorAll('div[role="menuitem"], div[role="menu"] div, .J-N');
+        let scheduleRelated = [];
+        for (let i = 0; i < allMenu.length; i++) {
+          const txt = (allMenu[i].innerText || allMenu[i].textContent || "").replace(/\s+/g, " ").trim();
+          if (txt && /schedule|pick|tomorrow|monday|date/i.test(txt)) {
+            scheduleRelated.push(txt.substring(0, 30) + " [tag=" + allMenu[i].tagName + "]");
+          }
+        }
+        log("(v20) DIAGNOSTIC - Menu items found:", scheduleRelated.length, scheduleRelated.join(" | "));
+      }
+
+      // v20: Robust search ignoring whitespace and length
+      const allEls = document.querySelectorAll('div[role="menuitem"], .J-N, div, span');
+      for (let i = 0; i < allEls.length; i++) {
+        const el = allEls[i];
+        // Only look at elements that don't have too many descendants to find the most specific one
+        if (el.children.length > 5) continue;
+
+        const txt = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+        if (txt.includes("pick date") || txt === "pick date & time") {
+          log("(v20) Found pick date element:", el.tagName, el.className, txt);
+
+          // Try to click the element itself, or its closest menuitem parent
+          const clickable = el.closest('[role="menuitem"]') || el.closest('.J-N') || el;
+          clickable.click();
           pickDateClicked = true;
-          log("Pick date & time clicked.");
           break;
         }
       }
+
       if (pickDateClicked) break;
+      log("(v19) Pick date not found yet, retrying... (attempt " + (attempt + 1) + ")");
+      await delay(1200);
     }
 
     if (!pickDateClicked) {
-      logError("Pick date & time option not found.");
-      // Just click anywhere to try and dismiss
+      logError("(v19) Pick date option not found.");
       document.body.click();
       return { success: false, error: "Pick date option not found" };
     }
 
-    await delay(800);
+    await delay(1800);
 
-    // 4. Input Time
+    // 4. Input Time (v18: Expanded search)
     let timeInputFilled = false;
-    const timeInputs = document.querySelectorAll('input[aria-label="Time" i], input[type="text"]');
-    for (let i = 0; i < timeInputs.length; i++) {
-      const input = timeInputs[i];
-      if (!isVisible(input)) continue;
-      // Check if it's the right input by looking at nearby elements or label
-      const isTimeInput = (input.getAttribute("aria-label") || "").toLowerCase().includes("time") ||
-        input.placeholder.toLowerCase().includes("time");
-      if (isTimeInput || timeInputs.length === 2) { // Usually Date is first, Time is second
-        const timeEl = isTimeInput ? input : timeInputs[1];
-        if (timeEl) {
-          timeEl.focus();
-          timeEl.value = "";
-          document.execCommand("insertText", false, scheduleTime);
-          timeEl.dispatchEvent(new Event("input", { bubbles: true }));
-          timeEl.dispatchEvent(new Event("change", { bubbles: true }));
-          timeEl.blur();
-          timeInputFilled = true;
-          log(`Filled time input with: ${scheduleTime}`);
-          break;
-        }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const allInputs = document.querySelectorAll('input');
+      const timeInput = Array.from(allInputs).find(inp => {
+        if (!isVisible(inp)) return false;
+        const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
+        return lbl.includes('time') || inp.type === 'text';
+      });
+
+      if (timeInput) {
+        timeInput.focus();
+        timeInput.value = "";
+        document.execCommand("insertText", false, scheduleTime);
+        timeInput.dispatchEvent(new Event("input", { bubbles: true }));
+        timeInput.dispatchEvent(new Event("change", { bubbles: true }));
+        timeInput.blur();
+        timeInputFilled = true;
+        log("Filled time input:", scheduleTime);
+        break;
       }
+      await delay(800);
     }
 
     if (!timeInputFilled) {
@@ -1547,28 +1566,24 @@
       return { success: false, error: "Time input not found" };
     }
 
-    await delay(500);
+    await delay(1500);
 
-    // 5. Click final "Schedule send" button
+    // 5. Final Click (v18: 3 attempts, global search)
     let finalScheduleClicked = false;
-    const finalDialogs = document.querySelectorAll('div[role="dialog"]');
-    for (let i = 0; i < finalDialogs.length; i++) {
-      const d = finalDialogs[i];
-      if (!isVisible(d)) continue;
-      const buttons = d.querySelectorAll('div[role="button"], button');
-      for (let j = 0; j < buttons.length; j++) {
-        const btn = buttons[j];
-        if (!isVisible(btn)) continue;
-        const text = (btn.textContent || "").trim().toLowerCase();
-        // Specifically look for the blue confirmation button which usually is the last one or explicitly says schedule send
-        if (text === "schedule send") {
-          btn.click();
-          finalScheduleClicked = true;
-          log("Final Schedule send confirmation clicked.");
-          break;
-        }
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const allBtns = document.querySelectorAll('div[role="button"], button');
+      const finalBtn = Array.from(allBtns).find(el => {
+        if (!isVisible(el)) return false;
+        const t = (el.textContent || "").toLowerCase().trim();
+        return t === "schedule send" || t === "schedule";
+      });
+      if (finalBtn) {
+        finalBtn.click();
+        finalScheduleClicked = true;
+        log("Final Schedule send clicked.");
+        break;
       }
-      if (finalScheduleClicked) break;
+      await delay(1000);
     }
 
     if (!finalScheduleClicked) {
@@ -2767,6 +2782,8 @@
       }
     }
 
+
+
     if (autoSend) {
       if (!toFilled) {
         logError("Auto send aborted: recipient not confirmed");
@@ -2776,10 +2793,29 @@
         return;
       }
 
-      /*
-      if (data.scheduleSendTime) {
-        log(`Attempting Schedule Send at ${data.scheduleSendTime}`);
-        const scheduleResult = await clickScheduleSendButton(composeRoot, bodyEl, data.scheduleSendTime);
+      log("(v19) SCHEDULE DIAGNOSTIC: data.scheduleSendTime =", JSON.stringify(data.scheduleSendTime), "typeof =", typeof data.scheduleSendTime, "autoSend =", autoSend);
+
+      // Fallback: if scheduleSendTime is empty, try reading from chrome.storage.local
+      let effectiveScheduleTime = (data.scheduleSendTime || "").trim();
+      if (!effectiveScheduleTime) {
+        try {
+          const stored = await chrome.storage.local.get("pendingScheduleSendTime");
+          if (stored && stored.pendingScheduleSendTime) {
+            effectiveScheduleTime = String(stored.pendingScheduleSendTime).trim();
+            log("(v19) FALLBACK: Read scheduleSendTime from chrome.storage.local:", effectiveScheduleTime);
+          }
+        } catch (e) {
+          logError("(v19) Failed to read pendingScheduleSendTime from storage:", e);
+        }
+      }
+      // Clear the stored value after reading to prevent reuse on next send
+      try {
+        await chrome.storage.local.remove("pendingScheduleSendTime");
+      } catch (e) { }
+
+      if (effectiveScheduleTime) {
+        log(`Attempting Schedule Send at ${effectiveScheduleTime}`);
+        const scheduleResult = await clickScheduleSendButton(composeRoot, bodyEl, effectiveScheduleTime);
         if (!scheduleResult.success) {
           const errMsg = scheduleResult.error || "Failed to click schedule send UI";
           logError(`Schedule Send Failed: ${errMsg}`);
@@ -2797,29 +2833,28 @@
         await closeCurrentAutomationTab();
         return;
       } else {
-      */
-      const sendBaseline = {
-        hadMessageSent: getSendStatusText() === "message sent",
-        viewCount: countViewMessageControls()
-      };
-      const clicked = clickSendButton(composeRoot, bodyEl);
-      if (!clicked) {
-        logError("Auto send failed: Send button not found");
-        try {
-          await chrome.runtime.sendMessage({ action: "sendScheduleError", data: { email: data.to, error: "Send button not found" } });
-        } catch (e) { }
-        return;
+        const sendBaseline = {
+          hadMessageSent: getSendStatusText() === "message sent",
+          viewCount: countViewMessageControls()
+        };
+        const clicked = clickSendButton(composeRoot, bodyEl);
+        if (!clicked) {
+          logError("Auto send failed: Send button not found");
+          try {
+            await chrome.runtime.sendMessage({ action: "sendScheduleError", data: { email: data.to, error: "Send button not found" } });
+          } catch (e) { }
+          return;
+        }
+        log("Auto send triggered, waiting for completion");
+        const sendCompleted = await waitForSendCompletion(60000, sendBaseline);
+        if (!sendCompleted) {
+          log("Auto send completion was not detected before timeout");
+          try {
+            await chrome.runtime.sendMessage({ action: "sendScheduleError", data: { email: data.email, error: "Send completion timeout" } });
+          } catch (e) { }
+          return;
+        }
       }
-      log("Auto send triggered, waiting for completion");
-      const sendCompleted = await waitForSendCompletion(60000, sendBaseline);
-      if (!sendCompleted) {
-        log("Auto send completion was not detected before timeout");
-        try {
-          await chrome.runtime.sendMessage({ action: "sendScheduleError", data: { email: data.email, error: "Send completion timeout" } });
-        } catch (e) { }
-        return;
-      }
-      // } // (End of commented-out 'else' for scheduling)
     } else {
       log("Draft ready, waiting for manual send");
       const sendCompleted = await waitForSendCompletion(300000);

@@ -8,6 +8,8 @@ export type SendEmailOptions = {
   html?: string;
   /** When set and provider is gmail_api, the message is sent as a reply in this thread. */
   threadId?: string;
+  /** When set and provider is gmail_manual, the time is passed for scheduling. */
+  scheduleTime?: string;
 };
 
 export type SendEmailResult =
@@ -19,7 +21,10 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
   const content = html ?? body;
 
   if (provider === "gmail_manual" || provider === "gmail") {
-    const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(content)}`;
+    let url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(content)}`;
+    if (options.scheduleTime) {
+      url += `&scheduleTime=${encodeURIComponent(options.scheduleTime)}`;
+    }
     return { type: "redirect", url };
   }
 

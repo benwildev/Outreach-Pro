@@ -35,8 +35,8 @@ const REPLY_CHECK_PERIOD_MINUTES = 24 * 60;
 const CHATGPT_HANDOFF_TIMEOUT_MS = 90000;
 const CHATGPT_DEFAULT_URL = "https://chatgpt.com/";
 const CAMPAIGN_CHAT_URLS_KEY = "campaignChatUrls";
-// ── Change this to your production URL when deploying to VPS ──
-const API_BASE_URL = "https://automation.benwil.store";
+// ── Auto-detect API URL based on where the dashboard is running ──
+const API_BASE_URL = "http://localhost:3000";
 
 const SEND_QUEUE_API_BASE = API_BASE_URL + "/api/send-queue";
 const FOLLOWUP_QUEUE_API_BASE = API_BASE_URL + "/api/followup-queue";
@@ -74,6 +74,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "startWorkflow") {
+    console.log("[Leads Extension] RAW startWorkflow data keys:", message.data ? Object.keys(message.data).join(",") : "(no data)", "scheduleSendTime:", message.data && message.data.scheduleSendTime ? message.data.scheduleSendTime : "(MISSING)");
     handleStartWorkflow(message.data)
       .then(sendResponse)
       .catch((err) => {
@@ -269,7 +270,15 @@ async function handleStartWorkflow(data) {
   if (mappedChatUrl) {
     console.log("[Leads Extension] Using mapped ChatGPT URL for campaign:", campaignId, mappedChatUrl);
   }
-  console.log("[Leads Extension] Workflow started for lead:", data && data.leadId ? data.leadId : "(no lead id)");
+  console.log("[Leads Extension] Workflow started for lead:", data && data.leadId ? data.leadId : "(no lead id)", "scheduleSendTime:", data && data.scheduleSendTime ? data.scheduleSendTime : "(NONE)");
+  // Persist scheduleSendTime to chrome.storage.local so Gmail content script can read it as fallback
+  const scheduleTimeForStorage = data && data.scheduleSendTime ? String(data.scheduleSendTime).trim() : "";
+  try {
+    await chrome.storage.local.set({ pendingScheduleSendTime: scheduleTimeForStorage });
+    console.log("[Leads Extension] Stored pendingScheduleSendTime:", scheduleTimeForStorage || "(empty)");
+  } catch (e) {
+    console.warn("[Leads Extension] Failed to store pendingScheduleSendTime:", e);
+  }
   const workflowKey = getWorkflowKey(data);
   pendingWorkflows.set(workflowKey, {
     data: data,
@@ -361,6 +370,7 @@ async function handleChatGptDone(data, chatTabId) {
       scheduleSendTime: pending && pending.data && pending.data.scheduleSendTime ? pending.data.scheduleSendTime : "",
     },
   }, 7, 900);
+  console.log("[Leads Extension] handleChatGptDone - scheduleSendTime sent to Gmail:", pending && pending.data && pending.data.scheduleSendTime ? pending.data.scheduleSendTime : "(NONE)");
   if (!sentToGmail) {
     console.warn("[Leads Extension] Initial Gmail handoff failed, forcing active tab retry:", tab.id);
     try {

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { sendLead } from "./sendActions";
 import { Check, Loader2, SendHorizontal } from "lucide-react";
+import { sendRuntimeMessage } from "./extensionBridge";
 
 interface LeadSendButtonProps {
   leadId: string;
@@ -24,6 +25,13 @@ export function LeadSendButton({ leadId, status }: LeadSendButtonProps) {
       if (result.success) {
         if (result.type === "redirect") {
           window.open(result.url, "_blank");
+        } else if (result.type === "extension_workflow") {
+          try {
+            await sendRuntimeMessage({ action: "startWorkflow", data: result.data });
+          } catch (e) {
+            console.error(e);
+            alert("Extension failed: " + (e instanceof Error ? e.message : "Unknown error"));
+          }
         }
         router.refresh();
       }
