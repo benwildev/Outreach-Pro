@@ -20,6 +20,7 @@ export async function GET(request: Request) {
                 replied: true,
                 status: true,
                 recipientEmail: true,
+                nextFollowup: true,
             },
         });
 
@@ -29,7 +30,9 @@ export async function GET(request: Request) {
 
         // Determine if the lead is in a valid state to receive a follow-up right now
         // If they already replied, or if step >= 3, they shouldn't receive a follow-up.
-        const isEligibleForFollowup = lead.status === "sent" && !lead.replied && lead.step < 3;
+        const now = new Date();
+        const isDue = lead.nextFollowup ? new Date(lead.nextFollowup) <= now : false;
+        const isEligibleForFollowup = lead.status === "sent" && !lead.replied && lead.step < 3 && isDue;
 
         return NextResponse.json({
             success: true,
