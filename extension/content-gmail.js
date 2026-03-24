@@ -1600,106 +1600,86 @@
     await delay(2000); // Wait for Schedule send popup
 
     // 3. Click "Pick date & time" — but skip if Gmail already opened the date/time dialog directly
-    function isDateTimeDialogOpen() {
-      // Check if there's a visible date or time input already on screen (direct dialog path)
+    //    "Date picker" = a dialog with date/time inputs that are NOT compose-window fields
+    const COMPOSE_FIELDS = ['recipients', 'subject', 'bcc', 'cc'];
+    function isDatePickerOpen() {
       const inputs = Array.from(document.querySelectorAll('input')).filter(isVisible);
       return inputs.some(inp => {
         const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
+        if (COMPOSE_FIELDS.some(w => lbl.includes(w))) return false;
         return lbl.includes('date') || lbl.includes('time') || inp.type === 'time' || inp.type === 'date';
       });
     }
 
-    if (isDateTimeDialogOpen()) {
-      log("(v25) Date/time dialog already open — skipping submenu step.");
+    if (isDatePickerOpen()) {
+      log("(v26) Date picker already open — skipping submenu step.");
     } else {
       let pickDateClicked = false;
-      for (let attempt = 0; attempt < 10; attempt++) {
 
-        // Diagnostic on first attempt
-        if (attempt === 0) {
-          const allMenus = Array.from(document.querySelectorAll('[role="menu"]'));
-          log("(v25) DIAG menus:", allMenus.length,
-            allMenus.map(m => `vis=${isVisible(m)} items=${m.querySelectorAll('[role="menuitem"]').length} txt="${(m.textContent||"").trim().slice(0,30)}"`).join(" | "));
-        }
-
-        // Strategy 1: search ALL menus (ignore visibility — submenu may be in CSS transition).
-        // Look for a menu with 3–5 items that contains "pick date" or use the last item.
-        const allMenus = Array.from(document.querySelectorAll('[role="menu"]'));
-        for (const menu of allMenus) {
-          const items = Array.from(menu.querySelectorAll('[role="menuitem"]'));
-          if (items.length < 2) continue;
-          // Prefer explicit "pick date" match
-          const pickItem = items.find(el => (el.textContent || "").toLowerCase().includes("pick date"));
-          if (pickItem) {
-            pickItem.click();
-            pickDateClicked = true;
-            log("(v25) S1 clicked pick date item:", (pickItem.textContent||"").trim().slice(0,40));
-            break;
-          }
-          // Fallback: last item in any menu whose text contains schedule-related words
-          const menuTxt = (menu.textContent || "").toLowerCase();
-          if (menuTxt.includes("tomorrow") || menuTxt.includes("this afternoon") || menuTxt.includes("monday") || menuTxt.includes("morning")) {
-            const lastItem = items[items.length - 1];
-            lastItem.click();
-            pickDateClicked = true;
-            log("(v25) S1 clicked last item in schedule menu:", (lastItem.textContent||"").trim().slice(0,40));
+      // Primary approach: wait for the schedule submenu dialog to appear,
+      // then search ALL its child elements for "pick date" text (role-independent).
+      let scheduleDialog = null;
+      for (let attempt = 0; attempt < 14; attempt++) {
+        // Detect the schedule submenu dialog by its content ("tomorrow", "morning", "pick date")
+        const candidates = Array.from(document.querySelectorAll('[aria-modal="true"], [role="dialog"]'));
+        for (const dlg of candidates) {
+          const dlgTxt = (dlg.textContent || "").toLowerCase();
+          if (dlgTxt.includes("tomorrow") || dlgTxt.includes("pick date") || (dlgTxt.includes("morning") && dlgTxt.includes("schedule"))) {
+            scheduleDialog = dlg;
+            log("(v26) Found schedule submenu dialog on attempt", attempt + 1);
             break;
           }
         }
-
-        if (!pickDateClicked) {
-          // Strategy 2: look inside any [role="dialog"] for schedule options
-          const dialogs = Array.from(document.querySelectorAll('[role="dialog"], [aria-modal="true"]'));
-          for (const dlg of dialogs) {
-            const dlgTxt = (dlg.textContent || "").toLowerCase();
-            if (!dlgTxt.includes("schedule send")) continue;
-            // Try menuitems first
-            const items = Array.from(dlg.querySelectorAll('[role="menuitem"]'));
-            const pickItem = items.find(el => (el.textContent || "").toLowerCase().includes("pick date"));
-            if (pickItem) { pickItem.click(); pickDateClicked = true; log("(v25) S2a dialog menuitem"); break; }
-            if (items.length >= 2) { items[items.length-1].click(); pickDateClicked = true; log("(v25) S2b dialog last menuitem"); break; }
-            // Fallback: any clickable div containing "pick date"
-            const allDivs = Array.from(dlg.querySelectorAll('div, span, li'));
-            for (const el of allDivs) {
-              if (el.children.length > 3) continue;
-              const txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-              if (txt.includes("pick date")) { el.click(); pickDateClicked = true; log("(v25) S2c dialog div:", txt.slice(0,40)); break; }
-            }
-            if (pickDateClicked) break;
-          }
-        }
-
-        if (!pickDateClicked) {
-          // Strategy 3: TreeWalker over full document for "pick date" text node
-          const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_TEXT);
-          let node;
-          while ((node = walker.nextNode())) {
-            const txt = (node.nodeValue || "").replace(/\s+/g, " ").trim().toLowerCase();
-            if (txt.includes("pick date")) {
-              const el = node.parentElement;
-              const clickable = el.closest('[role="menuitem"]') || el.closest('[role="option"]') || el.closest('li') || el;
-              clickable.click();
-              pickDateClicked = true;
-              log("(v25) S3 text node:", txt.slice(0, 50));
-              break;
-            }
-          }
-        }
-
-        if (pickDateClicked) break;
-        if (isDateTimeDialogOpen()) { log("(v25) dialog appeared mid-search"); pickDateClicked = true; break; }
-
-        log("(v25) not found, attempt " + (attempt + 1));
-        await delay(700);
+        if (scheduleDialog) break;
+        log("(v26) Waiting for schedule submenu... attempt " + (attempt + 1));
+        await delay(500);
       }
 
+      if (scheduleDialog) {
+        // Search every element inside the dialog for "pick date" text
+        const allEls = Array.from(scheduleDialog.querySelectorAll('*'));
+        for (const el of allEls) {
+          if (el.children.length > 4) continue; // skip large containers
+          const txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+          if (txt.includes("pick date")) {
+            const clickable = el.closest('[role="menuitem"]') || el.closest('[role="option"]') || el.closest('[tabindex]') || el;
+            clickable.click();
+            pickDateClicked = true;
+            log("(v26) Clicked pick date in dialog:", txt.slice(0, 50));
+            break;
+          }
+        }
+        if (!pickDateClicked) {
+          log("(v26) DIAG dialog text:", (scheduleDialog.textContent || "").replace(/\s+/g, " ").trim().slice(0, 200));
+        }
+      } else {
+        log("(v26) Schedule submenu dialog not found after 14 attempts");
+      }
+
+      // Fallback: TreeWalker over full document
       if (!pickDateClicked) {
-        logError("(v25) Pick date option not found.");
+        const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+          const txt = (node.nodeValue || "").replace(/\s+/g, " ").trim().toLowerCase();
+          if (txt.includes("pick date")) {
+            const el = node.parentElement;
+            const clickable = el.closest('[role="menuitem"]') || el.closest('[role="option"]') || el.closest('[tabindex]') || el;
+            clickable.click();
+            pickDateClicked = true;
+            log("(v26) FB TreeWalker text node:", txt.slice(0, 50));
+            break;
+          }
+        }
+      }
+
+      if (!pickDateClicked && !isDatePickerOpen()) {
+        logError("(v26) Pick date option not found — cannot schedule.");
         document.body.click();
         return { success: false, error: "Pick date option not found" };
       }
 
-      await delay(1500);
+      if (pickDateClicked) await delay(1500);
     }
 
     // 4. Fill date and time inputs in Gmail's "Pick date & time" dialog
@@ -1722,21 +1702,37 @@
       input.blur();
     }
 
-    // Scope input searches to the active modal/dialog so we don't accidentally
-    // hit unrelated inputs (e.g. the Gmail search bar) on the page.
-    function getDialogRoot() {
-      return document.querySelector('[role="dialog"][aria-modal="true"], [role="dialog"]') || document;
+    // Scope input searches to the date-picker dialog only — never touch compose fields.
+    function getDatePickerRoot() {
+      // Find a visible dialog whose inputs are NOT compose-window fields (To/Subject/BCC etc.)
+      const allDialogs = Array.from(document.querySelectorAll('[role="dialog"][aria-modal="true"], [role="dialog"]')).filter(isVisible);
+      for (const dlg of allDialogs) {
+        const inputs = Array.from(dlg.querySelectorAll('input')).filter(isVisible);
+        if (inputs.length === 0) continue;
+        const isCompose = inputs.some(inp =>
+          COMPOSE_FIELDS.some(w => (inp.getAttribute('aria-label') || '').toLowerCase().includes(w))
+        );
+        if (!isCompose) return dlg;
+      }
+      return null; // Return null if no dedicated date picker dialog found
     }
 
     function visibleInputsIn(root) {
       return Array.from(root.querySelectorAll('input')).filter(isVisible);
     }
 
+    // Verify the date picker dialog actually opened before filling
+    const datePickerRoot = getDatePickerRoot();
+    if (!datePickerRoot) {
+      logError("(v26) Date picker dialog did not open — cannot fill date/time.");
+      return { success: false, error: "Date picker dialog not found" };
+    }
+    log("(v26) Date picker dialog confirmed open.");
+
     // Fill the DATE field first (if we have a date to set)
     if (parsed.gmailDate) {
-      const dialogRoot = getDialogRoot();
-      const dialogInputs = visibleInputsIn(dialogRoot);
-      log("(v21) Dialog inputs found for date search:", dialogInputs.map(i => `[${i.type}] aria-label="${i.getAttribute('aria-label')}"`).join(", "));
+      const dialogInputs = visibleInputsIn(datePickerRoot);
+      log("(v26) Date picker inputs:", dialogInputs.map(i => `[${i.type}] aria-label="${i.getAttribute('aria-label')}"`).join(", "));
       const dateInput = dialogInputs.find(inp => {
         const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
         return lbl.includes('date') && !lbl.includes('time');
@@ -1747,35 +1743,34 @@
 
       if (dateInput) {
         fillInput(dateInput, parsed.gmailDate);
-        log("(v21) Filled date input:", parsed.gmailDate, "| aria-label:", dateInput.getAttribute('aria-label'));
+        log("(v26) Filled date:", parsed.gmailDate, "| aria-label:", dateInput.getAttribute('aria-label'));
         await delay(600);
       } else {
-        logError("(v21) Date input not found in dialog — Gmail will use its default date. Inputs seen:", dialogInputs.length);
+        logError("(v26) Date input not found — inputs seen:", dialogInputs.length);
       }
     }
 
     // Fill the TIME field
     let timeInputFilled = false;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const dialogRoot = getDialogRoot();
-      const inputs = visibleInputsIn(dialogRoot);
-      // Primary: aria-label contains "time"
+      const root = getDatePickerRoot();
+      if (!root) { logError("(v26) Date picker closed unexpectedly."); break; }
+      const inputs = visibleInputsIn(root);
       const timeInput = inputs.find(inp => {
         const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
         return lbl.includes('time');
       }) || inputs.find(inp => {
-        // Fallback: first text input whose aria-label does NOT indicate it is a date field
         const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
-        return inp.type === 'text' && !lbl.includes('date') && inp.type !== 'date';
+        return inp.type === 'text' && !lbl.includes('date') && !COMPOSE_FIELDS.some(w => lbl.includes(w));
       });
 
       if (timeInput) {
         fillInput(timeInput, parsed.gmailTime);
         timeInputFilled = true;
-        log("(v21) Filled time input:", parsed.gmailTime, "| aria-label:", timeInput.getAttribute('aria-label'), "| type:", timeInput.type);
+        log("(v26) Filled time:", parsed.gmailTime, "| aria-label:", timeInput.getAttribute('aria-label'));
         break;
       }
-      log(`(v21) Time input not found on attempt ${attempt + 1} — inputs in dialog:`, inputs.map(i => `[${i.type}] aria-label="${i.getAttribute('aria-label')}"`).join(", "));
+      log(`(v26) Time input not found attempt ${attempt + 1}, inputs:`, inputs.map(i => `[${i.type}] "${i.getAttribute('aria-label')}"`).join(", "));
       await delay(800);
     }
 
