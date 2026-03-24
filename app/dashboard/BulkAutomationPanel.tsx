@@ -88,7 +88,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
   const [windowEnabled, setWindowEnabled] = useState(false);
   const [windowStart, setWindowStart] = useState("09:00");
   const [windowEnd, setWindowEnd] = useState("18:00");
-  const [scheduleDate, setScheduleDate] = useState("");
+  const [scheduleDate, setScheduleDate] = useState(getTomorrowDate);
   const [scheduleTime, setScheduleTime] = useState("");
   const [state, setState] = useState<BulkState>({});
   const [error, setError] = useState("");
@@ -120,9 +120,6 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
   function buildScheduleSendTime(): string {
     if (scheduleDate && scheduleTime) {
       return `${scheduleDate}T${scheduleTime}`;
-    }
-    if (scheduleTime) {
-      return scheduleTime;
     }
     return "";
   }
@@ -168,6 +165,10 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
     setError("");
     try {
       if (action === "start") {
+        if ((scheduleDate && !scheduleTime) || (!scheduleDate && scheduleTime)) {
+          setError("Schedule At requires both a date and a time, or leave both blank to send immediately.");
+          return;
+        }
         const minSec = clamp(delayMinSeconds, 5, 600);
         const maxSec = clamp(Math.max(delayMaxSeconds, minSec), 5, 600);
         const maxLeads = clamp(limit, 1, 500);
