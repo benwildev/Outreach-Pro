@@ -29,12 +29,13 @@ import { LeadMessagePreviewButton } from "./LeadMessagePreviewButton";
 import { ClientDate } from "./ClientDate";
 import { Badge } from "@/components/ui/badge";
 import { StatsCards } from "./StatsCards";
+import { DailySendTracker } from "./DailySendTracker";
 import { BulkAutomationPanel } from "./BulkAutomationPanel";
 import { BulkSchedulePanel } from "./BulkSchedulePanel";
 import { BulkActionsRow } from "./BulkActionsRow";
 import { LeadsTableClient } from "./LeadsTableClient";
 import { AdvancedFilters } from "./AdvancedFilters";
-import { Settings, Download } from "lucide-react";
+import { Settings, Download, FileDown } from "lucide-react";
 
 const VALID_STATUSES = ["pending", "sent", "replied"] as const;
 const PAGE_SIZE = 50;
@@ -154,6 +155,26 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   });
   const followupDueCount = followupDueLeads.length;
 
+  // Daily send tracker — emails sent today grouped by Gmail account
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todaySentLeads = await prisma.lead.findMany({
+    where: {
+      sentAt: { gte: todayStart },
+      sentGmailAuthUser: { not: null },
+    },
+    select: { sentGmailAuthUser: true },
+  });
+  const accountCountMap: Record<string, number> = {};
+  for (const l of todaySentLeads) {
+    const acct = l.sentGmailAuthUser ?? "unknown";
+    accountCountMap[acct] = (accountCountMap[acct] ?? 0) + 1;
+  }
+  const dailyAccountStats = Object.entries(accountCountMap).map(([account, count]) => ({
+    account,
+    count,
+  }));
+
   return (
     <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-6 px-3">
       <div className="mx-auto w-full">
@@ -179,6 +200,22 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                   Download Extension
                 </a>
               </Button>
+              <Button variant="outline" size="sm" asChild className="gap-2">
+                <a
+                  href={`/api/export-leads?${new URLSearchParams({
+                    ...(statusFilter ? { status: statusFilter } : {}),
+                    ...(filter ? { filter } : {}),
+                    ...(campaignId ? { campaign: campaignId } : {}),
+                    ...(emailSearch ? { email: emailSearch } : {}),
+                    ...(dateFrom ? { dateFrom } : {}),
+                    ...(dateTo ? { dateTo } : {}),
+                  }).toString()}`}
+                  download
+                >
+                  <FileDown className="w-4 h-4" />
+                  Export CSV
+                </a>
+              </Button>
             </div>
           </div>
         </div>
@@ -192,6 +229,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           bouncedLeads={bouncedLeads}
           followupDueCount={followupDueCount}
         />
+
+        {/* Daily Send Tracker per Gmail account */}
+        <DailySendTracker accountStats={dailyAccountStats} />
 
         {/* Main Content Card */}
         <Card className="border-0 shadow-lg">

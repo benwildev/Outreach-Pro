@@ -57,6 +57,69 @@ function isFollowUpDue(lead: {
 }
 
 // Function to check if a specific lead is eligible for manual bulk follow-up
+type ReplyCategory = "Interested" | "Not Interested" | "Out of Office" | "Unsubscribe" | "Bounced" | "Other";
+
+function categorizeReply(body: string | null | undefined): ReplyCategory {
+    if (!body) return "Other";
+    const lower = body.toLowerCase();
+
+    const interested = [
+        "interested", "sounds good", "tell me more", "let's talk", "lets talk",
+        "love to chat", "would love", "set up a call", "schedule a call",
+        "send me more", "please send", "can we connect", "happy to hop",
+        "open to", "i'd like", "id like", "yes please", "absolutely",
+        "definitely interested", "looks good", "can you share",
+    ];
+    const notInterested = [
+        "not interested", "no thanks", "no thank you", "don't contact",
+        "do not contact", "remove me", "take me off", "stop emailing",
+        "not a good fit", "not for us", "pass", "decline", "rejected",
+        "don't reach out", "please don't", "not right now", "maybe another time",
+    ];
+    const ooo = [
+        "out of office", "i'm away", "im away", "on vacation", "on leave",
+        "annual leave", "i will be back", "i'll be back", "ill be back",
+        "away until", "returning on", "currently unavailable", "auto-reply",
+        "automatic reply", "i am currently out",
+    ];
+    const unsub = [
+        "unsubscribe", "opt out", "opt-out", "remove from", "please remove",
+        "stop sending", "no longer wish", "don't want", "don't send",
+        "mailing list", "email list",
+    ];
+    const bounced = [
+        "delivery failed", "delivery status notification", "undeliverable",
+        "address not found", "does not exist", "mailbox full",
+        "user unknown", "no such user", "invalid address",
+        "permanent failure", "could not be delivered",
+    ];
+
+    if (bounced.some((k) => lower.includes(k))) return "Bounced";
+    if (unsub.some((k) => lower.includes(k))) return "Unsubscribe";
+    if (notInterested.some((k) => lower.includes(k))) return "Not Interested";
+    if (ooo.some((k) => lower.includes(k))) return "Out of Office";
+    if (interested.some((k) => lower.includes(k))) return "Interested";
+    return "Other";
+}
+
+const replyCategoryStyles: Record<ReplyCategory, string> = {
+    "Interested":     "bg-emerald-100 text-emerald-800 border-emerald-200",
+    "Not Interested": "bg-red-100 text-red-800 border-red-200",
+    "Out of Office":  "bg-yellow-100 text-yellow-800 border-yellow-200",
+    "Unsubscribe":    "bg-orange-100 text-orange-800 border-orange-200",
+    "Bounced":        "bg-purple-100 text-purple-800 border-purple-200",
+    "Other":          "bg-gray-100 text-gray-600 border-gray-200",
+};
+
+function ReplyBadge({ body }: { body: string | null | undefined }) {
+    const cat = categorizeReply(body);
+    return (
+        <span className={`inline-block text-[9px] font-medium px-1.5 py-0.5 rounded border ${replyCategoryStyles[cat]}`}>
+            {cat}
+        </span>
+    );
+}
+
 function canFollowUp(lead: { status: string; step: number; replied?: boolean }): boolean {
     if (lead.replied || lead.status === "replied") return false;
     if (lead.step >= 3) return false;
@@ -233,23 +296,28 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                         {lead.niche || "—"}
                                     </TableCell>
                                     <TableCell data-step={lead.step}>
-                                        <div className="flex items-center gap-1.5 flex-wrap">
-                                            <Badge
-                                                variant={
-                                                    lead.replied || lead.status === "replied"
-                                                        ? "replied"
-                                                        : lead.status === "pending"
-                                                            ? "pending"
-                                                            : "sent"
-                                                }
-                                                className="text-[10px] capitalize"
-                                            >
-                                                {getStepLabel(lead)}
-                                            </Badge>
-                                            {isFollowUpDue(lead) && (
-                                                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
-                                                    Due
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                                <Badge
+                                                    variant={
+                                                        lead.replied || lead.status === "replied"
+                                                            ? "replied"
+                                                            : lead.status === "pending"
+                                                                ? "pending"
+                                                                : "sent"
+                                                    }
+                                                    className="text-[10px] capitalize"
+                                                >
+                                                    {getStepLabel(lead)}
                                                 </Badge>
+                                                {isFollowUpDue(lead) && (
+                                                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                                                        Due
+                                                    </Badge>
+                                                )}
+                                            </div>
+                                            {(lead.replied || lead.status === "replied") && (
+                                                <ReplyBadge body={lead.replyBody} />
                                             )}
                                         </div>
                                     </TableCell>

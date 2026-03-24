@@ -31,7 +31,7 @@ const ANTI_AI_PHRASES_INSTRUCTION =
 // Run ChatGPT and Gmail tabs in the background so the user stays on the dashboard.
 const RUN_TABS_IN_BACKGROUND = true;
 const REPLY_CHECK_ALARM = "dailyReplyCheck";
-const REPLY_CHECK_PERIOD_MINUTES = 24 * 60;
+const REPLY_CHECK_PERIOD_MINUTES = 4 * 60;
 const CHATGPT_HANDOFF_TIMEOUT_MS = 90000;
 const CHATGPT_DEFAULT_URL = "https://chatgpt.com/";
 const CAMPAIGN_CHAT_URLS_KEY = "campaignChatUrls";
