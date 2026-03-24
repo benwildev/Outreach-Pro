@@ -1658,38 +1658,68 @@
       }
 
       if (scheduleDialog) {
-        // Search every element inside the dialog for "pick date" text
+        // Find the "Pick date & time" button specifically.
+        // Its text is short (~16 chars). Require length < 30 to avoid matching
+        // outer containers whose textContent includes the whole dialog text.
         const allEls = Array.from(scheduleDialog.querySelectorAll('*'));
+
+        // Pass 1: exact or near-exact text match (most reliable)
         for (const el of allEls) {
-          if (el.children.length > 4) continue; // skip large containers
           const txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-          if (txt.includes("pick date")) {
+          if (txt === "pick date & time" || txt === "pick date" || txt === "pick date & time ") {
             const clickable = el.closest('[role="menuitem"]') || el.closest('[role="option"]') || el.closest('[tabindex]') || el;
             syntheticClick(clickable);
             pickDateClicked = true;
-            log("(v27) Clicked pick date in dialog:", txt.slice(0, 50));
+            log("(v28) Exact match pick date:", txt);
             break;
           }
         }
+
+        // Pass 2: short text containing "pick date" (< 30 chars)
         if (!pickDateClicked) {
-          log("(v27) DIAG dialog text:", (scheduleDialog.textContent || "").replace(/\s+/g, " ").trim().slice(0, 200));
+          for (const el of allEls) {
+            const txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+            if (txt.includes("pick date") && txt.length < 30) {
+              const clickable = el.closest('[role="menuitem"]') || el.closest('[role="option"]') || el.closest('[tabindex]') || el;
+              syntheticClick(clickable);
+              pickDateClicked = true;
+              log("(v28) Short match pick date:", txt);
+              break;
+            }
+          }
+        }
+
+        // Pass 3: last [role="menuitem"] or [tabindex] item in the dialog
+        // "Pick date & time" is always the last option in the schedule submenu
+        if (!pickDateClicked) {
+          const interactiveEls = Array.from(scheduleDialog.querySelectorAll('[role="menuitem"], [role="option"], [tabindex="0"]'));
+          if (interactiveEls.length > 0) {
+            const lastEl = interactiveEls[interactiveEls.length - 1];
+            syntheticClick(lastEl);
+            pickDateClicked = true;
+            log("(v28) Last interactive el in submenu:", (lastEl.textContent || "").trim().slice(0, 40));
+          }
+        }
+
+        if (!pickDateClicked) {
+          log("(v28) DIAG dialog text:", (scheduleDialog.textContent || "").replace(/\s+/g, " ").trim().slice(0, 200));
         }
       } else {
-        log("(v27) Schedule submenu dialog not found after 14 attempts");
+        log("(v28) Schedule submenu dialog not found after 14 attempts");
       }
 
-      // Fallback: TreeWalker over full document
+      // Fallback: TreeWalker over full document — find short "pick date" text node
       if (!pickDateClicked) {
         const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_TEXT);
         let node;
         while ((node = walker.nextNode())) {
           const txt = (node.nodeValue || "").replace(/\s+/g, " ").trim().toLowerCase();
-          if (txt.includes("pick date")) {
+          if (txt.includes("pick date") && txt.length < 30) {
             const el = node.parentElement;
             const clickable = el.closest('[role="menuitem"]') || el.closest('[role="option"]') || el.closest('[tabindex]') || el;
             syntheticClick(clickable);
             pickDateClicked = true;
-            log("(v27) FB TreeWalker:", txt.slice(0, 50));
+            log("(v28) FB TreeWalker:", txt.slice(0, 50));
             break;
           }
         }
