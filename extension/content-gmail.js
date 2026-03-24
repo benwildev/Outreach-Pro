@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const SCRIPT_VERSION = "gmail-content-v22-SCHED-THREAD-ACCT";
+  const SCRIPT_VERSION = "gmail-content-v23-SCHED-NO-CLICK";
   const LOG_PREFIX = "[Gmail Extension]";
   const FALLBACK_API_BASE_URL = "https://automation.benwil.store";
   async function getApiBaseUrl() {
@@ -2734,67 +2734,64 @@
     const normalizedSubject = normalizeSubjectForSearch(subject);
     const timeout = maxWait || 35000;
     const start = Date.now();
-    let openedRow = false;
 
-    log("Force-open scheduled fallback started");
+    log("Force-open scheduled: scanning Scheduled folder for thread ID (no click)");
 
-    const hash = (window.location.hash || "").replace(/^#+/, "");
-    if (!/^scheduled(?:[/?#]|$)/i.test(hash)) {
-      window.location.hash = "#scheduled";
-      await delay(2200);
-    }
+    // Navigate directly to a search for this specific scheduled email.
+    // NEVER use clickMessageRow here — clicking a scheduled email navigates to
+    // #all/ID where the blank-page draft kills the content script's async context.
+    // Instead, we read the thread ID from link hrefs and data attributes in the
+    // search results list, which Gmail renders without any navigation.
+    const parts = ["in:scheduled", "newer_than:7d"];
+    if (toEmail) parts.push("to:" + toEmail);
+    if (normalizedSubject) parts.push('subject:"' + normalizedSubject + '"');
+    window.location.hash = "#search/" + encodeURIComponent(parts.join(" "));
+    await delay(3000);
 
     while (Date.now() - start < timeout) {
+      // 1. Check the current URL hash in case Gmail navigated itself.
       const directId =
         getThreadIdFromHashPath() ||
         getThreadIdFromSearchHashPath() ||
         extractThreadIdFromHref(window.location.href) ||
         extractThreadIdFromHref(window.location.hash);
       if (directId) {
-        log("Thread ID found in force-open scheduled flow:", directId);
+        log("Scheduled thread ID found in URL:", directId);
         return directId;
       }
 
-      const bestRow = findBestVisibleMessageRow(toEmail, normalizedSubject) || findFirstVisibleMessageRow();
-      if (bestRow) {
-        const fromRow = extractThreadIdFromRow(bestRow);
-        if (fromRow) {
-          log("Thread ID from scheduled row parse:", fromRow);
-          return fromRow;
-        }
-
-        if (!openedRow) {
-          if (clickMessageRow(bestRow)) {
-            openedRow = true;
-            await delay(2800);
-            const afterOpenId =
-              getThreadIdFromHashPath() ||
-              getThreadIdFromSearchHashPath() ||
-              extractThreadIdFromHref(window.location.href) ||
-              extractThreadIdFromHref(window.location.hash);
-            if (afterOpenId) {
-              log("Thread ID after scheduled row navigation:", afterOpenId);
-              return afterOpenId;
-            }
-          }
-        }
-      } else {
-        if (toEmail) {
-          const parts = ["in:scheduled", "to:" + toEmail, "newer_than:7d"];
-          if (normalizedSubject) {
-            parts.push('subject:"' + normalizedSubject + '"');
-          }
-          window.location.hash = "#search/" + encodeURIComponent(parts.join(" "));
-          await delay(2200);
-        } else {
-          await delay(1000);
+      // 2. Scan all visible links — Gmail row <a href> contains the thread ID
+      //    in the format /mail/u/email/#all/ID or similar, without needing a click.
+      const allLinks = document.querySelectorAll("a[href]");
+      for (let li = 0; li < allLinks.length; li++) {
+        const link = allLinks[li];
+        if (!link || link.offsetParent === null) continue;
+        const href = link.getAttribute("href") || link.href || "";
+        if (!href) continue;
+        const id = extractThreadIdFromHref(href);
+        if (id) {
+          log("Scheduled thread ID found in page link:", id);
+          return id;
         }
       }
 
-      await delay(900);
+      // 3. Scan data-thread-id / data-legacy-thread-id / data-thread-perm-id attributes.
+      const threadIdAttrs = ["data-thread-id", "data-legacy-thread-id", "data-thread-perm-id"];
+      for (let ti = 0; ti < threadIdAttrs.length; ti++) {
+        const nodes = document.querySelectorAll("[" + threadIdAttrs[ti] + "]");
+        for (let ni = 0; ni < nodes.length; ni++) {
+          const val = (nodes[ni].getAttribute(threadIdAttrs[ti]) || "").trim();
+          if (val && isTrustedThreadId(val)) {
+            log("Scheduled thread ID found in data attribute", threadIdAttrs[ti] + ":", val);
+            return val;
+          }
+        }
+      }
+
+      await delay(1200);
     }
 
-    log("Force-open scheduled fallback did not find a thread ID");
+    log("Force-open scheduled fallback did not find a thread ID after", maxWait, "ms");
     return null;
   }
 
