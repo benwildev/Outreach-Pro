@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const SCRIPT_VERSION = "gmail-content-v21-ROBUST-DOM";
+  const SCRIPT_VERSION = "gmail-content-v22-SCHED-THREAD-ACCT";
   const LOG_PREFIX = "[Gmail Extension]";
   const FALLBACK_API_BASE_URL = "https://automation.benwil.store";
   async function getApiBaseUrl() {
@@ -2729,6 +2729,75 @@
     return null;
   }
 
+  async function forceOpenScheduledAndExtractThreadId(to, subject, maxWait) {
+    const toEmail = String(to || "").trim();
+    const normalizedSubject = normalizeSubjectForSearch(subject);
+    const timeout = maxWait || 35000;
+    const start = Date.now();
+    let openedRow = false;
+
+    log("Force-open scheduled fallback started");
+
+    const hash = (window.location.hash || "").replace(/^#+/, "");
+    if (!/^scheduled(?:[/?#]|$)/i.test(hash)) {
+      window.location.hash = "#scheduled";
+      await delay(2200);
+    }
+
+    while (Date.now() - start < timeout) {
+      const directId =
+        getThreadIdFromHashPath() ||
+        getThreadIdFromSearchHashPath() ||
+        extractThreadIdFromHref(window.location.href) ||
+        extractThreadIdFromHref(window.location.hash);
+      if (directId) {
+        log("Thread ID found in force-open scheduled flow:", directId);
+        return directId;
+      }
+
+      const bestRow = findBestVisibleMessageRow(toEmail, normalizedSubject) || findFirstVisibleMessageRow();
+      if (bestRow) {
+        const fromRow = extractThreadIdFromRow(bestRow);
+        if (fromRow) {
+          log("Thread ID from scheduled row parse:", fromRow);
+          return fromRow;
+        }
+
+        if (!openedRow) {
+          if (clickMessageRow(bestRow)) {
+            openedRow = true;
+            await delay(2800);
+            const afterOpenId =
+              getThreadIdFromHashPath() ||
+              getThreadIdFromSearchHashPath() ||
+              extractThreadIdFromHref(window.location.href) ||
+              extractThreadIdFromHref(window.location.hash);
+            if (afterOpenId) {
+              log("Thread ID after scheduled row navigation:", afterOpenId);
+              return afterOpenId;
+            }
+          }
+        }
+      } else {
+        if (toEmail) {
+          const parts = ["in:scheduled", "to:" + toEmail, "newer_than:7d"];
+          if (normalizedSubject) {
+            parts.push('subject:"' + normalizedSubject + '"');
+          }
+          window.location.hash = "#search/" + encodeURIComponent(parts.join(" "));
+          await delay(2200);
+        } else {
+          await delay(1000);
+        }
+      }
+
+      await delay(900);
+    }
+
+    log("Force-open scheduled fallback did not find a thread ID");
+    return null;
+  }
+
   async function forceOpenSentAndExtractThreadId(to, subject, maxWait) {
     const toEmail = String(to || "").trim();
     const normalizedSubject = normalizeSubjectForSearch(subject);
@@ -3193,8 +3262,22 @@
         }
         log("Schedule send triggered, waiting 3s to let UI settle");
         await delay(3000);
-        // We successfully scheduled it, so we must tell the dashboard it's "Sent" (Scheduled)
-        await updateLead(leadId, to, subject, body, null, expectedGmailAuthUser);
+        // Try to extract the thread ID from the Gmail Scheduled folder
+        // (mirrors the immediate-send path which uses forceOpenSentAndExtractThreadId)
+        let scheduledThreadId = null;
+        try {
+          scheduledThreadId = await forceOpenScheduledAndExtractThreadId(to, subject, 35000);
+          if (scheduledThreadId && !isTrustedThreadId(scheduledThreadId)) {
+            logError("Rejected untrusted thread ID from scheduled folder:", scheduledThreadId);
+            scheduledThreadId = null;
+          }
+        } catch (e) {
+          log("Could not extract thread ID from Scheduled folder:", e);
+        }
+        log("Scheduled thread ID:", scheduledThreadId || "(not found)");
+        // We successfully scheduled it, so we must tell the dashboard it's "Sent" (Scheduled).
+        // Use getSenderIdentityForStorage (same as immediate-send) to resolve the real Gmail address.
+        await updateLead(leadId, to, subject, body, scheduledThreadId, getSenderIdentityForStorage(expectedGmailAuthUser));
         log("Lead updated after schedule send");
         await closeCurrentAutomationTab();
         return;
