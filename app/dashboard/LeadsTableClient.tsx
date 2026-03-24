@@ -255,10 +255,13 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                     </TableCell>
                                     <TableCell className="truncate text-xs font-mono" title={lead.gmailThreadId ?? undefined}>
                                         {lead.gmailThreadId ? (() => {
-                                            const acct = (lead.sentGmailAuthUser || "0").replace(/@/g, "%40");
+                                            // Keep @ raw (not %40) and add trailing slash — both required for
+                                            // Gmail to route email-format /u/email@gmail.com/ links correctly
+                                            // without redirecting to u/0.
+                                            const acct = lead.sentGmailAuthUser || "0";
                                             const isScheduled = lead.sentAt && new Date(lead.sentAt) > new Date();
                                             const folder = isScheduled ? "scheduled" : "all";
-                                            const gmailUrl = `https://mail.google.com/mail/u/${acct}/#${folder}/${encodeURIComponent(lead.gmailThreadId)}`;
+                                            const gmailUrl = `https://mail.google.com/mail/u/${acct}/#${folder}/${lead.gmailThreadId}`;
                                             return (
                                                 <a
                                                     href={gmailUrl}
