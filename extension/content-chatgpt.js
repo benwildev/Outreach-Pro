@@ -164,6 +164,33 @@
       return { success: false, error: "Model returned placeholder template text" };
     }
 
+    // Prompt-echo guard: if the first ~60 chars of the body appear in the first 400 chars
+    // of the original prompt, ChatGPT echoed our instructions instead of writing an email.
+    // This prevents the raw campaign template from being sent to the recipient.
+    if (body && prompt) {
+      const bodyLead = body.replace(/\s+/g, " ").trim().slice(0, 70).toLowerCase();
+      const promptHead = prompt.replace(/\s+/g, " ").trim().slice(0, 400).toLowerCase();
+      if (bodyLead.length > 20 && promptHead.includes(bodyLead)) {
+        logError("ChatGPT", "Prompt echo detected — body matches prompt instructions. Aborting send.");
+        return { success: false, error: "ChatGPT returned prompt content as email body" };
+      }
+    }
+
+    // Also reject if the body doesn't start with a typical email greeting
+    // AND contains instruction-like patterns (bullet points, 'suggest', 'strictly follow')
+    if (body && !/^(hi|hello|dear|hey)\s+\S/i.test(body.trim())) {
+      const lowerBody = body.toLowerCase();
+      const hasInstructionPattern = (
+        lowerBody.includes("strictly follow") ||
+        lowerBody.includes("deeply browse") ||
+        /^\s*\*\s*(suggest|write|include|provide)/m.test(lowerBody)
+      );
+      if (hasInstructionPattern) {
+        logError("ChatGPT", "Body contains instruction/prompt content — not a real email. Aborting.");
+        return { success: false, error: "ChatGPT returned instruction text as email body" };
+      }
+    }
+
     log("ChatGPT", "Parsed subject length:", subject.length, "body length:", body.length);
 
     if (!subject || !body) {
