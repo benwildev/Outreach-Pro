@@ -1084,13 +1084,35 @@ async function runSingleBulkWorkflow(item) {
   }
 
   const completionPromise = waitForBulkWorkflowCompletion(leadId, BULK_WORKFLOW_TIMEOUT_MS);
-  // Always inject the live scheduleSendTime from bulkAutomationState at dispatch time.
-  // This ensures it is present regardless of when the queue item was originally built.
+  // Always inject the live scheduleSendTime from bulkAutomationState at dispatch time,
+  // offset by (currentIndex × scheduleStaggerMs) so each lead lands at a different time.
+  const baseScheduleTime = current.scheduleSendTime || bulkAutomationState.scheduleSendTime || "";
+  const staggerMs = bulkAutomationState.scheduleStaggerMs || 0;
+  const leadIndex = bulkAutomationState.currentIndex || 0;
+  let effectiveScheduleTime = baseScheduleTime;
+  if (baseScheduleTime && staggerMs > 0 && leadIndex > 0) {
+    try {
+      const baseDate = new Date(baseScheduleTime);
+      if (!isNaN(baseDate.getTime())) {
+        const staggeredDate = new Date(baseDate.getTime() + leadIndex * staggerMs);
+        const y = staggeredDate.getFullYear();
+        const mo = String(staggeredDate.getMonth() + 1).padStart(2, "0");
+        const d = String(staggeredDate.getDate()).padStart(2, "0");
+        const h = String(staggeredDate.getHours()).padStart(2, "0");
+        const mi = String(staggeredDate.getMinutes()).padStart(2, "0");
+        effectiveScheduleTime = `${y}-${mo}-${d}T${h}:${mi}`;
+      }
+    } catch (e) {
+      console.warn("[Leads Extension] Failed to compute staggered time:", e);
+    }
+  }
   const workflowData = Object.assign({}, current, {
-    scheduleSendTime: current.scheduleSendTime || bulkAutomationState.scheduleSendTime || "",
+    scheduleSendTime: effectiveScheduleTime,
   });
   console.log("[Leads Extension] Bulk: dispatching handleStartWorkflow for", leadId,
-    "scheduleSendTime:", workflowData.scheduleSendTime || "(none — immediate send)");
+    "index:", leadIndex,
+    "scheduleSendTime:", workflowData.scheduleSendTime || "(none — immediate send)",
+    staggerMs > 0 ? ("stagger: " + (staggerMs / 60000) + "min") : "");
   await handleStartWorkflow(workflowData);
   await completionPromise;
   bulkAutomationState.sent += 1;
@@ -1201,6 +1223,7 @@ async function handleStartBulkAutomation(data) {
   // IMPORTANT: set scheduleSendTime BEFORE fetchSendQueue so that toBulkQueueItem
   // (called inside fetchSendQueue) picks it up from bulkAutomationState correctly.
   bulkAutomationState.scheduleSendTime = data && data.scheduleSendTime ? String(data.scheduleSendTime).trim() : "";
+  bulkAutomationState.scheduleStaggerMs = data && data.scheduleStaggerMs > 0 ? Number(data.scheduleStaggerMs) : 0;
 
   const queue = await fetchSendQueue(limit, campaignId);
 

@@ -17,6 +17,7 @@ import {
   BRIDGE_READY_TYPE,
   K_SCHEDULE_TIME,
   K_SCHED_LIMIT,
+  K_SCHED_STAGGER,
 } from "./extensionBridge";
 
 const SCHED_COMPOSE_DELAY_MS = 10000;
@@ -25,6 +26,7 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
   const [scheduleDate, setScheduleDate] = useState(getTomorrowDate);
   const [scheduleTime, setScheduleTime] = useState("");
   const [limit, setLimit] = useState(50);
+  const [staggerMin, setStaggerMin] = useState(3);
   const [state, setState] = useState<BulkState>({});
   const [error, setError] = useState("");
   const [hasRuntime, setHasRuntime] = useState(false);
@@ -34,6 +36,7 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
     const schedLimitRaw = typeof window !== "undefined" ? window.localStorage.getItem(K_SCHED_LIMIT) : null;
     const fallbackLimit = schedLimitRaw !== null ? readStorageInt(K_SCHED_LIMIT, 50) : readStorageInt("leadsExtensionBulkLimit", 50);
     setLimit(clamp(fallbackLimit, 1, 500));
+    setStaggerMin(clamp(readStorageInt(K_SCHED_STAGGER, 3), 1, 60));
     if (typeof window !== "undefined") {
       const saved = window.localStorage.getItem(K_SCHEDULE_TIME) || "";
       if (saved.includes("T")) {
@@ -89,9 +92,11 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
     }
     const combinedSchedule = `${scheduleDate}T${scheduleTime}`;
     const maxLeads = clamp(limit, 1, 500);
+    const staggerMinutes = clamp(staggerMin, 1, 60);
 
     window.localStorage.setItem(K_SCHEDULE_TIME, combinedSchedule);
     window.localStorage.setItem(K_SCHED_LIMIT, String(maxLeads));
+    window.localStorage.setItem(K_SCHED_STAGGER, String(staggerMinutes));
 
     try {
       const response = await sendRuntimeMessage({
@@ -104,6 +109,7 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
           followupEnabled: false,
           windowEnabled: false,
           scheduleSendTime: combinedSchedule,
+          scheduleStaggerMs: staggerMinutes * 60 * 1000,
         },
       });
       if (!response?.success) {
@@ -180,6 +186,21 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
             onChange={(e) => setLimit(e.target.value ? Number.parseInt(e.target.value, 10) : 0)}
             onBlur={() => setLimit(clamp(limit, 1, 500))}
             className="h-8 w-20 rounded border bg-white px-2 text-xs"
+          />
+        </label>
+        <label
+          className="inline-flex items-center gap-1"
+          title="Minutes added between each lead's scheduled send time. Lead 0 → Send At, Lead 1 → Send At + stagger, Lead 2 → Send At + 2×stagger, etc."
+        >
+          <span className="text-slate-700">Stagger (min)</span>
+          <input
+            type="number"
+            min={1}
+            max={60}
+            value={staggerMin || ""}
+            onChange={(e) => setStaggerMin(e.target.value ? Number.parseInt(e.target.value, 10) : 1)}
+            onBlur={() => setStaggerMin(clamp(staggerMin || 1, 1, 60))}
+            className="h-8 w-16 rounded border bg-white px-2 text-xs"
           />
         </label>
         <div className="w-px h-6 bg-amber-200 mx-1" />
