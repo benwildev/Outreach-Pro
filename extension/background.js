@@ -1190,6 +1190,11 @@ async function handleStartBulkAutomation(data) {
   const sendWindowStart = normalizeWindowTime(data && data.sendWindowStart, "09:00");
   const sendWindowEnd = normalizeWindowTime(data && data.sendWindowEnd, "18:00");
   const windowEnabled = !!(data && data.windowEnabled && sendWindowStart && sendWindowEnd);
+
+  // IMPORTANT: set scheduleSendTime BEFORE fetchSendQueue so that toBulkQueueItem
+  // (called inside fetchSendQueue) picks it up from bulkAutomationState correctly.
+  bulkAutomationState.scheduleSendTime = data && data.scheduleSendTime ? String(data.scheduleSendTime).trim() : "";
+
   const queue = await fetchSendQueue(limit, campaignId);
 
   bulkAutomationState.queue = Array.isArray(queue) ? queue : [];
@@ -1207,7 +1212,7 @@ async function handleStartBulkAutomation(data) {
   bulkAutomationState.windowEnabled = windowEnabled;
   bulkAutomationState.sendWindowStart = sendWindowStart;
   bulkAutomationState.sendWindowEnd = sendWindowEnd;
-  bulkAutomationState.scheduleSendTime = data && data.scheduleSendTime ? String(data.scheduleSendTime).trim() : "";
+  // (scheduleSendTime already set above before fetchSendQueue)
   bulkAutomationState.limit = limit;
   bulkAutomationState.campaignId = campaignId;
   bulkAutomationState.phase = "send";

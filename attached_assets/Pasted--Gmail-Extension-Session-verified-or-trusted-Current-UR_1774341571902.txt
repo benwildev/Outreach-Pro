@@ -1,0 +1,31 @@
+[Gmail Extension] Session verified or trusted. Current URL Auth: 3 UI Email: nickgoodexp@gmail.com Proceeding.
+content-gmail.js:24 [Gmail Extension] To filled
+content-gmail.js:24 [Gmail Extension] Subject filled
+content-gmail.js:24 [Gmail Extension] Body inserted
+content-gmail.js:24 [Gmail Extension] Gmail signature preserved in compose
+content-gmail.js:24 [Gmail Extension] Body filled
+content-gmail.js:24 [Gmail Extension] (v19) SCHEDULE DIAGNOSTIC: data.scheduleSendTime = "" typeof = string autoSend = true
+content-gmail.js:24 [Gmail Extension] Send button clicked via selector: div[role="button"][aria-label^="Send"]
+content-gmail.js:24 [Gmail Extension] Auto send triggered, waiting for completion
+content-gmail.js:24 [Gmail Extension] Send completion confirmed from status toast
+content-gmail.js:24 [Gmail Extension] Clicked View message control
+content-gmail.js:24 [Gmail Extension] Checking thread ID from trusted sources only
+content-gmail.js:24 [Gmail Extension] No trusted thread ID found yet
+content-gmail.js:24 [Gmail Extension] Checking thread ID from trusted sources only
+content-gmail.js:24 [Gmail Extension] No trusted thread ID found yet
+content-gmail.js:24 [Gmail Extension] Checking thread ID from trusted sources only
+content-gmail.js:24 [Gmail Extension] No trusted thread ID found yet
+content-gmail.js:24 [Gmail Extension] Checking thread ID from trusted sources only
+content-gmail.js:24 [Gmail Extension] No trusted thread ID found yet
+content-gmail.js:24 [Gmail Extension] Checking thread ID from trusted sources only
+content-gmail.js:24 [Gmail Extension] No trusted thread ID found yet
+content-gmail.js:24 [Gmail Extension] Checking thread ID from trusted sources only
+content-gmail.js:24 [Gmail Extension] No trusted thread ID found yet
+content-gmail.js:24 [Gmail Extension] Checking thread ID from trusted sources only
+content-gmail.js:24 [Gmail Extension] No trusted thread ID found yet
+content-gmail.js:24 [Gmail Extension] Checking thread ID from trusted sources only
+content-gmail.js:24 [Gmail Extension] No trusted thread ID found yet
+content-gmail.js:24 [Gmail Extension] Checking thread ID from trusted sources only
+content-gmail.js:24 [Gmail Extension] No trusted thread ID found yet
+content-gmail.js:24 [Gmail Extension] Thread timeout (no trusted thread ID found)
+content-gmail.js:24 [Gmail Extension] Searching sent items for thread: in:sent to:cnbnewsblogg@gmail.com newer_than:2d subject:"Fresh Angles on Current Affairs and Events"
