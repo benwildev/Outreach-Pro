@@ -191,7 +191,44 @@
       }
     }
 
-    log("ChatGPT", "Parsed subject length:", subject.length, "body length:", body.length);
+    // Minimum content quality guard:
+    // Strip the greeting (first line) and signature block, then check that what
+    // remains is substantial enough to be a real outreach email.
+    // This catches cases where ChatGPT just wrote the company name or a single
+    // sentence with no actual pitch content.
+    const bodyForQualityCheck = (function (raw) {
+      const lines = raw.split("\n");
+      let start = 0;
+      let end = lines.length;
+      // Skip leading greeting line
+      if (lines.length > 0 && /^(hi|hello|dear|hey)\s+\S/i.test(lines[0].trim())) {
+        start = 1;
+      }
+      // Skip trailing signature block (Best regards … name lines)
+      for (let i = lines.length - 1; i > start; i--) {
+        const l = lines[i].trim();
+        if (/^(best(?: regards)?|kind regards|warm regards|regards|thanks|thank you|sincerely)[,!]?$/i.test(l)) {
+          end = i;
+          break;
+        }
+      }
+      return lines.slice(start, end).join("\n").trim();
+    })(body);
+
+    const bodyWordCount = bodyForQualityCheck.split(/\s+/).filter(function (w) { return w.length > 0; }).length;
+    const MIN_WORDS = 25;
+    const MIN_CHARS = 120;
+
+    if (bodyWordCount < MIN_WORDS || bodyForQualityCheck.length < MIN_CHARS) {
+      logError(
+        "ChatGPT",
+        "Email body too short — " + bodyWordCount + " words / " + bodyForQualityCheck.length +
+        " chars (need " + MIN_WORDS + " words & " + MIN_CHARS + " chars). Aborting send. Will retry next run."
+      );
+      return { success: false, error: "Email body too short — ChatGPT did not generate enough content" };
+    }
+
+    log("ChatGPT", "Parsed subject length:", subject.length, "body length:", body.length, "content words:", bodyWordCount);
 
     if (!subject || !body) {
       log("ChatGPT", "Using fallback parse result. Subject length:", subject.length, "Body length:", body.length);
