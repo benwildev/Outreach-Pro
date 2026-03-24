@@ -254,6 +254,9 @@
       }
 
       try {
+        if (action === "startWorkflow") {
+          console.log("[Leads Dashboard Bridge] Forwarding startWorkflow. scheduleSendTime:", data.scheduleSendTime || "(EMPTY)");
+        }
         const response = await sendRuntimeMessage({ action, data });
         postBridgeResponse(id, true, response || null);
       } catch (error) {

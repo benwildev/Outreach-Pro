@@ -32,17 +32,18 @@ type BulkState = {
   lastError?: string;
 };
 
-const K_DELAY_MIN = "leadsExtensionBulkDelayMinMs";
-const K_DELAY_MAX = "leadsExtensionBulkDelayMaxMs";
-const K_LIMIT = "leadsExtensionBulkLimit";
-const K_AUTO_FOLLOWUP = "leadsExtensionBulkAutoFollowup";
-const K_WINDOW_ENABLED = "leadsExtensionBulkWindowEnabled";
-const K_WINDOW_START = "leadsExtensionBulkWindowStart";
-const K_WINDOW_END = "leadsExtensionBulkWindowEnd";
-// const K_SCHEDULE_TIME = "leadsExtensionScheduleTime";
-const BRIDGE_REQUEST_TYPE = "LEADS_EXTENSION_BRIDGE_REQUEST";
-const BRIDGE_RESPONSE_TYPE = "LEADS_EXTENSION_BRIDGE_RESPONSE";
-const BRIDGE_READY_TYPE = "LEADS_EXTENSION_BRIDGE_READY";
+import {
+  sendRuntimeMessage,
+  BRIDGE_READY_TYPE,
+  K_DELAY_MIN,
+  K_DELAY_MAX,
+  K_LIMIT,
+  K_AUTO_FOLLOWUP,
+  K_WINDOW_ENABLED,
+  K_WINDOW_START,
+  K_WINDOW_END,
+  K_SCHEDULE_TIME
+} from "./extensionBridge";
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -61,56 +62,7 @@ function readStorageInt(key: string, fallback: number): number {
   return Number.isNaN(n) ? fallback : n;
 }
 
-async function sendRuntimeMessage(payload: unknown): Promise<any> {
-  if (typeof window === "undefined") {
-    throw new Error("Window is not available");
-  }
-  const p = (payload || {}) as { action?: string; data?: unknown };
-  const action = String(p.action || "").trim();
-  if (!action) {
-    throw new Error("Action is required");
-  }
-  const requestId = `bridge-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => {
-      window.removeEventListener("message", onMessage);
-      reject(new Error("Extension bridge timeout"));
-    }, 5000);
 
-    function onMessage(event: MessageEvent) {
-      if (event.source !== window) {
-        return;
-      }
-      const message = event.data as {
-        type?: string;
-        id?: string;
-        success?: boolean;
-        payload?: any;
-      };
-      if (!message || message.type !== BRIDGE_RESPONSE_TYPE || message.id !== requestId) {
-        return;
-      }
-      window.clearTimeout(timeout);
-      window.removeEventListener("message", onMessage);
-      if (!message.success) {
-        reject(new Error(message.payload?.error || "Extension bridge request failed"));
-        return;
-      }
-      resolve(message.payload ?? null);
-    }
-
-    window.addEventListener("message", onMessage);
-    window.postMessage(
-      {
-        type: BRIDGE_REQUEST_TYPE,
-        id: requestId,
-        action,
-        data: p.data ?? {},
-      },
-      window.location.origin
-    );
-  });
-}
 
 function formatStatus(value: string | undefined): string {
   const s = String(value || "idle").toLowerCase();
@@ -147,9 +99,8 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
       setWindowEnabled((window.localStorage.getItem(K_WINDOW_ENABLED) ?? "0") === "1");
       setWindowStart(normalizeTime(window.localStorage.getItem(K_WINDOW_START) ?? "", "09:00"));
       setWindowEnd(normalizeTime(window.localStorage.getItem(K_WINDOW_END) ?? "", "18:00"));
-      // const savedSchedule = window.localStorage.getItem(K_SCHEDULE_TIME) || "";
-      // setScheduleTime(savedSchedule ? normalizeTime(savedSchedule, "") : "");
-      setScheduleTime("");
+      const savedSchedule = window.localStorage.getItem(K_SCHEDULE_TIME) || "";
+      setScheduleTime(savedSchedule ? normalizeTime(savedSchedule, "") : "");
     }
   }, []);
 
@@ -207,13 +158,11 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
         window.localStorage.setItem(K_WINDOW_ENABLED, windowEnabled ? "1" : "0");
         window.localStorage.setItem(K_WINDOW_START, start);
         window.localStorage.setItem(K_WINDOW_END, end);
-        /*
         if (scheduleTime) {
           window.localStorage.setItem(K_SCHEDULE_TIME, normalizeTime(scheduleTime, ""));
         } else {
           window.localStorage.removeItem(K_SCHEDULE_TIME);
         }
-        */
 
         const response = await sendRuntimeMessage({
           action: "startBulkAutomation",
@@ -226,7 +175,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
             windowEnabled,
             sendWindowStart: start,
             sendWindowEnd: end,
-            // scheduleSendTime: scheduleTime ? normalizeTime(scheduleTime, "") : undefined,
+            scheduleSendTime: scheduleTime ? normalizeTime(scheduleTime, "") : undefined,
           },
         });
         if (!response?.success) {
@@ -349,13 +298,11 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
           <span className="text-slate-700">To</span>
           <input type="time" value={windowEnd} onChange={(e) => setWindowEnd(normalizeTime(e.target.value, "18:00"))} className="h-8 rounded border bg-white px-2 text-xs" />
         </label>
-        {/*
         <div className="w-px h-6 bg-blue-200 mx-1"></div>
         <label className="inline-flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded border border-yellow-200" title="Leave blank to send immediately">
           <span className="text-slate-700 font-medium">Schedule At:</span>
           <input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value ? normalizeTime(e.target.value, "") : "")} className="h-8 rounded border bg-white px-2 text-xs" />
         </label>
-        */}
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("start")} disabled={isActive || !hasRuntime}>Start</Button>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("pause")} disabled={!(statusValue === "running" || statusValue === "waiting-window")}>Pause</Button>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("resume")} disabled={statusValue !== "paused"}>Resume</Button>

@@ -10,6 +10,8 @@ export type SendEmailOptions = {
   threadId?: string;
   /** Gmail auth user index or email address */
   authUser?: string | null;
+  /** When set and provider is gmail_manual, the time is passed for scheduling. */
+  scheduleTime?: string;
 };
 
 export type SendEmailResult =
@@ -17,7 +19,7 @@ export type SendEmailResult =
   | { type: "success"; threadId?: string };
 
 export async function sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
-  const { provider, to, subject, body, html, authUser } = options;
+  const { provider, to, subject, body, html, authUser, scheduleTime } = options;
   const content = html ?? body;
   const emailList = to.split(",").map((e) => e.trim()).filter(Boolean);
   const primaryRecipient = emailList[0] || "";
@@ -28,6 +30,9 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
     let url = `https://mail.google.com/mail/${userPart}?view=cm&fs=1&to=${encodeURIComponent(primaryRecipient)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(content)}`;
     if (ccRecipients) {
       url += `&cc=${encodeURIComponent(ccRecipients)}`;
+    }
+    if (scheduleTime) {
+      url += `&scheduleTime=${encodeURIComponent(scheduleTime)}`;
     }
     return { type: "redirect", url };
   }
