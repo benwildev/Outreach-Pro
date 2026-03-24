@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { leadId, email, subject, body: emailBody, threadId, recipientEmail, sentGmailAuthUser, status } = body;
+    const { leadId, email, subject, body: emailBody, threadId, recipientEmail, sentGmailAuthUser, status, scheduledSendAt } = body;
 
     let targetLeadId = leadId;
     if (!targetLeadId && email) {
@@ -44,11 +44,24 @@ export async function POST(request: Request) {
       );
     }
 
-    // Calculate next followup delay (using calendar days at midnight)
-    const delay1Days = lead.campaign?.delay1Days ?? 3;
+    // Determine the effective send time.
+    // For scheduled emails the extension passes scheduledSendAt (the actual Gmail
+    // delivery time, e.g. "2026-03-25T11:05"). For immediate sends it is absent.
+    // sentAt should reflect when the email is delivered, not when we clicked Schedule.
     const now = new Date();
-    const nextFollowupDate = new Date(now);
-    nextFollowupDate.setDate(now.getDate() + delay1Days);
+    let effectiveSentAt = now;
+    if (scheduledSendAt && typeof scheduledSendAt === "string" && scheduledSendAt.trim()) {
+      const parsed = new Date(scheduledSendAt.trim());
+      if (!isNaN(parsed.getTime())) {
+        effectiveSentAt = parsed;
+        console.log(`[Email Sent] Using scheduled delivery time for sentAt: ${effectiveSentAt.toISOString()}`);
+      }
+    }
+
+    // Calculate next followup delay (using calendar days at midnight from effective send time)
+    const delay1Days = lead.campaign?.delay1Days ?? 3;
+    const nextFollowupDate = new Date(effectiveSentAt);
+    nextFollowupDate.setDate(nextFollowupDate.getDate() + delay1Days);
     nextFollowupDate.setHours(0, 0, 0, 0);
 
     const targetStatus = status || "sent";
@@ -60,7 +73,7 @@ export async function POST(request: Request) {
         status: targetStatus,
         step: targetStatus === "sent" ? 1 : lead.step,
         ...(targetStatus === "sent" ? {
-          sentAt: now,
+          sentAt: effectiveSentAt,
           nextFollowup: nextFollowupDate
         } : {}),
         ...(threadId ? { gmailThreadId: threadId } : {}),

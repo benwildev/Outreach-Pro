@@ -13,6 +13,10 @@ export async function GET(request: Request) {
       where: {
         status: "sent",
         replied: false,
+        // Only check leads whose email has already been delivered (sentAt <= now).
+        // Scheduled emails have sentAt set to their future delivery time, so they
+        // are excluded here until that time arrives.
+        sentAt: { lte: new Date() },
         AND: [
           { gmailThreadId: { not: null } },
           { gmailThreadId: { not: "" } },

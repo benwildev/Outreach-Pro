@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const SCRIPT_VERSION = "gmail-content-v23-SCHED-NO-CLICK";
+  const SCRIPT_VERSION = "gmail-content-v24-SCHED-TIMING";
   const LOG_PREFIX = "[Gmail Extension]";
   const FALLBACK_API_BASE_URL = "https://automation.benwil.store";
   async function getApiBaseUrl() {
@@ -2864,7 +2864,7 @@
     return null;
   }
 
-  async function updateLead(leadId, to, subject, body, threadId, sentGmailAuthUser) {
+  async function updateLead(leadId, to, subject, body, threadId, sentGmailAuthUser, scheduledSendAt) {
     try {
       log("=== UPDATING LEAD ===");
       log("LeadId:", leadId);
@@ -2872,6 +2872,7 @@
       log("Subject:", subject ? subject.substring(0, 50) : "none");
       log("Body length:", body ? body.length : 0);
       log("Thread ID extracted:", threadId);
+      if (scheduledSendAt) log("Scheduled send at:", scheduledSendAt);
 
       if (!leadId) {
         logError("CRITICAL: No leadId provided");
@@ -2887,6 +2888,9 @@
       };
       if (threadId) {
         payload.threadId = threadId;
+      }
+      if (scheduledSendAt) {
+        payload.scheduledSendAt = scheduledSendAt;
       }
 
       log("Payload:", JSON.stringify(payload).substring(0, 200));
@@ -3274,7 +3278,9 @@
         log("Scheduled thread ID:", scheduledThreadId || "(not found)");
         // We successfully scheduled it, so we must tell the dashboard it's "Sent" (Scheduled).
         // Use getSenderIdentityForStorage (same as immediate-send) to resolve the real Gmail address.
-        await updateLead(leadId, to, subject, body, scheduledThreadId, getSenderIdentityForStorage(expectedGmailAuthUser));
+        // Pass effectiveScheduleTime so the server stores the ACTUAL delivery time as sentAt
+        // (not "now"), keeping nextFollowup and reply-check timing correct.
+        await updateLead(leadId, to, subject, body, scheduledThreadId, getSenderIdentityForStorage(expectedGmailAuthUser), effectiveScheduleTime || "");
         log("Lead updated after schedule send");
         await closeCurrentAutomationTab();
         return;
