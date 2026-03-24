@@ -227,6 +227,11 @@
     }
     bridgeListenerBound = true;
 
+    // Save the dashboard origin so background.js can use it for API calls
+    try {
+      chrome.storage.local.set({ leadsExtensionDashboardOrigin: window.location.origin });
+    } catch (_) {}
+
     window.addEventListener("message", async (event) => {
       if (event.source !== window) {
         return;

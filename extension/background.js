@@ -36,10 +36,20 @@ const CHATGPT_HANDOFF_TIMEOUT_MS = 90000;
 const CHATGPT_DEFAULT_URL = "https://chatgpt.com/";
 const CAMPAIGN_CHAT_URLS_KEY = "campaignChatUrls";
 // ── Auto-detect API URL based on where the dashboard is running ──
-const API_BASE_URL = "http://localhost:3000";
+// Content-dashboard.js stores the dashboard origin via setDashboardOrigin message.
+const FALLBACK_API_BASE_URL = "https://automation.benwil.store";
+const DASHBOARD_ORIGIN_KEY = "leadsExtensionDashboardOrigin";
 
-const SEND_QUEUE_API_BASE = API_BASE_URL + "/api/send-queue";
-const FOLLOWUP_QUEUE_API_BASE = API_BASE_URL + "/api/followup-queue";
+async function getApiBaseUrl() {
+  try {
+    const stored = await chrome.storage.local.get({ [DASHBOARD_ORIGIN_KEY]: "" });
+    const origin = String(stored[DASHBOARD_ORIGIN_KEY] || "").trim();
+    if (origin && /^https?:\/\/.+/.test(origin)) {
+      return origin;
+    }
+  } catch (_) {}
+  return FALLBACK_API_BASE_URL;
+}
 const BULK_WORKFLOW_TIMEOUT_MS = 240000;
 const BULK_DELAY_DEFAULT_MS = 45000;
 const BULK_DELAY_MIN_MS = 5000;
@@ -943,7 +953,7 @@ async function fetchSendQueue(limit, campaignId) {
     params.set("campaignId", normalizedCampaignId);
   }
 
-  const response = await fetch(SEND_QUEUE_API_BASE + "?" + params.toString());
+  const response = await fetch((await getApiBaseUrl()) + "/api/send-queue?" + params.toString());
 
   let result = null;
   try {
@@ -972,7 +982,7 @@ async function fetchFollowupQueue(limit, campaignId) {
     params.set("campaignId", normalizedCampaignId);
   }
 
-  const response = await fetch(FOLLOWUP_QUEUE_API_BASE + "?" + params.toString());
+  const response = await fetch((await getApiBaseUrl()) + "/api/followup-queue?" + params.toString());
 
   let result = null;
   try {
@@ -1466,7 +1476,7 @@ async function ensureReplyCheckAlarm() {
 async function fetchReplyCheckQueue(limit) {
   const maxLeads = Number(limit || 30);
   const response = await fetch(
-    API_BASE_URL + "/api/reply-check-queue?limit=" + encodeURIComponent(String(maxLeads))
+    (await getApiBaseUrl()) + "/api/reply-check-queue?limit=" + encodeURIComponent(String(maxLeads))
   );
 
   let result = null;
@@ -1590,7 +1600,7 @@ async function handleCheckReplyByThread(data) {
 }
 
 async function handleMarkLeadReplied(data) {
-  const baseUrl = API_BASE_URL;
+  const baseUrl = await getApiBaseUrl();
   const response = await fetch(baseUrl + "/api/update-replied", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1620,7 +1630,7 @@ async function handleMarkLeadReplied(data) {
 }
 
 async function handleMarkLeadBounced(data) {
-  const baseUrl = API_BASE_URL;
+  const baseUrl = await getApiBaseUrl();
   const response = await fetch(baseUrl + "/api/update-bounced", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1655,7 +1665,7 @@ async function handleSendScheduleError(data) {
   if (!email) return { success: false, error: "Missing email" };
 
   try {
-    const baseUrl = API_BASE_URL;
+    const baseUrl = await getApiBaseUrl();
     const response = await fetch(baseUrl + "/api/update-send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1681,7 +1691,7 @@ async function handleSendScheduleError(data) {
 }
 
 async function handleUpdateFollowup(data) {
-  const baseUrl = API_BASE_URL;
+  const baseUrl = await getApiBaseUrl();
   const response = await fetch(baseUrl + "/api/update-followup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1718,7 +1728,7 @@ async function handleValidateFollowup(data) {
   const leadId = data && data.leadId;
   if (!leadId) throw new Error("Missing leadId for validation");
 
-  const response = await fetch(API_BASE_URL + "/api/validate-followup?leadId=" + encodeURIComponent(leadId));
+  const response = await fetch((await getApiBaseUrl()) + "/api/validate-followup?leadId=" + encodeURIComponent(leadId));
   const result = await response.json();
 
   if (!response.ok) {
@@ -1729,7 +1739,7 @@ async function handleValidateFollowup(data) {
 }
 
 async function handleUpdateLeadStatus(data) {
-  const response = await fetch(API_BASE_URL + "/api/update-send", {
+  const response = await fetch((await getApiBaseUrl()) + "/api/update-send", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data || {}),

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Leads Dashboard AI Outreach",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "description": "Integrates with Leads Dashboard to generate and send AI-powered cold emails via ChatGPT and Gmail",
   "permissions": [
     "tabs",
@@ -15,6 +15,7 @@
     "https://chatgpt.com/*",
     "https://mail.google.com/*",
     "http://localhost:3000/*",
+    "http://localhost:5000/*",
     "https://automation.benwil.store/*",
     "https://*/*"
   ],
@@ -37,7 +38,9 @@
     {
       "matches": [
         "http://localhost:3000/dashboard*",
+        "http://localhost:5000/dashboard*",
         "https://automation.benwil.store/dashboard*",
+        "https://*/dashboard*",
         "https://*/*/dashboard*"
       ],
       "js": [

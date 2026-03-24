@@ -8,7 +8,15 @@
 
   const SCRIPT_VERSION = "gmail-content-v21-ROBUST-DOM";
   const LOG_PREFIX = "[Gmail Extension]";
-  const API_BASE_URL = "https://automation.benwil.store";
+  const FALLBACK_API_BASE_URL = "https://automation.benwil.store";
+  async function getApiBaseUrl() {
+    try {
+      const stored = await chrome.storage.local.get({ leadsExtensionDashboardOrigin: "" });
+      const origin = String(stored.leadsExtensionDashboardOrigin || "").trim();
+      if (origin && /^https?:\/\/.+/.test(origin)) return origin;
+    } catch (_) {}
+    return FALLBACK_API_BASE_URL;
+  }
   let LAST_KNOWN_SIGNATURE_HTML = "";
 
   function log() {
