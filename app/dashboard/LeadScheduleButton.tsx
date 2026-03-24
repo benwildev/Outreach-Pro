@@ -93,7 +93,7 @@ export function LeadScheduleButton({ leadId, status }: LeadScheduleButtonProps) 
 
             {showPicker && (
                 <div
-                    className="absolute bottom-full right-0 mb-2 z-[100] bg-white border border-slate-200 shadow-2xl rounded-lg p-3 min-w-[220px]"
+                    className="absolute top-full right-0 mt-2 z-[100] bg-white border border-slate-200 shadow-2xl rounded-lg p-3 min-w-[220px]"
                     onClick={(e) => e.stopPropagation()}
                 >
                     <div className="text-[11px] font-bold text-slate-700 mb-2">Schedule Send</div>
