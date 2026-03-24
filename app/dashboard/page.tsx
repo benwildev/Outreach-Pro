@@ -34,7 +34,7 @@ import { BulkSchedulePanel } from "./BulkSchedulePanel";
 import { BulkActionsRow } from "./BulkActionsRow";
 import { LeadsTableClient } from "./LeadsTableClient";
 import { AdvancedFilters } from "./AdvancedFilters";
-import { Settings } from "lucide-react";
+import { Settings, Download } from "lucide-react";
 
 const VALID_STATUSES = ["pending", "sent", "replied"] as const;
 const PAGE_SIZE = 50;
@@ -172,6 +172,12 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
                   <Settings className="w-4 h-4" />
                   Manage Campaigns
                 </Link>
+              </Button>
+              <Button variant="outline" size="sm" asChild className="gap-2">
+                <a href="/api/download-extension" download="benwill-outreach-extension.zip">
+                  <Download className="w-4 h-4" />
+                  Download Extension
+                </a>
               </Button>
             </div>
           </div>
