@@ -3,31 +3,9 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { AddLeadDialog } from "./AddLeadDialog";
 import { ImportLeadsDialog } from "./ImportLeadsDialog";
-import { LeadSendButton } from "./LeadSendButton";
-import { LeadFollowupButton } from "./LeadFollowupButton";
-import { LeadCheckReplyButton } from "./LeadCheckReplyButton";
-import { LeadEditButton } from "./LeadEditButton";
-import { LeadDeleteButton } from "./LeadDeleteButton";
-import { LeadMessagePreviewButton } from "./LeadMessagePreviewButton";
-import { ClientDate } from "./ClientDate";
-import { Badge } from "@/components/ui/badge";
 import { StatsCards } from "./StatsCards";
 import { DailySendTracker } from "./DailySendTracker";
 import { BulkAutomationPanel } from "./BulkAutomationPanel";
@@ -35,7 +13,7 @@ import { BulkSchedulePanel } from "./BulkSchedulePanel";
 import { BulkActionsRow } from "./BulkActionsRow";
 import { LeadsTableClient } from "./LeadsTableClient";
 import { AdvancedFilters } from "./AdvancedFilters";
-import { Settings, Download, FileDown } from "lucide-react";
+import { Settings, Download, FileDown, Zap, LayoutDashboard } from "lucide-react";
 
 const VALID_STATUSES = ["pending", "sent", "replied"] as const;
 const PAGE_SIZE = 50;
@@ -45,40 +23,6 @@ type LeadRow = Prisma.LeadGetPayload<{
 }> & {
   sentGmailAuthUser?: string | null;
 };
-
-function formatDate(date: Date | null): string {
-  if (!date) return "—";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(date);
-}
-
-function isFollowUpDue(lead: {
-  status: string;
-  step: number;
-  nextFollowup: Date | null;
-  campaign: { followup1: string | null; followup2: string | null };
-}): boolean {
-  const now = new Date();
-  return (
-    lead.status === "sent" &&
-    lead.step < 3 &&
-    lead.nextFollowup != null &&
-    lead.nextFollowup <= now &&
-    ((lead.step === 1 && (lead.campaign.followup1 ?? "").trim() !== "") ||
-      (lead.step === 2 && (lead.campaign.followup2 ?? "").trim() !== ""))
-  );
-}
-
-function getStepLabel(lead: { status: string; step: number; replied?: boolean }): string {
-  if (lead.replied || lead.status === "replied") return "Replied";
-  if (lead.status === "pending") return "Pending";
-  if (lead.step === 1) return "Sent";
-  if (lead.step === 2) return "Follow up 1";
-  if (lead.step === 3) return "Follow up 2";
-  return "Sent";
-}
 
 interface DashboardPageProps {
   searchParams: {
@@ -135,12 +79,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     where,
     orderBy: { createdAt: status === "pending" ? "asc" : "desc" },
     take: PAGE_SIZE,
-    include: {
-      campaign: true,
-    },
+    include: { campaign: true },
   })) as LeadRow[];
 
-  // Get all leads for stats (no pagination)
   const [totalLeads, sentLeads, repliedLeads, pendingLeads, bouncedLeads] = await Promise.all([
     prisma.lead.count(),
     prisma.lead.count({ where: { status: "sent" } }),
@@ -149,13 +90,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     prisma.lead.count({ where: { status: "bounced" } }),
   ]);
 
-  // Count follow-ups due
   const followupDueLeads = await prisma.lead.findMany({
     where: { status: "sent", nextFollowup: { lte: new Date() } },
   });
   const followupDueCount = followupDueLeads.length;
 
-  // Daily send tracker — emails sent today grouped by Gmail account
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todaySentLeads = await prisma.lead.findMany({
@@ -175,52 +114,68 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     count,
   }));
 
+  const exportParams = new URLSearchParams({
+    ...(statusFilter ? { status: statusFilter } : {}),
+    ...(filter ? { filter } : {}),
+    ...(campaignId ? { campaign: campaignId } : {}),
+    ...(emailSearch ? { email: emailSearch } : {}),
+    ...(dateFrom ? { dateFrom } : {}),
+    ...(dateTo ? { dateTo } : {}),
+  }).toString();
+
   return (
-    <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 py-6 px-3">
-      <div className="mx-auto w-full">
-        {/* Header */}
-        <div className="mb-8">
+    <div className="min-h-screen bg-[#f4f6fb]">
+      {/* ── Top header bar ── */}
+      <header className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 shadow-xl">
+        <div className="mx-auto px-6 py-5">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h1 className="text-3xl md:text-4xl font-bold text-gray-900">Leads Dashboard</h1>
-              <p className="text-gray-600 mt-1">Manage and track your outreach campaigns</p>
+            {/* Brand */}
+            <div className="flex items-center gap-3">
+              <div className="bg-indigo-500/20 border border-indigo-400/30 rounded-xl p-2.5">
+                <Zap className="w-6 h-6 text-indigo-300" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-white tracking-tight">Benwill Outreach</h1>
+                <p className="text-indigo-300 text-xs mt-0.5 font-medium">Outreach automation dashboard</p>
+              </div>
             </div>
+
+            {/* Action buttons */}
             <div className="flex items-center gap-2 flex-wrap">
               <AddLeadDialog campaigns={campaigns} />
               <ImportLeadsDialog campaigns={campaigns} />
-              <Button variant="outline" size="sm" asChild className="gap-2">
-                <Link href="/dashboard/campaigns">
-                  <Settings className="w-4 h-4" />
-                  Manage Campaigns
-                </Link>
-              </Button>
-              <Button variant="outline" size="sm" asChild className="gap-2">
-                <a href="/api/download-extension" download="benwill-outreach-extension.zip">
-                  <Download className="w-4 h-4" />
-                  Download Extension
-                </a>
-              </Button>
-              <Button variant="outline" size="sm" asChild className="gap-2">
-                <a
-                  href={`/api/export-leads?${new URLSearchParams({
-                    ...(statusFilter ? { status: statusFilter } : {}),
-                    ...(filter ? { filter } : {}),
-                    ...(campaignId ? { campaign: campaignId } : {}),
-                    ...(emailSearch ? { email: emailSearch } : {}),
-                    ...(dateFrom ? { dateFrom } : {}),
-                    ...(dateTo ? { dateTo } : {}),
-                  }).toString()}`}
-                  download
-                >
-                  <FileDown className="w-4 h-4" />
-                  Export CSV
-                </a>
-              </Button>
+              <Link
+                href="/dashboard/campaigns"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-200 hover:text-white border border-indigo-700/60 hover:border-indigo-500 bg-indigo-900/40 hover:bg-indigo-800/60 rounded-lg px-3 py-2 transition-all duration-150"
+              >
+                <Settings className="w-3.5 h-3.5" />
+                Campaigns
+              </Link>
+              <a
+                href="/api/download-extension"
+                download="benwill-outreach-extension.zip"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-200 hover:text-white border border-indigo-700/60 hover:border-indigo-500 bg-indigo-900/40 hover:bg-indigo-800/60 rounded-lg px-3 py-2 transition-all duration-150"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Extension
+              </a>
+              <a
+                href={`/api/export-leads${exportParams ? `?${exportParams}` : ""}`}
+                download
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-200 hover:text-white border border-indigo-700/60 hover:border-indigo-500 bg-indigo-900/40 hover:bg-indigo-800/60 rounded-lg px-3 py-2 transition-all duration-150"
+              >
+                <FileDown className="w-3.5 h-3.5" />
+                Export CSV
+              </a>
             </div>
           </div>
         </div>
+      </header>
 
-        {/* Stats Cards */}
+      {/* ── Page body ── */}
+      <main className="mx-auto px-6 py-6 max-w-[1600px]">
+
+        {/* Stats row */}
         <StatsCards
           totalLeads={totalLeads}
           sentLeads={sentLeads}
@@ -230,31 +185,45 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           followupDueCount={followupDueCount}
         />
 
-        {/* Daily Send Tracker per Gmail account */}
+        {/* Daily send tracker */}
         <DailySendTracker accountStats={dailyAccountStats} />
 
-        {/* Main Content Card */}
-        <Card className="border-0 shadow-lg">
-          <CardHeader className="border-b border-gray-100 bg-gradient-to-r from-slate-50 to-blue-50 pb-3">
-            <CardTitle className="text-xl">Leads List</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <AdvancedFilters
-              campaigns={campaigns}
-              currentStatus={status}
-              currentFilter={filter}
-              currentCampaignId={campaignId}
-              currentEmail={emailSearch}
-              currentDateFrom={dateFrom}
-              currentDateTo={dateTo}
-            />
+        {/* Main content card */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 overflow-hidden">
+
+          {/* Card header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-indigo-50/50">
+            <div className="flex items-center gap-2.5">
+              <LayoutDashboard className="w-4 h-4 text-indigo-500" />
+              <span className="text-sm font-semibold text-gray-800">Leads</span>
+              <span className="text-xs text-gray-400 font-normal">
+                — showing up to {PAGE_SIZE} results
+              </span>
+            </div>
+          </div>
+
+          {/* Filters */}
+          <AdvancedFilters
+            campaigns={campaigns}
+            currentStatus={status}
+            currentFilter={filter}
+            currentCampaignId={campaignId}
+            currentEmail={emailSearch}
+            currentDateFrom={dateFrom}
+            currentDateTo={dateTo}
+          />
+
+          {/* Automation panels */}
+          <div className="px-4 pb-2 pt-1 border-b border-gray-100 space-y-2">
             <BulkAutomationPanel currentCampaignId={campaignId} />
             <BulkSchedulePanel currentCampaignId={campaignId} />
             <BulkActionsRow currentCampaignId={campaignId} />
-            <LeadsTableClient leads={leads} campaigns={campaigns} />
-          </CardContent>
-        </Card>
-      </div>
-    </main>
+          </div>
+
+          {/* Table */}
+          <LeadsTableClient leads={leads} campaigns={campaigns} />
+        </div>
+      </main>
+    </div>
   );
 }

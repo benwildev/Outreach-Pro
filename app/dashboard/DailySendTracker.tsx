@@ -1,4 +1,4 @@
-import { Mail, AlertTriangle } from "lucide-react";
+import { Send, AlertTriangle, TrendingUp } from "lucide-react";
 
 const GMAIL_DAILY_LIMIT = 500;
 const WARN_THRESHOLD = 0.7;
@@ -16,13 +16,17 @@ export function DailySendTracker({ accountStats }: DailySendTrackerProps) {
   if (accountStats.length === 0) return null;
 
   return (
-    <div className="mb-6 animate-slideUp">
-      <div className="bg-white rounded-lg border border-gray-200 shadow-sm px-4 py-3">
-        <div className="flex items-center gap-2 mb-2">
-          <Mail className="w-4 h-4 text-blue-500" />
-          <span className="text-xs font-semibold text-gray-700">Today&apos;s Sends per Gmail Account</span>
+    <div className="mb-5">
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm px-5 py-4">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="bg-indigo-100 rounded-lg p-1.5">
+            <Send className="w-3.5 h-3.5 text-indigo-600" />
+          </div>
+          <span className="text-sm font-semibold text-gray-700">Today&apos;s Sends</span>
+          <span className="text-xs text-gray-400 font-normal">per Gmail account</span>
+          <TrendingUp className="w-3.5 h-3.5 text-gray-300 ml-auto" />
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-5">
           {accountStats.map(({ account, count }) => {
             const pct = Math.min(100, Math.round((count / GMAIL_DAILY_LIMIT) * 100));
             const isWarning = count / GMAIL_DAILY_LIMIT >= WARN_THRESHOLD;
@@ -30,31 +34,32 @@ export function DailySendTracker({ accountStats }: DailySendTrackerProps) {
             const barColor = isDanger
               ? "bg-red-500"
               : isWarning
-              ? "bg-orange-400"
-              : "bg-emerald-500";
-            const textColor = isDanger
-              ? "text-red-700"
+              ? "bg-amber-400"
+              : "bg-indigo-500";
+            const pillColor = isDanger
+              ? "bg-red-50 text-red-700 border-red-200"
               : isWarning
-              ? "text-orange-700"
-              : "text-emerald-700";
+              ? "bg-amber-50 text-amber-700 border-amber-200"
+              : "bg-indigo-50 text-indigo-700 border-indigo-200";
 
             return (
-              <div key={account} className="flex flex-col gap-1 min-w-[160px] max-w-[220px]">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-medium text-gray-700 truncate" title={account}>
+              <div key={account} className="flex-1 min-w-[180px] max-w-[260px]">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-xs font-medium text-gray-600 truncate" title={account}>
                     {account}
                   </span>
-                  <span className={`text-[11px] font-bold ${textColor} flex items-center gap-0.5 whitespace-nowrap`}>
-                    {isDanger && <AlertTriangle className="w-3 h-3" />}
+                  <span className={`inline-flex items-center gap-1 text-[11px] font-bold border rounded-full px-2 py-0.5 whitespace-nowrap ${pillColor}`}>
+                    {isDanger && <AlertTriangle className="w-2.5 h-2.5" />}
                     {count} / {GMAIL_DAILY_LIMIT}
                   </span>
                 </div>
-                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                    className={`h-full rounded-full transition-all duration-700 ${barColor}`}
                     style={{ width: `${pct}%` }}
                   />
                 </div>
+                <p className="text-[10px] text-gray-400 mt-1">{pct}% of daily limit</p>
               </div>
             );
           })}

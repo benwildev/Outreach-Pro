@@ -1,4 +1,5 @@
-import { Mail, CheckCircle2, Clock, AlertCircle, XCircle } from "lucide-react";
+import { Mail, CheckCircle2, MessageSquare, Clock, AlertCircle, XCircle } from "lucide-react";
+import Link from "next/link";
 
 interface StatsCardsProps {
   totalLeads: number;
@@ -18,10 +19,8 @@ export function StatsCards({
   followupDueCount,
 }: StatsCardsProps) {
   const deliveredLeads = sentLeads + repliedLeads + bouncedLeads;
-  const replyRate =
-    deliveredLeads > 0 ? Math.round((repliedLeads / deliveredLeads) * 100) : null;
-  const bounceRate =
-    deliveredLeads > 0 ? Math.round((bouncedLeads / deliveredLeads) * 100) : null;
+  const replyRate = deliveredLeads > 0 ? Math.round((repliedLeads / deliveredLeads) * 100) : null;
+  const bounceRate = deliveredLeads > 0 ? Math.round((bouncedLeads / deliveredLeads) * 100) : null;
 
   const stats = [
     {
@@ -29,29 +28,32 @@ export function StatsCards({
       value: totalLeads,
       sub: null,
       icon: Mail,
-      color: "bg-blue-500",
-      lightColor: "bg-blue-50",
-      textColor: "text-blue-600",
+      accent: "border-l-blue-500",
+      iconBg: "bg-blue-500",
+      valueColor: "text-blue-700",
+      href: "/dashboard",
     },
     {
       label: "Sent",
       value: sentLeads,
-      sub: replyRate !== null ? `${replyRate}% replied` : null,
-      subColor: "text-emerald-600",
+      sub: replyRate !== null ? `${replyRate}% reply rate` : "0 sent yet",
+      subColor: "text-slate-500",
       icon: CheckCircle2,
-      color: "bg-green-500",
-      lightColor: "bg-green-50",
-      textColor: "text-green-600",
+      accent: "border-l-emerald-500",
+      iconBg: "bg-emerald-500",
+      valueColor: "text-emerald-700",
+      href: "/dashboard?status=sent",
     },
     {
       label: "Replied",
       value: repliedLeads,
-      sub: replyRate !== null ? `${replyRate}% reply rate` : null,
-      subColor: "text-emerald-600",
-      icon: CheckCircle2,
-      color: "bg-emerald-500",
-      lightColor: "bg-emerald-50",
-      textColor: "text-emerald-600",
+      sub: replyRate !== null ? `${replyRate}% of delivered` : null,
+      subColor: "text-indigo-500",
+      icon: MessageSquare,
+      accent: "border-l-indigo-500",
+      iconBg: "bg-indigo-500",
+      valueColor: "text-indigo-700",
+      href: "/dashboard?status=replied",
     },
     {
       label: "Bounced",
@@ -59,57 +61,64 @@ export function StatsCards({
       sub: bounceRate !== null ? `${bounceRate}% bounce rate` : null,
       subColor: "text-red-500",
       icon: XCircle,
-      color: "bg-red-500",
-      lightColor: "bg-red-50",
-      textColor: "text-red-600",
+      accent: "border-l-red-500",
+      iconBg: "bg-red-500",
+      valueColor: "text-red-700",
+      href: "/dashboard?status=bounced",
     },
     {
       label: "Pending",
       value: pendingLeads,
-      sub: null,
+      sub: "queued to send",
+      subColor: "text-amber-600",
       icon: Clock,
-      color: "bg-yellow-500",
-      lightColor: "bg-yellow-50",
-      textColor: "text-yellow-600",
+      accent: "border-l-amber-500",
+      iconBg: "bg-amber-500",
+      valueColor: "text-amber-700",
+      href: "/dashboard?status=pending",
     },
     {
       label: "Follow-ups Due",
       value: followupDueCount,
-      sub: null,
+      sub: followupDueCount > 0 ? "action needed" : "all up to date",
+      subColor: followupDueCount > 0 ? "text-orange-600" : "text-slate-400",
       icon: AlertCircle,
-      color: "bg-orange-500",
-      lightColor: "bg-orange-50",
-      textColor: "text-orange-600",
+      accent: followupDueCount > 0 ? "border-l-orange-500" : "border-l-gray-300",
+      iconBg: followupDueCount > 0 ? "bg-orange-500" : "bg-gray-400",
+      valueColor: followupDueCount > 0 ? "text-orange-700" : "text-gray-500",
+      href: "/dashboard?filter=followup-due",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6 animate-slideUp">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
       {stats.map((stat, index) => {
         const Icon = stat.icon;
         return (
-          <div
+          <Link
             key={index}
-            style={{ animationDelay: `${index * 50}ms` }}
-            className={`${stat.lightColor} rounded-lg p-4 border border-gray-200 shadow-sm hover:shadow-md transition-all duration-300 transform hover:-translate-y-1 animate-slideUp`}
+            href={stat.href}
+            className={`group bg-white rounded-xl border border-gray-200 border-l-4 ${stat.accent} shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 p-4 flex flex-col gap-3`}
           >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-gray-600">{stat.label}</p>
-                <p className={`text-2xl font-bold ${stat.textColor} mt-1`}>
-                  {stat.value}
-                </p>
-                {stat.sub && (
-                  <p className={`text-[10px] font-medium mt-0.5 ${(stat as { subColor?: string }).subColor ?? "text-gray-500"}`}>
-                    {stat.sub}
-                  </p>
-                )}
-              </div>
-              <div className={`${stat.color} p-3 rounded-lg shadow-md`}>
-                <Icon className="w-5 h-5 text-white" />
+            <div className="flex items-start justify-between">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide leading-none">
+                {stat.label}
+              </p>
+              <div className={`${stat.iconBg} rounded-lg p-1.5 shadow-sm flex-shrink-0`}>
+                <Icon className="w-3.5 h-3.5 text-white" />
               </div>
             </div>
-          </div>
+            <div>
+              <p className={`text-3xl font-bold ${stat.valueColor} leading-none`}>
+                {stat.value.toLocaleString()}
+              </p>
+              {stat.sub && (
+                <p className={`text-[11px] mt-1.5 font-medium ${(stat as { subColor?: string }).subColor ?? "text-gray-400"}`}>
+                  {stat.sub}
+                </p>
+              )}
+            </div>
+          </Link>
         );
       })}
     </div>

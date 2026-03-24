@@ -202,13 +202,13 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
             )}
 
             <div className="overflow-x-auto">
-                <Table className="w-full table-fixed text-xs [&_th]:px-2 [&_th]:py-2 [&_td]:px-2 [&_td]:py-2 min-w-[1100px]">
+                <Table className="w-full table-fixed text-xs [&_th]:px-2.5 [&_th]:py-3 [&_td]:px-2.5 [&_td]:py-2.5 min-w-[1100px]">
                     <TableHeader>
-                        <TableRow className="border-b border-gray-200 bg-gray-50 hover:bg-gray-50">
+                        <TableRow className="border-b-2 border-gray-100 bg-gradient-to-r from-slate-50 to-indigo-50/30 hover:bg-transparent">
                             <TableHead className="w-[3%] text-center">
                                 <input
                                     type="checkbox"
-                                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 cursor-pointer w-3.5 h-3.5"
+                                    className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer w-3.5 h-3.5"
                                     checked={leads.length > 0 && selectedIds.size === leads.length}
                                     ref={input => {
                                         if (input) {
@@ -218,18 +218,18 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                     onChange={toggleAll}
                                 />
                             </TableHead>
-                            <TableHead className="w-[7%] font-semibold text-gray-700">Campaign</TableHead>
-                            <TableHead className="w-[8%] font-semibold text-gray-700">Recipient</TableHead>
-                            <TableHead className="w-[14%] font-semibold text-gray-700">Email</TableHead>
-                            <TableHead className="w-[10%] font-semibold text-gray-700">Website</TableHead>
-                            <TableHead className="w-[10%] font-semibold text-gray-700">Niche</TableHead>
-                            <TableHead className="w-[6%] font-semibold text-gray-700">Status</TableHead>
-                            <TableHead className="w-[6%] font-semibold text-gray-700" title="Gmail thread ID — captured after send">Thread ID</TableHead>
-                            <TableHead className="w-[5%] font-semibold text-gray-700">Mail</TableHead>
-                            <TableHead className="w-[8%] font-semibold text-gray-700" title="Gmail account used to send this email">Gmail Acct</TableHead>
-                            <TableHead className="w-[8%] font-semibold text-gray-700">Sent At</TableHead>
-                            <TableHead className="w-[8%] font-semibold text-gray-700">Created At</TableHead>
-                            <TableHead className="w-[10%] font-semibold text-gray-700">Actions</TableHead>
+                            <TableHead className="w-[7%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Campaign</TableHead>
+                            <TableHead className="w-[8%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Recipient</TableHead>
+                            <TableHead className="w-[14%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Email</TableHead>
+                            <TableHead className="w-[10%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Website</TableHead>
+                            <TableHead className="w-[10%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Niche</TableHead>
+                            <TableHead className="w-[6%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Status</TableHead>
+                            <TableHead className="w-[6%] text-[11px] font-bold text-gray-600 uppercase tracking-wide" title="Gmail thread ID — captured after send">Thread ID</TableHead>
+                            <TableHead className="w-[5%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Mail</TableHead>
+                            <TableHead className="w-[8%] text-[11px] font-bold text-gray-600 uppercase tracking-wide" title="Gmail account used to send this email">Gmail Acct</TableHead>
+                            <TableHead className="w-[8%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Sent At</TableHead>
+                            <TableHead className="w-[8%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Created At</TableHead>
+                            <TableHead className="w-[10%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -237,13 +237,18 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                             <TableRow>
                                 <TableCell
                                     colSpan={13}
-                                    className="h-24 text-center text-muted-foreground"
+                                    className="h-32 text-center text-gray-400 text-sm"
                                 >
-                                    No leads found.
+                                    <div className="flex flex-col items-center gap-2 py-8">
+                                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                                            <span className="text-lg">📭</span>
+                                        </div>
+                                        <span>No leads found</span>
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ) : (
-                            leads.map((lead) => (
+                            leads.map((lead, idx) => (
                                 <TableRow
                                     key={lead.id}
                                     data-lead-id={lead.id}
@@ -257,7 +262,13 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                     data-campaign-signature={lead.campaign.signature ?? ""}
                                     data-gmail-thread-id={lead.gmailThreadId ?? ""}
                                     data-sent-gmail-auth-user={lead.sentGmailAuthUser ?? ""}
-                                    className={`border-b border-gray-100 transition-colors duration-150 ${selectedIds.has(lead.id) ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-slate-50'}`}
+                                    className={`border-b border-gray-100 transition-colors duration-150 cursor-pointer ${
+                                        selectedIds.has(lead.id)
+                                            ? 'bg-indigo-50 hover:bg-indigo-50/80'
+                                            : idx % 2 === 0
+                                            ? 'bg-white hover:bg-slate-50'
+                                            : 'bg-gray-50/50 hover:bg-slate-50'
+                                    }`}
                                     onClick={(e) => {
                                         // Ignore clicks on buttons/links
                                         if (e.target instanceof HTMLElement && (e.target.closest('button') || e.target.closest('a'))) {

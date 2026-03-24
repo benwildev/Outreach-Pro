@@ -21,6 +21,7 @@ import {
   K_WINDOW_START,
   K_WINDOW_END,
 } from "./extensionBridge";
+import { Play, Pause, RotateCcw, Square, Zap, ChevronDown, ChevronUp } from "lucide-react";
 
 export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: string | null }) {
   const [delayMinSeconds, setDelayMinSeconds] = useState(45);
@@ -33,6 +34,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
   const [state, setState] = useState<BulkState>({});
   const [error, setError] = useState("");
   const [hasRuntime, setHasRuntime] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
     setDelayMinSeconds(clamp(Math.round(readStorageInt(K_DELAY_MIN, 45000) / 1000), 5, 600));
@@ -65,9 +67,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
 
   useEffect(() => {
     refreshState();
-    const timer = window.setInterval(() => {
-      refreshState();
-    }, 1800);
+    const timer = window.setInterval(() => refreshState(), 1800);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -75,9 +75,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
     function onBridgeReady(event: MessageEvent) {
       if (event.source !== window) return;
       const message = event.data as { type?: string };
-      if (message?.type === BRIDGE_READY_TYPE) {
-        refreshState();
-      }
+      if (message?.type === BRIDGE_READY_TYPE) refreshState();
     }
     window.addEventListener("message", onBridgeReady);
     return () => window.removeEventListener("message", onBridgeReady);
@@ -146,77 +144,130 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
     statusValue === "stopping" ||
     statusValue === "waiting-window";
 
-  const progressText = useMemo(
-    () => buildProgressText(state, isActive),
-    [state, isActive]
-  );
+  const progressText = useMemo(() => buildProgressText(state, isActive), [state, isActive]);
+
+  const statusDot =
+    statusValue === "running"
+      ? "bg-emerald-500 animate-pulse"
+      : statusValue === "paused"
+      ? "bg-amber-400"
+      : statusValue === "stopping"
+      ? "bg-orange-400"
+      : "bg-gray-300";
+
+  const inputClass = "h-8 w-20 rounded-lg border border-gray-200 bg-white px-2.5 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent shadow-sm";
 
   return (
-    <div className="mb-1 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold text-blue-900">Bulk Automation</span>
-        <span className="text-blue-400 text-[10px]">(sends immediately)</span>
-        <label className="inline-flex items-center gap-1">
-          <span className="text-slate-700">Delay Min (sec)</span>
-          <input
-            type="number"
-            min={5}
-            max={600}
-            value={delayMinSeconds || ""}
-            onChange={(e) => setDelayMinSeconds(e.target.value ? Number.parseInt(e.target.value, 10) : 0)}
-            onBlur={() => setDelayMinSeconds(clamp(delayMinSeconds, 5, 600))}
-            className="h-8 w-20 rounded border bg-white px-2 text-xs"
-          />
-        </label>
-        <label className="inline-flex items-center gap-1">
-          <span className="text-slate-700">Delay Max (sec)</span>
-          <input
-            type="number"
-            min={5}
-            max={600}
-            value={delayMaxSeconds || ""}
-            onChange={(e) => setDelayMaxSeconds(e.target.value ? Number.parseInt(e.target.value, 10) : 0)}
-            onBlur={() => setDelayMaxSeconds(clamp(delayMaxSeconds, 5, 600))}
-            className="h-8 w-20 rounded border bg-white px-2 text-xs"
-          />
-        </label>
-        <label className="inline-flex items-center gap-1">
-          <span className="text-slate-700">Limit</span>
-          <input
-            type="number"
-            min={1}
-            max={500}
-            value={limit || ""}
-            onChange={(e) => setLimit(e.target.value ? Number.parseInt(e.target.value, 10) : 0)}
-            onBlur={() => setLimit(clamp(limit, 1, 500))}
-            className="h-8 w-20 rounded border bg-white px-2 text-xs"
-          />
-        </label>
-        <label className="inline-flex items-center gap-1 rounded border bg-white px-2 py-1">
-          <input type="checkbox" checked={autoFollowup} onChange={(e) => setAutoFollowup(e.target.checked)} />
-          <span className="text-slate-700">Auto follow-ups</span>
-        </label>
-        <label className="inline-flex items-center gap-1 rounded border bg-white px-2 py-1">
-          <input type="checkbox" checked={windowEnabled} onChange={(e) => setWindowEnabled(e.target.checked)} />
-          <span className="text-slate-700">Send window</span>
-        </label>
-        <label className="inline-flex items-center gap-1">
-          <span className="text-slate-700">From</span>
-          <input type="time" value={windowStart} onChange={(e) => setWindowStart(normalizeTime(e.target.value, "09:00"))} className="h-8 rounded border bg-white px-2 text-xs" />
-        </label>
-        <label className="inline-flex items-center gap-1">
-          <span className="text-slate-700">To</span>
-          <input type="time" value={windowEnd} onChange={(e) => setWindowEnd(normalizeTime(e.target.value, "18:00"))} className="h-8 rounded border bg-white px-2 text-xs" />
-        </label>
-        <div className="w-px h-6 bg-blue-200 mx-1" />
-        <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("start")} disabled={isActive || !hasRuntime}>Start</Button>
-        <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("pause")} disabled={!(statusValue === "running" || statusValue === "waiting-window")}>Pause</Button>
-        <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("resume")} disabled={statusValue !== "paused"}>Resume</Button>
-        <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("stop")} disabled={!isActive || statusValue === "stopping"}>Stop</Button>
-      </div>
-      <div className="mt-2 text-slate-700">Status: {formatStatus(state.status)} • Phase: {state.phase || "send"}</div>
-      <div className="text-slate-600">{progressText}</div>
-      {error ? <div className="text-red-600">{error}</div> : null}
+    <div className="rounded-xl border border-indigo-100 bg-gradient-to-r from-indigo-50/60 to-blue-50/40 overflow-hidden">
+      {/* Panel header */}
+      <button
+        type="button"
+        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-indigo-50/80 transition-colors"
+        onClick={() => setCollapsed((v) => !v)}
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="bg-indigo-500 rounded-md p-1">
+            <Zap className="w-3 h-3 text-white" />
+          </div>
+          <span className="text-xs font-semibold text-indigo-900">Bulk Automation</span>
+          <span className="text-[10px] text-indigo-400 font-medium bg-indigo-100 rounded-full px-2 py-0.5">sends immediately</span>
+          <span className={`w-2 h-2 rounded-full ml-1 ${statusDot}`} />
+          <span className="text-[11px] text-indigo-700 font-medium capitalize">{formatStatus(state.status)}</span>
+        </div>
+        {collapsed ? <ChevronDown className="w-3.5 h-3.5 text-indigo-400" /> : <ChevronUp className="w-3.5 h-3.5 text-indigo-400" />}
+      </button>
+
+      {!collapsed && (
+        <div className="px-4 pb-3 border-t border-indigo-100/60">
+          {/* Config grid */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-3">
+            <label className="flex items-center gap-1.5">
+              <span className="text-[11px] text-gray-600 font-medium whitespace-nowrap">Delay Min (s)</span>
+              <input
+                type="number" min={5} max={600}
+                value={delayMinSeconds || ""}
+                onChange={(e) => setDelayMinSeconds(e.target.value ? Number.parseInt(e.target.value, 10) : 0)}
+                onBlur={() => setDelayMinSeconds(clamp(delayMinSeconds, 5, 600))}
+                className={inputClass}
+              />
+            </label>
+            <label className="flex items-center gap-1.5">
+              <span className="text-[11px] text-gray-600 font-medium whitespace-nowrap">Delay Max (s)</span>
+              <input
+                type="number" min={5} max={600}
+                value={delayMaxSeconds || ""}
+                onChange={(e) => setDelayMaxSeconds(e.target.value ? Number.parseInt(e.target.value, 10) : 0)}
+                onBlur={() => setDelayMaxSeconds(clamp(delayMaxSeconds, 5, 600))}
+                className={inputClass}
+              />
+            </label>
+            <label className="flex items-center gap-1.5">
+              <span className="text-[11px] text-gray-600 font-medium">Limit</span>
+              <input
+                type="number" min={1} max={500}
+                value={limit || ""}
+                onChange={(e) => setLimit(e.target.value ? Number.parseInt(e.target.value, 10) : 0)}
+                onBlur={() => setLimit(clamp(limit, 1, 500))}
+                className={inputClass}
+              />
+            </label>
+            <label className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm cursor-pointer hover:border-indigo-300 transition-colors">
+              <input type="checkbox" checked={autoFollowup} onChange={(e) => setAutoFollowup(e.target.checked)} className="rounded text-indigo-600 w-3 h-3" />
+              <span className="text-[11px] text-gray-600 font-medium whitespace-nowrap">Auto follow-ups</span>
+            </label>
+            <label className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm cursor-pointer hover:border-indigo-300 transition-colors">
+              <input type="checkbox" checked={windowEnabled} onChange={(e) => setWindowEnabled(e.target.checked)} className="rounded text-indigo-600 w-3 h-3" />
+              <span className="text-[11px] text-gray-600 font-medium whitespace-nowrap">Send window</span>
+            </label>
+            {windowEnabled && (
+              <>
+                <label className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-gray-500">From</span>
+                  <input type="time" value={windowStart} onChange={(e) => setWindowStart(normalizeTime(e.target.value, "09:00"))} className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </label>
+                <label className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-gray-500">To</span>
+                  <input type="time" value={windowEnd} onChange={(e) => setWindowEnd(normalizeTime(e.target.value, "18:00"))} className="h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                </label>
+              </>
+            )}
+
+            {/* Divider */}
+            <div className="w-px h-6 bg-indigo-200 mx-1" />
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-1.5">
+              <Button type="button" size="sm"
+                className="h-8 px-3 text-xs bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm gap-1.5"
+                onClick={() => doAction("start")} disabled={isActive || !hasRuntime}>
+                <Play className="w-3 h-3" /> Start
+              </Button>
+              <Button type="button" size="sm" variant="outline"
+                className="h-8 px-3 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 gap-1.5"
+                onClick={() => doAction("pause")} disabled={!(statusValue === "running" || statusValue === "waiting-window")}>
+                <Pause className="w-3 h-3" /> Pause
+              </Button>
+              <Button type="button" size="sm" variant="outline"
+                className="h-8 px-3 text-xs border-indigo-200 text-indigo-700 hover:bg-indigo-50 gap-1.5"
+                onClick={() => doAction("resume")} disabled={statusValue !== "paused"}>
+                <RotateCcw className="w-3 h-3" /> Resume
+              </Button>
+              <Button type="button" size="sm" variant="outline"
+                className="h-8 px-3 text-xs border-red-200 text-red-600 hover:bg-red-50 gap-1.5"
+                onClick={() => doAction("stop")} disabled={!isActive || statusValue === "stopping"}>
+                <Square className="w-3 h-3" /> Stop
+              </Button>
+            </div>
+          </div>
+
+          {/* Status / progress */}
+          <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-[11px] text-gray-500">Phase: <span className="font-medium text-gray-700">{state.phase || "send"}</span></span>
+            {progressText && <span className="text-[11px] text-gray-500">{progressText}</span>}
+            {error && <span className="text-[11px] text-red-600 font-medium">{error}</span>}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
