@@ -165,8 +165,8 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
     setError("");
     try {
       if (action === "start") {
-        if ((scheduleDate && !scheduleTime) || (!scheduleDate && scheduleTime)) {
-          setError("Schedule At requires both a date and a time, or leave both blank to send immediately.");
+        if (scheduleTime && !scheduleDate) {
+          setError("Schedule At: please also set a date when specifying a time.");
           return;
         }
         const minSec = clamp(delayMinSeconds, 5, 600);
