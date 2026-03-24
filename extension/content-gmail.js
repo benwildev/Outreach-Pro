@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const SCRIPT_VERSION = "gmail-content-v24-SCHED-TIMING";
+  const SCRIPT_VERSION = "gmail-content-v25-NO-LINKIFY";
   const LOG_PREFIX = "[Gmail Extension]";
   const FALLBACK_API_BASE_URL = "https://automation.benwil.store";
   async function getApiBaseUrl() {
@@ -793,7 +793,7 @@
           closeParagraph();
           openList();
           const itemText = line.replace(/^\s*[-*•]\s/, "");
-          parts.push('<li style="margin: 0 0 4px 0;"><b>' + linkifyInlineText(itemText) + "</b></li>");
+          parts.push('<li style="margin: 0 0 4px 0;"><b>' + escapeHtml(itemText) + "</b></li>");
           continue;
         }
 
@@ -802,7 +802,7 @@
         if (isSignoffLine(line)) {
           parts.push("<div><br></div>");
         }
-        parts.push("<div>" + linkifyInlineText(line) + "</div>");
+        parts.push("<div>" + escapeHtml(line) + "</div>");
       }
 
       closeParagraph();
