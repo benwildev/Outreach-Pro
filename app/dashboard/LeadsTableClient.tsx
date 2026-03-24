@@ -56,7 +56,6 @@ function isFollowUpDue(lead: {
     );
 }
 
-// Function to check if a specific lead is eligible for manual bulk follow-up
 type ReplyCategory = "Interested" | "Not Interested" | "Out of Office" | "Unsubscribe" | "Bounced" | "Other";
 
 function categorizeReply(body: string | null | undefined): ReplyCategory {

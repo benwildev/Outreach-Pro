@@ -51,7 +51,7 @@ export async function GET(req: NextRequest) {
   });
 
   const header = [
-    "Campaign", "Recipient Name", "Recipient Email", "Email",
+    "Campaign", "Recipient Name", "Recipient Email",
     "Website URL", "Niche", "Status", "Step",
     "Sent At", "Sent Gmail Account", "Gmail Thread ID",
     "Reply Body", "Next Followup", "Created At",
@@ -62,7 +62,6 @@ export async function GET(req: NextRequest) {
       escCsv(l.campaign.name),
       escCsv(l.recipientName),
       escCsv(l.recipientEmail),
-      escCsv(l.email),
       escCsv(l.websiteUrl),
       escCsv(l.niche),
       escCsv(l.status),
