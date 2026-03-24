@@ -1084,7 +1084,14 @@ async function runSingleBulkWorkflow(item) {
   }
 
   const completionPromise = waitForBulkWorkflowCompletion(leadId, BULK_WORKFLOW_TIMEOUT_MS);
-  await handleStartWorkflow(current);
+  // Always inject the live scheduleSendTime from bulkAutomationState at dispatch time.
+  // This ensures it is present regardless of when the queue item was originally built.
+  const workflowData = Object.assign({}, current, {
+    scheduleSendTime: current.scheduleSendTime || bulkAutomationState.scheduleSendTime || "",
+  });
+  console.log("[Leads Extension] Bulk: dispatching handleStartWorkflow for", leadId,
+    "scheduleSendTime:", workflowData.scheduleSendTime || "(none — immediate send)");
+  await handleStartWorkflow(workflowData);
   await completionPromise;
   bulkAutomationState.sent += 1;
 }

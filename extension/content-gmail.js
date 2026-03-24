@@ -3159,7 +3159,7 @@
         return;
       }
 
-      log("(v19) SCHEDULE DIAGNOSTIC: data.scheduleSendTime =", JSON.stringify(data.scheduleSendTime), "typeof =", typeof data.scheduleSendTime, "autoSend =", autoSend);
+      log("(v20) SCHEDULE DIAGNOSTIC: data.scheduleSendTime =", JSON.stringify(data.scheduleSendTime), "typeof =", typeof data.scheduleSendTime, "autoSend =", autoSend);
 
       // Fallback: if scheduleSendTime is empty, try reading from chrome.storage.local
       let effectiveScheduleTime = (data.scheduleSendTime || "").trim();
@@ -3168,10 +3168,10 @@
           const stored = await chrome.storage.local.get("pendingScheduleSendTime");
           if (stored && stored.pendingScheduleSendTime) {
             effectiveScheduleTime = String(stored.pendingScheduleSendTime).trim();
-            log("(v19) FALLBACK: Read scheduleSendTime from chrome.storage.local:", effectiveScheduleTime);
+            log("(v20) FALLBACK: Read scheduleSendTime from chrome.storage.local:", effectiveScheduleTime);
           }
         } catch (e) {
-          logError("(v19) Failed to read pendingScheduleSendTime from storage:", e);
+          logError("(v20) Failed to read pendingScheduleSendTime from storage:", e);
         }
       }
       // Clear the stored value after reading to prevent reuse on next send
