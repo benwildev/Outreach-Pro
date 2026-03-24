@@ -1597,55 +1597,70 @@
       return { success: false, error: "Menu item not found" };
     }
 
-    await delay(3000); // Wait for Schedule send popup (v19: increased)
+    await delay(2000); // Wait for Schedule send popup
 
-    // 3. Click "Pick date & time" (v19: NO visibility filter, diagnostic logging)
-    let pickDateClicked = false;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      // v19 DIAGNOSTIC: Log what is on screen
-      if (attempt === 0) {
-        const allMenu = document.querySelectorAll('div[role="menuitem"], div[role="menu"] div, .J-N');
-        let scheduleRelated = [];
-        for (let i = 0; i < allMenu.length; i++) {
-          const txt = (allMenu[i].innerText || allMenu[i].textContent || "").replace(/\s+/g, " ").trim();
-          if (txt && /schedule|pick|tomorrow|monday|date/i.test(txt)) {
-            scheduleRelated.push(txt.substring(0, 30) + " [tag=" + allMenu[i].tagName + "]");
+    // 3. Click "Pick date & time" — but skip if Gmail already opened the date/time dialog directly
+    function isDateTimeDialogOpen() {
+      // Check if there's a visible date or time input already on screen (direct dialog path)
+      const inputs = Array.from(document.querySelectorAll('input')).filter(isVisible);
+      return inputs.some(inp => {
+        const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
+        return lbl.includes('date') || lbl.includes('time') || inp.type === 'time' || inp.type === 'date';
+      });
+    }
+
+    if (isDateTimeDialogOpen()) {
+      log("(v22) Date/time dialog already open — skipping 'Pick date & time' step.");
+    } else {
+      // Gmail still shows intermediate submenu — find and click "Pick date & time"
+      let pickDateClicked = false;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        // Diagnostic on first attempt
+        if (attempt === 0) {
+          const allEls = Array.from(document.querySelectorAll('*')).filter(el => {
+            const txt = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+            return txt && /pick|tomorrow|monday|date/i.test(txt) && el.children.length < 5;
+          });
+          log("(v22) DIAGNOSTIC - Potential pick-date elements:", allEls.length,
+            allEls.slice(0, 5).map(e => `"${(e.innerText||e.textContent||"").trim().slice(0,30)}" [${e.tagName}]`).join(" | "));
+        }
+
+        // Search ALL elements for "pick date" text (any tag)
+        const allEls = document.querySelectorAll('*');
+        for (let i = 0; i < allEls.length; i++) {
+          const el = allEls[i];
+          if (el.children.length > 4) continue;
+          const txt = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+          if (txt.includes("pick date")) {
+            const clickable = el.closest('[role="menuitem"]') || el.closest('[role="option"]') || el.closest('li') || el;
+            clickable.click();
+            pickDateClicked = true;
+            log("(v22) Clicked pick date element:", el.tagName, txt.slice(0, 40));
+            break;
           }
         }
-        log("(v20) DIAGNOSTIC - Menu items found:", scheduleRelated.length, scheduleRelated.join(" | "));
-      }
 
-      // v20: Robust search ignoring whitespace and length
-      const allEls = document.querySelectorAll('div[role="menuitem"], .J-N, div, span');
-      for (let i = 0; i < allEls.length; i++) {
-        const el = allEls[i];
-        // Only look at elements that don't have too many descendants to find the most specific one
-        if (el.children.length > 5) continue;
+        if (pickDateClicked) break;
 
-        const txt = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-        if (txt.includes("pick date") || txt === "pick date & time") {
-          log("(v20) Found pick date element:", el.tagName, el.className, txt);
-
-          // Try to click the element itself, or its closest menuitem parent
-          const clickable = el.closest('[role="menuitem"]') || el.closest('.J-N') || el;
-          clickable.click();
+        // Also check if dialog opened while we were searching
+        if (isDateTimeDialogOpen()) {
+          log("(v22) Date/time dialog appeared during search — proceeding.");
           pickDateClicked = true;
           break;
         }
+
+        log("(v22) Pick date not found yet, retrying... (attempt " + (attempt + 1) + ")");
+        await delay(1000);
       }
 
-      if (pickDateClicked) break;
-      log("(v19) Pick date not found yet, retrying... (attempt " + (attempt + 1) + ")");
-      await delay(1200);
-    }
+      if (!pickDateClicked) {
+        logError("(v22) Pick date option not found and dialog did not open.");
+        document.body.click();
+        return { success: false, error: "Pick date option not found" };
+      }
 
-    if (!pickDateClicked) {
-      logError("(v19) Pick date option not found.");
-      document.body.click();
-      return { success: false, error: "Pick date option not found" };
+      await delay(1500);
     }
-
-    await delay(1800);
 
     // 4. Fill date and time inputs in Gmail's "Pick date & time" dialog
     function fillInput(input, value) {

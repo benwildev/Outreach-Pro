@@ -1,0 +1,37 @@
+The FetchEvent for "https://mail.google.com/mail/u/3/#inbox?compose=new" resulted in a network error response: the promise was rejected.Understand this warning
+sw.js?offline_allowed=1:1 Uncaught (in promise) lfUnderstand this error
+The FetchEvent for "https://mail.google.com/mail/u/3/#inbox" resulted in a network error response: the promise was rejected.Understand this warning
+sw.js?offline_allowed=1:1 Uncaught (in promise) lfUnderstand this error
+m=a:2677 Deprecated API for given entry type.
+Iog.activate @ m=a:2677Understand this warning
+content-gmail.js:24 [Gmail Extension] Content script loaded gmail-content-v21-ROBUST-DOM
+content-gmail.js:16 [Gmail Extension] Content script loaded gmail-content-2026-03-04-auth-lock-v16
+3/data?sw=2&token=%5B%22cftp%22,%220af5875e8e%22,%22gmail.pinto-server_20260317.11_p2%22,%22ZyMrc6cBAw-rFZnvtXyj5A%5Cu003d%5Cu003d%22,null,3,%22%22%5D&dilte=0&gme=1&sme=1&pt=ji&di=0&dbv=112:1 An iframe which has both allow-scripts and allow-same-origin for its sandbox attribute can escape its sandboxing.Understand this warning
+The FetchEvent for "https://mail.google.com/mail/u/3/#inbox?compose=new" resulted in a network error response: the promise was rejected.Understand this warning
+sw.js?offline_allowed=1:1 Uncaught (in promise) lfUnderstand this error
+content-gmail.js:24 [Gmail Extension] Starting fill and send  
+content-gmail.js:24 [Gmail Extension] Session verified or trusted. Current URL Auth: 3 UI Email: nickgoodexp@gmail.com Proceeding.
+content-gmail.js:24 [Gmail Extension] To filled
+content-gmail.js:24 [Gmail Extension] Subject filled
+content-gmail.js:24 [Gmail Extension] Body inserted
+content-gmail.js:24 [Gmail Extension] Gmail signature preserved in compose
+content-gmail.js:24 [Gmail Extension] Body filled
+content-gmail.js:24 [Gmail Extension] (v19) SCHEDULE DIAGNOSTIC: data.scheduleSendTime = "2026-03-24T11:25" typeof = string autoSend = true
+content-gmail.js:24 [Gmail Extension] Attempting Schedule Send at 2026-03-24T11:25
+content-gmail.js:24 [Gmail Extension] (v21) clickScheduleSendButton start: 2026-03-24T11:25 → date: Mar 24, 2026 time: 11:25 AM
+content-gmail.js:24 [Gmail Extension] Clicked more send options, waiting for menu...
+content-gmail.js:24 [Gmail Extension] Found schedule menu item, clicking.
+content-gmail.js:24 [Gmail Extension] (v20) DIAGNOSTIC - Menu items found: 3 Schedule send [tag=DIV] | Schedule send [tag=DIV] | Schedule send [tag=DIV]
+content-gmail.js:24 [Gmail Extension] (v19) Pick date not found yet, retrying... (attempt 1)
+content-gmail.js:24 [Gmail Extension] (v19) Pick date not found yet, retrying... (attempt 2)
+content-gmail.js:24 [Gmail Extension] (v19) Pick date not found yet, retrying... (attempt 3)
+content-gmail.js:24 [Gmail Extension] (v19) Pick date not found yet, retrying... (attempt 4)
+content-gmail.js:24 [Gmail Extension] (v19) Pick date not found yet, retrying... (attempt 5)
+content-gmail.js:29 [Gmail Extension] (v19) Pick date option not found.
+logError @ content-gmail.js:29
+clickScheduleSendButton @ content-gmail.js:1643
+await in clickScheduleSendButton
+fillAndSend @ content-gmail.js:3055
+await in fillAndSend
+(anonymous) @ content-gmail.js:35Understand this error
+content-gmail.js:29 [Gmail Extension] Schedule Send Failed: Pick date option not found
