@@ -8,7 +8,7 @@
     "start": "next start -p 5000 -H 0.0.0.0",
     "lint": "next lint",
     "db:status": "prisma migrate status",
-    "db:migrate": "prisma migrate deploy",
+    "db:migrate": "DATABASE_URL=\"postgresql://$PGUSER:$PGPASSWORD@$PGHOST:${PGPORT:-5432}/$PGDATABASE\" prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:sync:safe": "node scripts/db-sync-safe.js",
     "postinstall": "prisma generate"
