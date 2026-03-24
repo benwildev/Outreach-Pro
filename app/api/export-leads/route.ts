@@ -34,7 +34,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (emailSearch) {
-    where.email = { contains: emailSearch, mode: "insensitive" };
+    where.recipientEmail = { contains: emailSearch, mode: "insensitive" };
   }
 
   if (dateFrom || dateTo) {

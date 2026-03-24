@@ -121,7 +121,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   }
 
   if (emailSearch) {
-    where.email = { contains: emailSearch, mode: "insensitive" };
+    where.recipientEmail = { contains: emailSearch, mode: "insensitive" };
   }
 
   if (dateFrom || dateTo) {
