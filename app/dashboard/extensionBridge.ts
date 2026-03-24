@@ -8,6 +8,7 @@ export const K_WINDOW_ENABLED = "leadsExtensionBulkWindowEnabled";
 export const K_WINDOW_START = "leadsExtensionBulkWindowStart";
 export const K_WINDOW_END = "leadsExtensionBulkWindowEnd";
 export const K_SCHEDULE_TIME = "leadsExtensionScheduleTime";
+export const K_SCHED_LIMIT = "leadsExtensionSchedLimit";
 
 export const BRIDGE_REQUEST_TYPE = "LEADS_EXTENSION_BRIDGE_REQUEST";
 export const BRIDGE_RESPONSE_TYPE = "LEADS_EXTENSION_BRIDGE_RESPONSE";

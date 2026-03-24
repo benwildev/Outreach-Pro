@@ -32,6 +32,7 @@ import { Badge } from "@/components/ui/badge";
 import { CampaignFilter } from "./CampaignFilter";
 import { StatsCards } from "./StatsCards";
 import { BulkAutomationPanel } from "./BulkAutomationPanel";
+import { BulkSchedulePanel } from "./BulkSchedulePanel";
 import { LeadsTableClient } from "./LeadsTableClient";
 import { Settings } from "lucide-react";
 
@@ -176,6 +177,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           </CardHeader>
           <CardContent className="p-0">
             <BulkAutomationPanel currentCampaignId={campaignId} />
+            <BulkSchedulePanel currentCampaignId={campaignId} />
             <LeadsTableClient leads={leads} campaigns={campaigns} />
           </CardContent>
         </Card>

@@ -4,34 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { deletePendingLeads } from "./actions";
 import { Trash2 } from "lucide-react";
-
-type BulkState = {
-  status?: string;
-  phase?: string;
-  paused?: boolean;
-  stopRequested?: boolean;
-  delayMinMs?: number;
-  delayMaxMs?: number;
-  delayMs?: number;
-  limit?: number;
-  total?: number;
-  currentIndex?: number;
-  processed?: number;
-  sent?: number;
-  followups?: number;
-  failed?: number;
-  skipped?: number;
-  remaining?: number;
-  currentLeadId?: string;
-  currentRecipientEmail?: string;
-  followupEnabled?: boolean;
-  windowEnabled?: boolean;
-  sendWindowStart?: string;
-  sendWindowEnd?: string;
-  scheduleSendTime?: string;
-  lastError?: string;
-};
-
+import {
+  BulkState,
+  clamp,
+  normalizeTime,
+  readStorageInt,
+  formatStatus,
+  buildProgressText,
+} from "./bulkPanelUtils";
 import {
   sendRuntimeMessage,
   BRIDGE_READY_TYPE,
@@ -42,50 +22,7 @@ import {
   K_WINDOW_ENABLED,
   K_WINDOW_START,
   K_WINDOW_END,
-  K_SCHEDULE_TIME
 } from "./extensionBridge";
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function normalizeTime(value: string, fallback: string): string {
-  const raw = String(value || "").trim();
-  const match = raw.match(/^([0-1]?\d|2[0-3]):([0-5]\d)$/);
-  if (!match) return fallback;
-  return `${String(match[1]).padStart(2, "0")}:${String(match[2]).padStart(2, "0")}`;
-}
-
-function localDateString(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function getTomorrowDate(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return localDateString(d);
-}
-
-function readStorageInt(key: string, fallback: number): number {
-  if (typeof window === "undefined") return fallback;
-  const n = Number.parseInt(window.localStorage.getItem(key) ?? "", 10);
-  return Number.isNaN(n) ? fallback : n;
-}
-
-function formatStatus(value: string | undefined): string {
-  const s = String(value || "idle").toLowerCase();
-  if (s === "running") return "Running";
-  if (s === "paused") return "Paused";
-  if (s === "stopping") return "Stopping";
-  if (s === "waiting-window") return "Waiting for window";
-  if (s === "completed") return "Completed";
-  if (s === "failed") return "Failed";
-  if (s === "stopped") return "Stopped";
-  return "Idle";
-}
 
 export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: string | null }) {
   const [delayMinSeconds, setDelayMinSeconds] = useState(45);
@@ -95,8 +32,6 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
   const [windowEnabled, setWindowEnabled] = useState(false);
   const [windowStart, setWindowStart] = useState("09:00");
   const [windowEnd, setWindowEnd] = useState("18:00");
-  const [scheduleDate, setScheduleDate] = useState(getTomorrowDate);
-  const [scheduleTime, setScheduleTime] = useState("");
   const [state, setState] = useState<BulkState>({});
   const [error, setError] = useState("");
   const [isCheckingReplies, setIsCheckingReplies] = useState(false);
@@ -111,25 +46,8 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
       setWindowEnabled((window.localStorage.getItem(K_WINDOW_ENABLED) ?? "0") === "1");
       setWindowStart(normalizeTime(window.localStorage.getItem(K_WINDOW_START) ?? "", "09:00"));
       setWindowEnd(normalizeTime(window.localStorage.getItem(K_WINDOW_END) ?? "", "18:00"));
-
-      const savedSchedule = window.localStorage.getItem(K_SCHEDULE_TIME) || "";
-      if (savedSchedule.includes("T")) {
-        const [datePart, timePart] = savedSchedule.split("T");
-        setScheduleDate(datePart || "");
-        setScheduleTime(normalizeTime(timePart || "", ""));
-      } else if (savedSchedule) {
-        setScheduleDate(getTomorrowDate());
-        setScheduleTime(normalizeTime(savedSchedule, ""));
-      }
     }
   }, []);
-
-  function buildScheduleSendTime(): string {
-    if (scheduleDate && scheduleTime) {
-      return `${scheduleDate}T${scheduleTime}`;
-    }
-    return "";
-  }
 
   async function refreshState(customError = "") {
     try {
@@ -172,16 +90,11 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
     setError("");
     try {
       if (action === "start") {
-        if (scheduleTime && !scheduleDate) {
-          setError("Schedule At: please also set a date when specifying a time.");
-          return;
-        }
         const minSec = clamp(delayMinSeconds, 5, 600);
         const maxSec = clamp(Math.max(delayMaxSeconds, minSec), 5, 600);
         const maxLeads = clamp(limit, 1, 500);
         const start = normalizeTime(windowStart, "09:00");
         const end = normalizeTime(windowEnd, "18:00");
-        const combinedSchedule = buildScheduleSendTime();
 
         window.localStorage.setItem(K_DELAY_MIN, String(minSec * 1000));
         window.localStorage.setItem(K_DELAY_MAX, String(maxSec * 1000));
@@ -190,11 +103,6 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
         window.localStorage.setItem(K_WINDOW_ENABLED, windowEnabled ? "1" : "0");
         window.localStorage.setItem(K_WINDOW_START, start);
         window.localStorage.setItem(K_WINDOW_END, end);
-        if (combinedSchedule) {
-          window.localStorage.setItem(K_SCHEDULE_TIME, combinedSchedule);
-        } else {
-          window.localStorage.removeItem(K_SCHEDULE_TIME);
-        }
 
         const response = await sendRuntimeMessage({
           action: "startBulkAutomation",
@@ -207,7 +115,6 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
             windowEnabled,
             sendWindowStart: start,
             sendWindowEnd: end,
-            scheduleSendTime: combinedSchedule || undefined,
           },
         });
         if (!response?.success) {
@@ -259,27 +166,16 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
     statusValue === "stopping" ||
     statusValue === "waiting-window";
 
-  const progressText = useMemo(() => {
-    const processed = Number(state.processed || 0);
-    const total = Number(state.total || 0);
-    const sent = Number(state.sent || 0);
-    const followups = Number(state.followups || 0);
-    const failed = Number(state.failed || 0);
-    const skipped = Number(state.skipped || 0);
-    const remaining = Math.max(total - processed, 0);
-    let text = `Processed ${processed}/${total} • Sent ${sent} • Follow-ups ${followups} • Failed ${failed}`;
-    if (skipped > 0) text += ` • Skipped ${skipped}`;
-    if (isActive) text += ` • Remaining ${remaining}`;
-    if (state.currentRecipientEmail) text += ` • Current ${state.currentRecipientEmail}`;
-    return text;
-  }, [state, isActive]);
-
-  const todayStr = localDateString(new Date());
+  const progressText = useMemo(
+    () => buildProgressText(state, isActive),
+    [state, isActive]
+  );
 
   return (
-    <div className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs">
+    <div className="mb-1 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-blue-900">Bulk Automation</span>
+        <span className="text-blue-400 text-[10px]">(sends immediately)</span>
         <label className="inline-flex items-center gap-1">
           <span className="text-slate-700">Delay Min (sec)</span>
           <input
@@ -332,28 +228,12 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
           <span className="text-slate-700">To</span>
           <input type="time" value={windowEnd} onChange={(e) => setWindowEnd(normalizeTime(e.target.value, "18:00"))} className="h-8 rounded border bg-white px-2 text-xs" />
         </label>
-        <div className="w-px h-6 bg-blue-200 mx-1"></div>
-        <div className="inline-flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded border border-yellow-200" title="Leave blank to send immediately. Set date + time to use Gmail schedule send.">
-          <span className="text-slate-700 font-medium">Schedule At:</span>
-          <input
-            type="date"
-            value={scheduleDate}
-            min={todayStr}
-            onChange={(e) => setScheduleDate(e.target.value)}
-            className="h-8 rounded border bg-white px-2 text-xs"
-          />
-          <input
-            type="time"
-            value={scheduleTime}
-            onChange={(e) => setScheduleTime(e.target.value ? normalizeTime(e.target.value, "") : "")}
-            className="h-8 rounded border bg-white px-2 text-xs"
-          />
-        </div>
+        <div className="w-px h-6 bg-blue-200 mx-1" />
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("start")} disabled={isActive || !hasRuntime}>Start</Button>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("pause")} disabled={!(statusValue === "running" || statusValue === "waiting-window")}>Pause</Button>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("resume")} disabled={statusValue !== "paused"}>Resume</Button>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("stop")} disabled={!isActive || statusValue === "stopping"}>Stop</Button>
-        <div className="w-px h-6 bg-blue-200 mx-1"></div>
+        <div className="w-px h-6 bg-blue-200 mx-1" />
         <Button
           type="button"
           variant="secondary"
@@ -363,7 +243,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
         >
           {isCheckingReplies ? "Checking..." : "Check Replies"}
         </Button>
-        <div className="flex-1"></div>
+        <div className="flex-1" />
         <Button
           type="button"
           variant="ghost"
