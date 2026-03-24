@@ -1563,41 +1563,63 @@
       return { success: false, error: "Dropdown not found" };
     }
 
-    moreOptionsBtn.click();
-    log("Clicked more send options, waiting for menu...");
+    // Use full mouse event sequence — Gmail uses jsaction which requires mousedown+up+click
+    function syntheticClick(el) {
+      el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
+      el.dispatchEvent(new MouseEvent('mouseup',   { bubbles: true, cancelable: true, view: window }));
+      el.dispatchEvent(new MouseEvent('click',     { bubbles: true, cancelable: true, view: window }));
+    }
+
+    syntheticClick(moreOptionsBtn);
+    log("(v27) Clicked more send options, waiting for menu...");
     await delay(1500);
 
-    // 2. Find "Schedule send" in the menu (with expanded retries)
+    // 2. Find "Schedule send" — search specifically inside visible [role="menu"] popups first,
+    //    then fall back to broader search. Use exact text match to avoid static labels.
     let menuClicked = false;
     for (let attempt = 0; attempt < 5; attempt++) {
-      // Try roles and everything else
-      const allPossible = document.querySelectorAll('div[role="menuitem"], [role="option"], div, span, b');
-      let scheduleItem = Array.from(allPossible).find(el => {
-        if (!isVisible(el)) return false;
-        const text = (el.textContent || "").trim().toLowerCase();
-        // Look for "schedule send" or just "schedule" if very short
-        return text.includes("schedule send") || (text.includes("schedule") && text.length < 20);
-      });
+      let scheduleItem = null;
+
+      // Primary: find "Schedule send" inside a visible popup menu
+      const visibleMenus = Array.from(document.querySelectorAll('[role="menu"], [role="listbox"]')).filter(isVisible);
+      for (const menu of visibleMenus) {
+        const items = Array.from(menu.querySelectorAll('[role="menuitem"], [role="option"], div, li'));
+        scheduleItem = items.find(el => {
+          const txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+          return txt === "schedule send" || (txt.includes("schedule send") && el.children.length <= 3);
+        });
+        if (scheduleItem) { log("(v27) Found in visible menu"); break; }
+      }
+
+      // Secondary: any visible [role="menuitem"] whose text contains "schedule send"
+      if (!scheduleItem) {
+        const allItems = Array.from(document.querySelectorAll('[role="menuitem"], [role="option"]'));
+        scheduleItem = allItems.find(el => {
+          if (!isVisible(el)) return false;
+          const txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+          return txt.includes("schedule send");
+        });
+        if (scheduleItem) log("(v27) Found via menuitem role");
+      }
 
       if (scheduleItem) {
-        log("Found schedule menu item, clicking.");
-        const clickable = scheduleItem.closest('div[role="menuitem"]') || scheduleItem;
-        clickable.click();
+        log("(v27) Clicking Schedule send item:", (scheduleItem.textContent || "").trim().slice(0, 30));
+        syntheticClick(scheduleItem);
         menuClicked = true;
         break;
       }
 
-      log("(v17) Schedule menu item not found, retrying... (attempt " + (attempt + 1) + ")");
-      await delay(1000);
+      log("(v27) Schedule send not found, retrying... (attempt " + (attempt + 1) + ")");
+      await delay(800);
     }
 
     if (!menuClicked) {
-      logError("(v17) Schedule send menu item not found after retries.");
-      document.body.click(); // dismiss
+      logError("(v27) Schedule send menu item not found.");
+      document.body.click();
       return { success: false, error: "Menu item not found" };
     }
 
-    await delay(2000); // Wait for Schedule send popup
+    await delay(2500); // Wait for schedule submenu popup
 
     // 3. Click "Pick date & time" — but skip if Gmail already opened the date/time dialog directly
     //    "Date picker" = a dialog with date/time inputs that are NOT compose-window fields
@@ -1643,17 +1665,17 @@
           const txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
           if (txt.includes("pick date")) {
             const clickable = el.closest('[role="menuitem"]') || el.closest('[role="option"]') || el.closest('[tabindex]') || el;
-            clickable.click();
+            syntheticClick(clickable);
             pickDateClicked = true;
-            log("(v26) Clicked pick date in dialog:", txt.slice(0, 50));
+            log("(v27) Clicked pick date in dialog:", txt.slice(0, 50));
             break;
           }
         }
         if (!pickDateClicked) {
-          log("(v26) DIAG dialog text:", (scheduleDialog.textContent || "").replace(/\s+/g, " ").trim().slice(0, 200));
+          log("(v27) DIAG dialog text:", (scheduleDialog.textContent || "").replace(/\s+/g, " ").trim().slice(0, 200));
         }
       } else {
-        log("(v26) Schedule submenu dialog not found after 14 attempts");
+        log("(v27) Schedule submenu dialog not found after 14 attempts");
       }
 
       // Fallback: TreeWalker over full document
@@ -1665,9 +1687,9 @@
           if (txt.includes("pick date")) {
             const el = node.parentElement;
             const clickable = el.closest('[role="menuitem"]') || el.closest('[role="option"]') || el.closest('[tabindex]') || el;
-            clickable.click();
+            syntheticClick(clickable);
             pickDateClicked = true;
-            log("(v26) FB TreeWalker text node:", txt.slice(0, 50));
+            log("(v27) FB TreeWalker:", txt.slice(0, 50));
             break;
           }
         }
