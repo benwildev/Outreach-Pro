@@ -1486,12 +1486,18 @@
       const month = parseInt(isoMatch[2], 10);
       const day   = parseInt(isoMatch[3], 10);
       const hour24 = parseInt(isoMatch[4], 10);
-      const min   = isoMatch[5];
+      const min   = parseInt(isoMatch[5], 10);
+      // Validate ranges; log and fall through to unknown on bad values
+      if (month < 1 || month > 12 || day < 1 || day > 31 || hour24 > 23 || min > 59) {
+        logError("parseScheduleDateTime: value out of range:", str);
+        return { gmailDate: null, gmailTime: str };
+      }
       const period = hour24 >= 12 ? "PM" : "AM";
       const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
+      const minStr = String(min).padStart(2, "0");
       return {
         gmailDate: MONTH_NAMES[month - 1] + " " + day + ", " + year,
-        gmailTime: hour12 + ":" + min + " " + period,
+        gmailTime: hour12 + ":" + minStr + " " + period,
       };
     }
 
@@ -1499,16 +1505,22 @@
     const timeMatch = str.match(/^(\d{1,2}):(\d{2})$/);
     if (timeMatch) {
       const hour24 = parseInt(timeMatch[1], 10);
-      const min   = timeMatch[2];
+      const min   = parseInt(timeMatch[2], 10);
+      if (hour24 > 23 || min > 59) {
+        logError("parseScheduleDateTime: time out of range:", str);
+        return { gmailDate: null, gmailTime: str };
+      }
       const period = hour24 >= 12 ? "PM" : "AM";
       const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
+      const minStr = String(min).padStart(2, "0");
       return {
         gmailDate: null,
-        gmailTime: hour12 + ":" + min + " " + period,
+        gmailTime: hour12 + ":" + minStr + " " + period,
       };
     }
 
-    // Unknown format — pass through as-is for the time field
+    // Unknown format — log a warning and pass through as-is for the time field
+    logError("parseScheduleDateTime: unrecognized format:", str, "(expected YYYY-MM-DDTHH:MM)");
     return { gmailDate: null, gmailTime: str };
   }
 
