@@ -1300,6 +1300,22 @@ async function openGmailFromFallback(data, chatTabId) {
   const campaignSubject = data && data.campaignSubject ? String(data.campaignSubject).trim() : "";
   const campaignBody = data && data.campaignBody ? String(data.campaignBody) : "";
   const campaignGmailAuthUser = data && data.campaignGmailAuthUser ? String(data.campaignGmailAuthUser).trim() : "";
+
+  // If campaignBody is present it is a ChatGPT prompt, not a ready-to-send email.
+  // Sending it to Gmail would deliver the raw AI instructions to the recipient.
+  // Abort silently so no garbage email is sent; the user can retry the lead manually.
+  if (campaignBody.trim()) {
+    console.warn(
+      "[Leads Extension] Fallback aborted for lead",
+      leadId || recipientEmail,
+      "— ChatGPT timed out and campaignBody is an AI prompt, not a real email. Skipping send to prevent sending raw instructions."
+    );
+    if (chatTabId) {
+      try { await chrome.tabs.remove(chatTabId); } catch (_) {}
+    }
+    return;
+  }
+
   const subject = campaignSubject || "Quick note";
   const body = fillCampaignPlaceholders(campaignBody, data) || "Hi,\n\nBest regards,";
   const customSignature = await getCustomSignatureSetting();
