@@ -35,11 +35,11 @@ export function LeadScheduleButton({ leadId, status }: LeadScheduleButtonProps) 
     const isSent = status.toLowerCase() === "sent";
     if (isSent) return null;
 
-    function getScheduleValue(): string {
+    function getScheduleValue(): string | null {
         if (scheduleDate && scheduleTime) {
             return `${scheduleDate}T${scheduleTime}`;
         }
-        return scheduleTime;
+        return null;
     }
 
     async function handleSchedule() {
@@ -47,9 +47,13 @@ export function LeadScheduleButton({ leadId, status }: LeadScheduleButtonProps) 
             alert("Please select a time to schedule.");
             return;
         }
+        if (!scheduleDate) {
+            alert("Please select a date to schedule.");
+            return;
+        }
         setLoading(true);
         try {
-            const combinedSchedule = getScheduleValue();
+            const combinedSchedule = getScheduleValue()!;
             const result = await sendLead(leadId, combinedSchedule);
             if (result.success) {
                 if (result.type === "redirect") {
