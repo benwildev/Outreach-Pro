@@ -87,15 +87,43 @@
     const templateHasSignature = templateHasSignatureBlock(campaignBodyText);
     const signatureBlock = extractTemplateSignatureBlock(campaignBodyText);
     const campaignSignature = message.campaignSignature || "";
-    runPasteAndSend(
-      message.prompt,
-      recipientName,
-      message.recipientEmail,
-      message.leadId,
-      templateHasSignature,
-      signatureBlock,
-      campaignSignature
-    )
+    const websiteUrl = (message.websiteUrl || "").trim();
+
+    // If the prompt doesn't already contain scraped company context (background.js
+    // may have already injected it), try to enrich it here as a secondary pass.
+    // This is a non-blocking, best-effort call — any failure falls back silently.
+    async function enrichAndRun() {
+      let enrichedPrompt = message.prompt;
+      if (websiteUrl && !enrichedPrompt.includes("Company context")) {
+        try {
+          const resp = await new Promise((resolve) => {
+            chrome.runtime.sendMessage({ action: "scrapeWebsite", url: websiteUrl }, resolve);
+          });
+          if (resp && resp.success && resp.data) {
+            const ctx = resp.data;
+            const parts = [];
+            if (ctx.title)      parts.push("- Business name / page title: " + ctx.title);
+            if (ctx.description) parts.push("- What they do: " + ctx.description);
+            if (ctx.firstPara)  parts.push("- Site excerpt: " + ctx.firstPara);
+            if (parts.length > 0) {
+              enrichedPrompt += "\n\nCompany context (use this to personalise the email — reference something specific):\n" + parts.join("\n");
+              log("ChatGPT", "Injected website context from scrape:", ctx.title || "(no title)");
+            }
+          }
+        } catch (_) { /* non-fatal */ }
+      }
+      return runPasteAndSend(
+        enrichedPrompt,
+        recipientName,
+        message.recipientEmail,
+        message.leadId,
+        templateHasSignature,
+        signatureBlock,
+        campaignSignature
+      );
+    }
+
+    enrichAndRun()
       .then((result) => {
         pendingPrompt = null;
         pendingRecipientEmail = null;

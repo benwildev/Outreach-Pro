@@ -370,6 +370,7 @@ async function handleStartWorkflow(data) {
     campaignId: campaignId,
     campaignBody: data.campaignBody || "",
     campaignSignature: data.campaignSignature || "",
+    websiteUrl: (data.websiteUrl || data.website || "").trim(),
   }, 5, 700);
   if (!sent) {
     console.error("[Leads Extension] Send message to ChatGPT tab failed after retries (tab:", tab.id, ")");
@@ -2063,9 +2064,25 @@ async function scrapeWebsiteContent(url) {
 async function handleGetPopupState() {
   const s = bulkAutomationState;
   let dashboardUrl = "";
+  let repliedCount = null;
+  let todaySentCount = null;
+
   try {
-    dashboardUrl = (await getApiBaseUrl()) + "/dashboard";
-  } catch (_) { /* ignore */ }
+    const base = await getApiBaseUrl();
+    dashboardUrl = base + "/dashboard";
+
+    // Fetch replied count and today's sent count from the server
+    const statsResp = await fetch(base + "/api/popup-stats", {
+      signal: AbortSignal.timeout(4000),
+    });
+    if (statsResp.ok) {
+      const stats = await statsResp.json();
+      repliedCount = stats.repliedCount ?? null;
+      todaySentCount = stats.todaySentCount ?? null;
+    }
+  } catch (_) { /* non-fatal — popup still renders with session data */ }
+
+  const queueRemaining = Math.max(0, (s.total || 0) - (s.processed || 0));
 
   return {
     success: true,
@@ -2076,6 +2093,9 @@ async function handleGetPopupState() {
     failed: s.failed || 0,
     processed: s.processed || 0,
     total: s.total || 0,
+    queueRemaining,
+    repliedCount,
+    todaySentCount,
     dashboardUrl,
   };
 }
