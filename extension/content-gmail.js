@@ -1691,10 +1691,15 @@
     for (let attempt = 0; attempt < 3; attempt++) {
       const dialogRoot = getDialogRoot();
       const inputs = visibleInputsIn(dialogRoot);
+      // Primary: aria-label contains "time"
       const timeInput = inputs.find(inp => {
         const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
         return lbl.includes('time');
-      }) || inputs.find(inp => inp.type === 'text');
+      }) || inputs.find(inp => {
+        // Fallback: first text input whose aria-label does NOT indicate it is a date field
+        const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
+        return inp.type === 'text' && !lbl.includes('date') && inp.type !== 'date';
+      });
 
       if (timeInput) {
         fillInput(timeInput, parsed.gmailTime);
