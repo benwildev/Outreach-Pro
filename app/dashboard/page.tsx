@@ -116,10 +116,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   })) as LeadRow[];
 
   // Get all leads for stats (no pagination)
-  const totalLeads = await prisma.lead.count();
-  const sentLeads = await prisma.lead.count({ where: { status: "sent" } });
-  const repliedLeads = await prisma.lead.count({ where: { status: "replied" } });
-  const pendingLeads = await prisma.lead.count({ where: { status: "pending" } });
+  const [totalLeads, sentLeads, repliedLeads, pendingLeads, bouncedLeads] = await Promise.all([
+    prisma.lead.count(),
+    prisma.lead.count({ where: { status: "sent" } }),
+    prisma.lead.count({ where: { status: "replied" } }),
+    prisma.lead.count({ where: { status: "pending" } }),
+    prisma.lead.count({ where: { status: "bounced" } }),
+  ]);
 
   // Count follow-ups due
   const followupDueLeads = await prisma.lead.findMany({
@@ -156,6 +159,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           sentLeads={sentLeads}
           repliedLeads={repliedLeads}
           pendingLeads={pendingLeads}
+          bouncedLeads={bouncedLeads}
           followupDueCount={followupDueCount}
         />
 
