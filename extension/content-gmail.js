@@ -1610,36 +1610,66 @@
     }
 
     if (isDateTimeDialogOpen()) {
-      log("(v23) Date/time dialog already open — skipping 'Pick date & time' step.");
+      log("(v24) Date/time dialog already open — skipping 'Pick date & time' step.");
     } else {
       // Gmail shows intermediate submenu — find and click "Pick date & time"
       let pickDateClicked = false;
       for (let attempt = 0; attempt < 8; attempt++) {
-        // Strategy 1: role="menuitem" elements containing "pick date" text
-        const menuItems = Array.from(document.querySelectorAll('[role="menuitem"], [role="option"], li'));
-        for (const el of menuItems) {
-          const txt = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-          if (txt.includes("pick date")) {
-            el.click();
-            pickDateClicked = true;
-            log("(v23) Clicked pick date via menuitem/li:", txt.slice(0, 50));
-            break;
+
+        // DIAGNOSTIC: log all visible menus and their items
+        if (attempt === 0) {
+          const allMenus = Array.from(document.querySelectorAll('[role="menu"]'));
+          log("(v24) DIAG menus found:", allMenus.length,
+            allMenus.map(m => `vis=${isVisible(m)} items=${m.querySelectorAll('[role="menuitem"]').length}`).join(" | "));
+          const allItems = Array.from(document.querySelectorAll('[role="menuitem"]'));
+          log("(v24) DIAG all menuitems:", allItems.length,
+            allItems.slice(0, 6).map(el => `"${(el.textContent||"").trim().slice(0,25)}" vis=${isVisible(el)}`).join(" | "));
+        }
+
+        // Strategy 1: last visible menuitem in a visible [role="menu"]
+        // "Pick date & time" is always the last item in Gmail's schedule submenu
+        const visibleMenus = Array.from(document.querySelectorAll('[role="menu"]')).filter(m => isVisible(m));
+        for (const menu of visibleMenus) {
+          const items = Array.from(menu.querySelectorAll('[role="menuitem"]')).filter(el => isVisible(el));
+          if (items.length >= 2) {
+            const lastItem = items[items.length - 1];
+            const lastTxt = (lastItem.textContent || "").trim().toLowerCase();
+            // Only click if the last item looks like a date picker option
+            if (lastTxt.includes("pick") || lastTxt.includes("date") || lastTxt.includes("custom")) {
+              lastItem.click();
+              pickDateClicked = true;
+              log("(v24) Clicked last menuitem in visible menu:", lastTxt.slice(0, 50));
+              break;
+            }
           }
         }
 
         if (!pickDateClicked) {
-          // Strategy 2: walk ALL text nodes and find the one containing "pick date",
-          // then click its closest interactive ancestor (no children.length restriction)
-          const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+          // Strategy 2: any menuitem whose textContent includes "pick date"
+          const allItems = Array.from(document.querySelectorAll('[role="menuitem"]'));
+          for (const el of allItems) {
+            const txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+            if (txt.includes("pick date") || txt.includes("pick a date")) {
+              el.click();
+              pickDateClicked = true;
+              log("(v24) Clicked menuitem by text:", txt.slice(0, 50));
+              break;
+            }
+          }
+        }
+
+        if (!pickDateClicked) {
+          // Strategy 3: TreeWalker to find "pick date" text node then click its ancestor
+          const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_TEXT);
           let node;
           while ((node = walker.nextNode())) {
-            const txt = node.nodeValue.replace(/\s+/g, " ").trim().toLowerCase();
+            const txt = (node.nodeValue || "").replace(/\s+/g, " ").trim().toLowerCase();
             if (txt.includes("pick date")) {
               const el = node.parentElement;
               const clickable = el.closest('[role="menuitem"]') || el.closest('[role="option"]') || el.closest('li') || el;
               clickable.click();
               pickDateClicked = true;
-              log("(v23) Clicked pick date via text node walk:", txt.slice(0, 50));
+              log("(v24) Clicked via text node walk:", txt.slice(0, 50));
               break;
             }
           }
@@ -1647,19 +1677,18 @@
 
         if (pickDateClicked) break;
 
-        // Check if dialog appeared while we were searching
         if (isDateTimeDialogOpen()) {
-          log("(v23) Date/time dialog appeared during search — proceeding.");
+          log("(v24) Date/time dialog appeared during search — proceeding.");
           pickDateClicked = true;
           break;
         }
 
-        log("(v23) Pick date not found yet, retrying... (attempt " + (attempt + 1) + ")");
+        log("(v24) Pick date not found yet, retrying... (attempt " + (attempt + 1) + ")");
         await delay(800);
       }
 
       if (!pickDateClicked) {
-        logError("(v23) Pick date option not found and dialog did not open.");
+        logError("(v24) Pick date option not found and dialog did not open.");
         document.body.click();
         return { success: false, error: "Pick date option not found" };
       }
