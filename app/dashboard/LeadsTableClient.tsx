@@ -164,7 +164,7 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                             <TableHead className="w-[6%] font-semibold text-gray-700">Status</TableHead>
                             <TableHead className="w-[6%] font-semibold text-gray-700" title="Gmail thread ID — captured after send">Thread ID</TableHead>
                             <TableHead className="w-[5%] font-semibold text-gray-700">Mail</TableHead>
-                            <TableHead className="w-[8%] font-semibold text-gray-700" title="Gmail account number used to send (u/0 = 1st account, u/1 = 2nd, etc.)">Gmail Acct</TableHead>
+                            <TableHead className="w-[8%] font-semibold text-gray-700" title="Gmail account used to send this email">Gmail Acct</TableHead>
                             <TableHead className="w-[8%] font-semibold text-gray-700">Sent At</TableHead>
                             <TableHead className="w-[8%] font-semibold text-gray-700">Created At</TableHead>
                             <TableHead className="w-[10%] font-semibold text-gray-700">Actions</TableHead>
@@ -276,8 +276,8 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                             />
                                         </div>
                                     </TableCell>
-                                    <TableCell className="truncate font-mono text-[11px]" title={lead.sentGmailAuthUser ? `Gmail account u/${lead.sentGmailAuthUser}` : "Not captured"}>
-                                        {lead.sentGmailAuthUser ? `u/${lead.sentGmailAuthUser}` : "—"}
+                                    <TableCell className="truncate font-mono text-[11px]" title={lead.sentGmailAuthUser ? `Gmail account: ${lead.sentGmailAuthUser}` : "Not captured"}>
+                                        {lead.sentGmailAuthUser || "—"}
                                     </TableCell>
                                     <TableCell className="truncate text-xs"><ClientDate date={lead.sentAt} /></TableCell>
                                     <TableCell className="truncate text-xs"><ClientDate date={lead.createdAt} /></TableCell>
