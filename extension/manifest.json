@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Leads Dashboard AI Outreach",
-  "version": "1.0.42",
+  "version": "1.0.43",
   "description": "Integrates with Leads Dashboard to generate and send AI-powered cold emails via ChatGPT and Gmail",
   "permissions": [
     "tabs",
@@ -29,7 +29,9 @@
       "16": "icon.png",
       "48": "icon.png",
       "128": "icon.png"
-    }
+    },
+    "default_popup": "popup.html",
+    "default_title": "Benwill Outreach"
   },
   "background": {
     "service_worker": "background.js"

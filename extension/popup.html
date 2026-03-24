@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Benwill Outreach</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      width: 280px;
+      background: #f8fafc;
+      color: #1e293b;
+    }
+
+    .header {
+      background: linear-gradient(135deg, #1d4ed8, #6366f1);
+      padding: 14px 16px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header img { width: 28px; height: 28px; border-radius: 6px; }
+    .header-text { flex: 1; }
+    .header-title { color: #fff; font-size: 14px; font-weight: 700; line-height: 1.2; }
+    .header-sub { color: #c7d2fe; font-size: 10px; margin-top: 2px; }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 99px;
+      font-size: 10px;
+      font-weight: 600;
+      margin: 10px 16px 0;
+    }
+    .status-pill .dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+    }
+    .status-idle    { background: #f1f5f9; color: #64748b; }
+    .status-idle .dot    { background: #94a3b8; }
+    .status-running { background: #dcfce7; color: #15803d; }
+    .status-running .dot { background: #22c55e; animation: pulse 1.2s infinite; }
+    .status-paused  { background: #fef9c3; color: #a16207; }
+    .status-paused .dot  { background: #eab308; }
+    .status-completed { background: #dbeafe; color: #1d4ed8; }
+    .status-completed .dot { background: #3b82f6; }
+    .status-stopped { background: #fee2e2; color: #b91c1c; }
+    .status-stopped .dot { background: #ef4444; }
+    .status-failed  { background: #fee2e2; color: #b91c1c; }
+    .status-failed .dot  { background: #ef4444; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 8px;
+      padding: 10px 16px 8px;
+    }
+    .stat-card {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 8px 6px;
+      text-align: center;
+    }
+    .stat-value { font-size: 20px; font-weight: 700; line-height: 1; }
+    .stat-label { font-size: 9px; color: #64748b; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sent-val   { color: #16a34a; }
+    .failed-val { color: #dc2626; }
+    .total-val  { color: #2563eb; }
+
+    .progress-wrap {
+      padding: 0 16px 10px;
+    }
+    .progress-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+    .progress-bar {
+      height: 5px;
+      background: #e2e8f0;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #6366f1);
+      border-radius: 99px;
+      transition: width 0.4s ease;
+    }
+
+    .divider { border: none; border-top: 1px solid #e2e8f0; margin: 0 16px; }
+
+    .footer {
+      padding: 10px 16px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 8px;
+      border-radius: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      text-align: center;
+      cursor: pointer;
+      border: none;
+      text-decoration: none;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #1d4ed8, #6366f1);
+      color: #fff;
+    }
+    .btn-primary:hover { opacity: 0.92; }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid #e2e8f0;
+      color: #475569;
+    }
+    .btn-ghost:hover { background: #f1f5f9; }
+
+    .error-state {
+      padding: 20px 16px;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <img src="icon.png" alt="Benwill" />
+  <div class="header-text">
+    <div class="header-title">Benwill Outreach</div>
+    <div class="header-sub">AI Cold Email Automation</div>
+  </div>
+</div>
+
+<div id="content">
+  <div class="error-state">Loading…</div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

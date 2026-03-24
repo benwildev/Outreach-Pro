@@ -272,9 +272,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true;
   }
+
+  if (message.action === "getPopupState") {
+    handleGetPopupState()
+      .then(sendResponse)
+      .catch((err) => {
+        sendResponse({ success: false, error: String(err.message) });
+      });
+    return true;
+  }
+
+  if (message.action === "scrapeWebsite") {
+    scrapeWebsiteContent(message.url)
+      .then((result) => sendResponse({ success: true, data: result }))
+      .catch((err) => sendResponse({ success: false, error: String(err.message) }));
+    return true;
+  }
 });
 
 async function handleStartWorkflow(data) {
+  // Scrape the lead's website before building the prompt so the context can
+  // be injected for personalisation. Skipped gracefully if URL is empty/fails.
+  const leadWebsiteUrl = (data.websiteUrl || data.website || "").trim();
+  if (leadWebsiteUrl) {
+    try {
+      const scraped = await scrapeWebsiteContent(leadWebsiteUrl);
+      if (scraped) data.websiteContext = scraped;
+    } catch (_) { /* non-fatal */ }
+  }
   const prompt = buildPrompt(data);
   const campaignId = data && data.campaignId ? String(data.campaignId).trim() : "";
   const campaignChatRaw = data && data.campaignChatId ? String(data.campaignChatId) : "";
@@ -1913,6 +1938,17 @@ function buildPrompt(data) {
   return buildColdOutreachPrompt(data);
 }
 
+function buildWebsiteContextBlock(data) {
+  const ctx = data.websiteContext;
+  if (!ctx) return "";
+  const parts = [];
+  if (ctx.title) parts.push("- Business name / page title: " + ctx.title);
+  if (ctx.description) parts.push("- What they do: " + ctx.description);
+  if (ctx.firstPara) parts.push("- Site excerpt: " + ctx.firstPara);
+  if (parts.length === 0) return "";
+  return "\n\nCompany context (use this to personalise the email — reference something specific):\n" + parts.join("\n");
+}
+
 function buildPromptFromCampaignBody(data, template) {
   const websiteUrl = (data.websiteUrl || data.website || "").trim() || "N/A";
   const niche = (data.niche || "").trim() || "N/A";
@@ -1927,6 +1963,7 @@ function buildPromptFromCampaignBody(data, template) {
     .replace(/\{niche\}/gi, niche);
 
   prompt += "\n\nRecipient Name: " + name + "\nRecipient Email: " + email;
+  prompt += buildWebsiteContextBlock(data);
   prompt += HUMAN_TONE_INSTRUCTION;
   prompt += EMAIL_STRUCTURE_INSTRUCTION;
   prompt += ANTI_AI_PHRASES_INSTRUCTION;
@@ -1944,6 +1981,7 @@ function buildColdOutreachPrompt(data) {
   return (
     "Write a professional cold outreach email.\n\n" +
     "Recipient Name: " + name + "\nRecipient Email: " + email + "\nCampaign: " + campaign + "\nWebsite: " + website + "\nStep: " + step +
+    buildWebsiteContextBlock(data) +
     HUMAN_TONE_INSTRUCTION +
     EMAIL_STRUCTURE_INSTRUCTION +
     ANTI_AI_PHRASES_INSTRUCTION +
@@ -1961,9 +1999,83 @@ function buildGuestPostPrompt(data) {
     "Deeply browse this website: " + websiteUrl + " and write a short and personalized guest post request focusing on " + niche + ".\n\n" +
     "Recipient Name: " + name + "\nRecipient Email: " + email + "\n\n" +
     "Suggest one subject line and 3 content topics; include them in the email. Use bullet points for the topics.\n" +
+    buildWebsiteContextBlock(data) +
     HUMAN_TONE_INSTRUCTION +
     EMAIL_STRUCTURE_INSTRUCTION +
     ANTI_AI_PHRASES_INSTRUCTION +
     "\n\nReturn output EXACTLY in this format:\n\nSubject: <single line subject>\nBody:\n<email body only>"
   );
+}
+
+// ─── Website scraper ──────────────────────────────────────────────────────────
+// Fetches the lead's landing page and extracts title, meta description, and
+// the first meaningful paragraph. Called from handleStartWorkflow before
+// prompt generation. Runs in the service-worker context so fetch() has no CORS
+// restrictions. Returns null on any failure (graceful degradation).
+async function scrapeWebsiteContent(url) {
+  try {
+    if (!url || !/^https?:\/\//i.test(url)) return null;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    let html;
+    try {
+      const resp = await fetch(url, {
+        signal: controller.signal,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; LeadsExtension/1.0)" },
+      });
+      clearTimeout(timer);
+      if (!resp.ok) return null;
+      html = await resp.text();
+    } catch (_) {
+      clearTimeout(timer);
+      return null;
+    }
+
+    // Strip scripts and styles to avoid false matches
+    const stripped = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ");
+
+    // Title
+    const titleMatch = stripped.match(/<title[^>]*>([^<]{1,200})<\/title>/i);
+    const title = titleMatch ? titleMatch[1].trim() : "";
+
+    // Meta description (both attribute orderings)
+    const metaMatch =
+      stripped.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']{1,400})["']/i) ||
+      stripped.match(/<meta[^>]+content=["']([^"']{1,400})["'][^>]+name=["']description["']/i);
+    const description = metaMatch ? metaMatch[1].trim() : "";
+
+    // First body paragraph with meaningful content (30+ chars)
+    const paraMatch = stripped.match(/<p[^>]*>([^<]{30,400})<\/p>/i);
+    const firstPara = paraMatch
+      ? paraMatch[1].replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim()
+      : "";
+
+    if (!title && !description && !firstPara) return null;
+    return { title, description, firstPara };
+  } catch (_) {
+    return null;
+  }
+}
+
+// ─── Popup state helper ───────────────────────────────────────────────────────
+async function handleGetPopupState() {
+  const s = bulkAutomationState;
+  let dashboardUrl = "";
+  try {
+    dashboardUrl = (await getApiBaseUrl()) + "/dashboard";
+  } catch (_) { /* ignore */ }
+
+  return {
+    success: true,
+    status: s.status || "idle",
+    phase: s.phase || "send",
+    sent: s.sent || 0,
+    followups: s.followups || 0,
+    failed: s.failed || 0,
+    processed: s.processed || 0,
+    total: s.total || 0,
+    dashboardUrl,
+  };
 }
