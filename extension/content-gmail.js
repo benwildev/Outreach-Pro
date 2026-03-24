@@ -83,50 +83,59 @@
   }
 
   function getCurrentAccountEmail() {
-    // 1. Try to find the ACTIVE profile button in the header.
-    // The active button usually has aria-label starting with "Google Account:"
-    // and is NOT inside a menu/list (which contains other accounts).
-    const selectors = [
-      'header a[aria-label^="Google Account:"]',
-      'header button[aria-label^="Google Account:"]',
-      '.gb_id a[aria-label^="Google Account:"]', // Older Gmail
-      'a[aria-label^="Google Account:"]',
-      'button[aria-label^="Google Account:"]'
+    // 1. Try any element whose aria-label contains "Google Account:" — works in most Gmail versions.
+    //    Exclude elements inside menus/lists (those are OTHER accounts in the switcher).
+    const ariaSelectors = [
+      'a[aria-label*="Google Account:"]',
+      'button[aria-label*="Google Account:"]',
+      '[aria-label*="Google Account:"]',
     ];
-
-    for (let i = 0; i < selectors.length; i++) {
-      const nodes = document.querySelectorAll(selectors[i]);
-      for (let j = 0; j < nodes.length; j++) {
-        const node = nodes[j];
-        // The active button usually doesn't have role=menuitem or be inside a list of other accounts
-        if (node.closest('li[role="presentation"]') || node.getAttribute('role') === 'menuitem') continue;
-        
-        const ariaLabel = node.getAttribute("aria-label") || "";
-        // Gmail format is "Google Account: Name (email@address.com)"
-        const email = extractEmailFromText(ariaLabel);
+    for (var si = 0; si < ariaSelectors.length; si++) {
+      var nodes = document.querySelectorAll(ariaSelectors[si]);
+      for (var ni = 0; ni < nodes.length; ni++) {
+        var node = nodes[ni];
+        if (node.closest('li[role="presentation"]') || node.getAttribute("role") === "menuitem") continue;
+        var ariaLabel = node.getAttribute("aria-label") || "";
+        var email = extractEmailFromText(ariaLabel);
         if (email) return email;
       }
     }
 
-    // 2. Extra robust check: Scan the scripts for "OGB_X" or similar which often contains the email
-    try {
-      const scripts = document.querySelectorAll('script');
-      for (const s of Array.from(scripts)) {
-        if (s.textContent && s.textContent.includes('["')) {
-          const email = extractEmailFromText(s.textContent);
-          // Only take it if it looks like a real email and isn't too common
-          if (email && email.includes('@') && !email.includes('googlegroups.com')) {
-             // We can't be 100% sure this is THE primary, but it's a good hint
-          }
-        }
-      }
-    } catch(e) {}
+    // 2. data-email attribute (older Gmail / Workspace)
+    var dataEmailNodes = document.querySelectorAll("[data-email]");
+    for (var di = 0; di < dataEmailNodes.length; di++) {
+      var email2 = extractEmailFromText(dataEmailNodes[di].getAttribute("data-email") || "");
+      if (email2) return email2;
+    }
 
-    // 2. Fallback to any node with data-email (less reliable if multiple accounts)
-    const dataEmailNode = document.querySelector('[data-email]');
-    if (dataEmailNode) {
-      const email = extractEmailFromText(dataEmailNode.getAttribute("data-email") || "");
-      if (email) return email;
+    // 3. data-hovercard-id often holds the email address
+    var hoverNodes = document.querySelectorAll("[data-hovercard-id]");
+    for (var hi = 0; hi < hoverNodes.length; hi++) {
+      var hval = hoverNodes[hi].getAttribute("data-hovercard-id") || "";
+      if (hval.includes("@")) return hval.toLowerCase().trim();
+    }
+
+    // 4. Account-management links: accounts.google.com/...Email=user@... or ?Email=user@...
+    var accountLinks = document.querySelectorAll('a[href*="accounts.google.com"]');
+    for (var ai = 0; ai < accountLinks.length; ai++) {
+      var href = accountLinks[ai].getAttribute("href") || "";
+      var em = href.match(/[?&][Ee]mail=([^&#]+)/);
+      if (em) {
+        try {
+          var decoded = decodeURIComponent(em[1]);
+          if (decoded.includes("@")) return decoded.toLowerCase().trim();
+        } catch (_) {}
+      }
+    }
+
+    // 5. Look at any element whose aria-label contains "@" (newer Gmail profile button variants)
+    var anyAria = document.querySelectorAll("[aria-label]");
+    for (var xi = 0; xi < anyAria.length; xi++) {
+      var al = anyAria[xi].getAttribute("aria-label") || "";
+      if (al.includes("@") && !al.toLowerCase().includes("search") && !al.toLowerCase().includes("compose")) {
+        var em2 = extractEmailFromText(al);
+        if (em2) return em2;
+      }
     }
 
     return "";
