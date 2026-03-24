@@ -1655,15 +1655,24 @@
       input.blur();
     }
 
-    const allVisibleInputs = Array.from(document.querySelectorAll('input')).filter(isVisible);
+    // Scope input searches to the active modal/dialog so we don't accidentally
+    // hit unrelated inputs (e.g. the Gmail search bar) on the page.
+    function getDialogRoot() {
+      return document.querySelector('[role="dialog"][aria-modal="true"], [role="dialog"]') || document;
+    }
+
+    function visibleInputsIn(root) {
+      return Array.from(root.querySelectorAll('input')).filter(isVisible);
+    }
 
     // Fill the DATE field first (if we have a date to set)
     if (parsed.gmailDate) {
-      const dateInput = allVisibleInputs.find(inp => {
+      const dialogRoot = getDialogRoot();
+      const dialogInputs = visibleInputsIn(dialogRoot);
+      const dateInput = dialogInputs.find(inp => {
         const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
         return lbl.includes('date') && !lbl.includes('time');
-      }) || allVisibleInputs.find(inp => {
-        // Fallback: find the first visible text/date input that isn't the time field
+      }) || dialogInputs.find(inp => {
         const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
         return !lbl.includes('time') && (inp.type === 'text' || inp.type === 'date');
       });
@@ -1680,7 +1689,8 @@
     // Fill the TIME field
     let timeInputFilled = false;
     for (let attempt = 0; attempt < 3; attempt++) {
-      const inputs = Array.from(document.querySelectorAll('input')).filter(isVisible);
+      const dialogRoot = getDialogRoot();
+      const inputs = visibleInputsIn(dialogRoot);
       const timeInput = inputs.find(inp => {
         const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
         return lbl.includes('time');
