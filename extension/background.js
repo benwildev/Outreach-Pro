@@ -28,8 +28,8 @@ const ANTI_AI_PHRASES_INSTRUCTION =
   "- genuinely helps your audience\n" +
   "- well researched guest article";
 
-// Reliability-first mode: keep automation tabs active so ChatGPT/Gmail UIs initialize fully.
-const RUN_TABS_IN_BACKGROUND = false;
+// Run ChatGPT and Gmail tabs in the background so the user stays on the dashboard.
+const RUN_TABS_IN_BACKGROUND = true;
 const REPLY_CHECK_ALARM = "dailyReplyCheck";
 const REPLY_CHECK_PERIOD_MINUTES = 24 * 60;
 const CHATGPT_HANDOFF_TIMEOUT_MS = 90000;
@@ -410,12 +410,16 @@ async function handleChatGptDone(data, chatTabId) {
   }, 7, 900);
   console.log("[Leads Extension] handleChatGptDone - scheduleSendTime sent to Gmail:", pending && pending.data && pending.data.scheduleSendTime ? pending.data.scheduleSendTime : "(NONE)");
   if (!sentToGmail) {
-    console.warn("[Leads Extension] Initial Gmail handoff failed, forcing active tab retry:", tab.id);
-    try {
-      await chrome.tabs.update(tab.id, { active: true });
-      await delay(1200);
-    } catch (_) {
-      // Ignore and retry anyway.
+    console.warn("[Leads Extension] Initial Gmail handoff failed, retrying:", tab.id);
+    if (!RUN_TABS_IN_BACKGROUND) {
+      try {
+        await chrome.tabs.update(tab.id, { active: true });
+        await delay(1200);
+      } catch (_) {
+        // Ignore and retry anyway.
+      }
+    } else {
+      await delay(2000);
     }
     sentToGmail = await sendMessageToTabWithRetry(tab.id, {
       action: "fillAndSend",
@@ -431,7 +435,7 @@ async function handleChatGptDone(data, chatTabId) {
         autoSend: true,
         scheduleSendTime: pending && pending.data && pending.data.scheduleSendTime ? pending.data.scheduleSendTime : "",
       },
-    }, 10, 1000);
+    }, 10, 1200);
     if (!sentToGmail) {
       console.error("[Leads Extension] Send message to Gmail tab failed after active retry (tab:", tab.id, ")");
     }
@@ -1393,12 +1397,16 @@ async function openGmailFromFallback(data, chatTabId) {
   }, 7, 900);
 
   if (!sentToGmail) {
-    console.warn("[Leads Extension] Fallback Gmail handoff failed, forcing active tab retry:", tab.id);
-    try {
-      await chrome.tabs.update(tab.id, { active: true });
-      await delay(1200);
-    } catch (_) {
-      // Ignore and retry anyway.
+    console.warn("[Leads Extension] Fallback Gmail handoff failed, retrying:", tab.id);
+    if (!RUN_TABS_IN_BACKGROUND) {
+      try {
+        await chrome.tabs.update(tab.id, { active: true });
+        await delay(1200);
+      } catch (_) {
+        // Ignore and retry anyway.
+      }
+    } else {
+      await delay(2000);
     }
     sentToGmail = await sendMessageToTabWithRetry(tab.id, {
       action: "fillAndSend",
@@ -1414,7 +1422,7 @@ async function openGmailFromFallback(data, chatTabId) {
         autoSend: true,
         scheduleSendTime: data.scheduleSendTime || "",
       },
-    }, 10, 1000);
+    }, 10, 1200);
     if (!sentToGmail) {
       console.error("[Leads Extension] Fallback Gmail handoff failed after active retry (tab:", tab.id, ")");
     }
@@ -1858,7 +1866,7 @@ async function sendMessageToTabWithRetry(tabId, payload, retries, delayMs) {
       return true;
     } catch (err) {
       lastError = err;
-      if (i === Math.floor(attempts / 2)) {
+      if (!RUN_TABS_IN_BACKGROUND && i === Math.floor(attempts / 2)) {
         try {
           await chrome.tabs.update(tabId, { active: true });
         } catch (_) {
