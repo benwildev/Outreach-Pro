@@ -80,6 +80,7 @@ export async function sendFollowup(leadId: string): Promise<SendFollowupResult> 
       subject: followUpSubject,
       body,
       html: trackedBody,
+      authUser: lead.sentGmailAuthUser || (campaign.gmailAuthUser ?? "").split(",")[0].trim() || "0",
       ...(useGmailApi && lead.gmailThreadId
         ? { threadId: lead.gmailThreadId }
         : {}),

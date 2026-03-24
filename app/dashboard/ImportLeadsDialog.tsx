@@ -85,6 +85,28 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
               className="cursor-pointer"
             />
           </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="import-start-row">Start Row (optional)</Label>
+              <Input
+                id="import-start-row"
+                name="startRow"
+                type="number"
+                min="2"
+                placeholder="e.g. 200"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="import-end-row">End Row (optional)</Label>
+              <Input
+                id="import-end-row"
+                name="endRow"
+                type="number"
+                min="2"
+                placeholder="e.g. 2050"
+              />
+            </div>
+          </div>
           {message && (
             <p
               className={`text-sm ${message.type === "success" ? "text-green-600 dark:text-green-400" : "text-destructive"}`}

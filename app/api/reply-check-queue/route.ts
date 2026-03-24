@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
@@ -19,15 +21,15 @@ export async function GET(request: Request) {
       include: {
         campaign: true,
       },
-      orderBy: [{ sentAt: "desc" }, { createdAt: "desc" }],
-      take: limit,
+      orderBy: [{ sentAt: "asc" }, { createdAt: "asc" }],
+      take: 100,
     });
 
     const normalizedLeads = leads.map((lead) => ({
       id: lead.id,
       recipientEmail: lead.recipientEmail,
       gmailThreadId: lead.gmailThreadId,
-      campaignGmailAuthUser: lead.campaign?.gmailAuthUser ?? "",
+      campaignGmailAuthUser: lead.sentGmailAuthUser || (lead.campaign?.gmailAuthUser ?? "").split(",")[0].trim() || "",
     }));
 
     return NextResponse.json({

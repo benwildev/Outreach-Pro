@@ -8,6 +8,7 @@
 
   const SCRIPT_VERSION = "gmail-content-2026-03-04-auth-lock-v16";
   const LOG_PREFIX = "[Gmail Extension]";
+  const API_BASE_URL = "https://automation.benwil.store";
   let LAST_KNOWN_SIGNATURE_HTML = "";
 
   function log() {
@@ -74,42 +75,88 @@
   }
 
   function getCurrentAccountEmail() {
+    // 1. Try to find the ACTIVE profile button in the header.
+    // The active button usually has aria-label starting with "Google Account:"
+    // and is NOT inside a menu/list (which contains other accounts).
     const selectors = [
-      'a[aria-label*="Google Account"][aria-label*="@"]',
-      'button[aria-label*="Google Account"][aria-label*="@"]',
-      'a[href*="SignOutOptions"][aria-label*="@"]',
-      '[data-email]'
+      'header a[aria-label^="Google Account:"]',
+      'header button[aria-label^="Google Account:"]',
+      '.gb_id a[aria-label^="Google Account:"]', // Older Gmail
+      'a[aria-label^="Google Account:"]',
+      'button[aria-label^="Google Account:"]'
     ];
 
     for (let i = 0; i < selectors.length; i++) {
       const nodes = document.querySelectorAll(selectors[i]);
       for (let j = 0; j < nodes.length; j++) {
         const node = nodes[j];
-        const emailFromData = extractEmailFromText(node.getAttribute("data-email") || "");
-        if (emailFromData) return emailFromData;
-        const emailFromAria = extractEmailFromText(node.getAttribute("aria-label") || "");
-        if (emailFromAria) return emailFromAria;
-        const emailFromText = extractEmailFromText(node.textContent || "");
-        if (emailFromText) return emailFromText;
+        // The active button usually doesn't have role=menuitem or be inside a list of other accounts
+        if (node.closest('li[role="presentation"]') || node.getAttribute('role') === 'menuitem') continue;
+        
+        const ariaLabel = node.getAttribute("aria-label") || "";
+        // Gmail format is "Google Account: Name (email@address.com)"
+        const email = extractEmailFromText(ariaLabel);
+        if (email) return email;
       }
+    }
+
+    // 2. Extra robust check: Scan the scripts for "OGB_X" or similar which often contains the email
+    try {
+      const scripts = document.querySelectorAll('script');
+      for (const s of Array.from(scripts)) {
+        if (s.textContent && s.textContent.includes('["')) {
+          const email = extractEmailFromText(s.textContent);
+          // Only take it if it looks like a real email and isn't too common
+          if (email && email.includes('@') && !email.includes('googlegroups.com')) {
+             // We can't be 100% sure this is THE primary, but it's a good hint
+          }
+        }
+      }
+    } catch(e) {}
+
+    // 2. Fallback to any node with data-email (less reliable if multiple accounts)
+    const dataEmailNode = document.querySelector('[data-email]');
+    if (dataEmailNode) {
+      const email = extractEmailFromText(dataEmailNode.getAttribute("data-email") || "");
+      if (email) return email;
     }
 
     return "";
   }
 
-  function getSenderIdentityForStorage() {
-    const email = getCurrentAccountEmail();
-    if (email) return email;
-    return getCurrentAuthUser() || "";
+  function resolveSenderIdentity(expected) {
+    // 1. Prefer URL-based identity if it's already an email (most reliable)
+    const authFromUrl = getCurrentAuthUser();
+    if (authFromUrl && authFromUrl.includes("@")) {
+      return authFromUrl.toLowerCase().trim();
+    }
+
+    // 2. Otherwise try to find it in the UI
+    const emailFromUI = getCurrentAccountEmail();
+    if (emailFromUI) return emailFromUI.toLowerCase().trim();
+
+    // 3. Last fallback: use expected email if valid
+    if (expected && String(expected).includes("@")) {
+      return String(expected).toLowerCase().trim();
+    }
+
+    return authFromUrl || expected || "0";
+  }
+
+  function getSenderIdentityForStorage(expected) {
+    return resolveSenderIdentity(expected);
   }
 
   function normalizeAuthUser(value) {
-    return String(value || "").trim();
+    return String(value || "").trim().toLowerCase();
   }
 
   function getGmailBaseUrl(authUser) {
     const user = normalizeAuthUser(authUser) || "0";
-    return "https://mail.google.com/mail/u/" + encodeURIComponent(user);
+    // Gmail handles the @ symbol raw in /u/ URLs better than %40.
+    // CRITICAL: A trailing slash is required to prevent redirects to /u/0 when using emails/indices.
+    const encoded = encodeURIComponent(user).replace(/%40/g, "@");
+    return "https://mail.google.com/mail/u/" + encoded + "/";
   }
 
   function isExpectedAuthUser(currentAuthUser, expectedAuthUser) {
@@ -118,7 +165,12 @@
       return true;
     }
     const current = normalizeAuthUser(currentAuthUser);
-    return !!current && current === expected;
+    // If both are emails, compare case-insensitively (normalizeAuthUser does toLowerCase)
+    if (expected.includes("@") && current.includes("@")) {
+      return current === expected;
+    }
+    // Fallback for index-based comparisons
+    return current === expected;
   }
 
   function getComposeRoots(doc) {
@@ -2167,6 +2219,24 @@
     return Array.from(emails);
   }
 
+  function isBounceSender(email) {
+    const e = String(email || "").toLowerCase();
+    return e === "mailer-daemon@googlemail.com" || e.indexOf("mailer-daemon") !== -1 || e.indexOf("postmaster") !== -1;
+  }
+
+  function hasBounceIndicators() {
+    const text = (document.body && document.body.innerText) || "";
+    // Common Gmail bounce indicators
+    const patterns = [
+      /Address not found/i,
+      /Message not delivered/i,
+      /Delivery Status Notification \(Failure\)/i,
+      /The response from the remote server was/i,
+      /couldn't be found\. Check for typos/i
+    ];
+    return patterns.some(p => p.test(text));
+  }
+
   function extractThreadReplyBody(recipientEmail) {
     const expected = normalizeEmailValue(recipientEmail);
     const messageNodes = document.querySelectorAll(".adn");
@@ -2179,7 +2249,10 @@
       const senderEmail = (senderEl.getAttribute("email") || senderEl.getAttribute("data-hovercard-id") || "").trim().toLowerCase();
       const normalizedSender = normalizeEmailValue(senderEmail);
 
-      if (normalizedSender === expected || normalizedSender.indexOf(expected) !== -1) {
+      const recipients = recipientEmail.split(",").map(e => normalizeEmailValue(e)).filter(e => !!e);
+      const isMatch = recipients.some(r => normalizedSender === r || normalizedSender.includes(r));
+
+      if (isMatch) {
         // Find the actual message payload inside this sender's block
         const bodyEl = node.querySelector(".ii.gt, .a3s.aiL");
         if (bodyEl) {
@@ -2203,20 +2276,28 @@
     while (Date.now() - start < timeout) {
       const senders = getThreadSenderEmails();
       if (senders.length > 0) {
+        // Check for bounce first
+        const bounced = senders.some(isBounceSender) || hasBounceIndicators();
+        if (bounced) {
+          log("Bounce detected in thread for:", recipientEmail);
+          return { replied: false, bounced: true, senders: senders };
+        }
+
+        const recipients = recipientEmail.split(",").map(e => normalizeEmailValue(e)).filter(e => !!e);
         const matched = senders.some(function (sender) {
           const s = normalizeEmailValue(sender);
-          return s === expected || s.indexOf(expected) !== -1;
+          return recipients.some(r => s === r || s.includes(r));
         });
 
         if (matched) {
           const replyBody = extractThreadReplyBody(recipientEmail);
-          return { replied: true, senders: senders, replyBody: replyBody };
+          return { replied: true, bounced: false, senders: senders, replyBody: replyBody };
         }
       }
       await delay(600);
     }
 
-    return { replied: false, senders: getThreadSenderEmails() };
+    return { replied: false, bounced: false, senders: getThreadSenderEmails() };
   }
 
   async function checkThreadReply(data) {
@@ -2224,7 +2305,7 @@
     const recipientEmail = String((data && data.recipientEmail) || "").trim().toLowerCase();
 
     if (!threadId || !recipientEmail) {
-      return { replied: false, senders: [], replyBody: null };
+      return { replied: false, bounced: false, senders: [], replyBody: null };
     }
 
     const currentHash = (window.location.hash || "").replace(/^#+/, "");
@@ -2235,7 +2316,7 @@
 
     const text = (document.body && document.body.innerText) || "";
     if (/conversation that you requested no longer exists/i.test(text)) {
-      return { replied: false, senders: [], replyBody: null };
+      return { replied: false, bounced: false, senders: [], replyBody: null };
     }
 
     const result = await waitForRecipientSender(recipientEmail, 16000);
@@ -2508,9 +2589,14 @@
 
   async function closeCurrentAutomationTab() {
     try {
+      log("Requesting tab closure");
+      // Kill beforeunload prompt
+      if (typeof window !== "undefined") {
+        window.onbeforeunload = null;
+      }
       await chrome.runtime.sendMessage({ action: "closeCurrentTab" });
     } catch (_) {
-      // Ignore.
+      try { window.close(); } catch(__) {}
     }
   }
 
@@ -2532,31 +2618,73 @@
 
     log("Starting fill and send", isFollowup ? "(follow-up)" : "", openReply ? "(reply in thread)" : "");
 
-    await delay(openReply ? 2500 : 1500);
+    // Wait longer for Gmail to settle redirects and render the profile button
+    // Increased to 6s for slow loads
+    await delay(openReply ? 6000 : 3500);
 
     let currentAuthUser = getCurrentAuthUser();
-    if (!isExpectedAuthUser(currentAuthUser, expectedGmailAuthUser)) {
-      log("Authuser mismatch detected, redirecting to expected account:", currentAuthUser, "->", expectedGmailAuthUser);
-      const hash = window.location.hash || "";
-      window.location.href = gmailBaseUrl + (hash || "/#inbox");
-      await delay(4200);
-      currentAuthUser = getCurrentAuthUser();
+    let currentAccountEmail = getCurrentAccountEmail();
+
+    // MATCHING STRATEGY (DEFINITIVE):
+    // 1. If we are at a non-zero numeric index (u/1, u/2, etc.) -> PROCEED.
+    //    Gmail automatically maps u/email/ to u/N/. If we are at N > 0, we trust Gmail got it right.
+    // 2. If we are at u/0 -> We only redirect if we have NOT already tried redirecting in this session.
+    // 3. If we are already at u/email@... -> PROCEED (it will likely redirect itself soon).
+
+    const urlIsEmail = currentAuthUser.includes("@");
+    const urlIsZero = (currentAuthUser === "0");
+    const urlIsNonZeroIndex = !urlIsEmail && !urlIsZero && currentAuthUser !== "";
+
+    let shouldRedirect = false;
+    let redirectReason = "";
+
+    if (urlIsZero && expectedGmailAuthUser !== "0" && expectedGmailAuthUser !== "") {
+      shouldRedirect = true;
+      redirectReason = "At u/0 but expected specific account";
     }
 
-    if (!isExpectedAuthUser(currentAuthUser, expectedGmailAuthUser)) {
-      logError("Blocked send: Gmail account mismatch. Expected authuser:", expectedGmailAuthUser, "Current:", currentAuthUser || "(none)");
+    // If we have UI email, and it SPECIFICALLY mismatches (double check)
+    if (currentAccountEmail && !isExpectedAuthUser(currentAccountEmail, expectedGmailAuthUser)) {
+       // Only redirect if we are at u/0 or if we are at a DIFFERENT email URL
+       if (urlIsZero || urlIsEmail) {
+         shouldRedirect = true;
+         redirectReason = "UI Email mismatch (" + currentAccountEmail + " vs " + expectedGmailAuthUser + ")";
+       }
+    }
+
+    // ANTI-LOOP CHECK: Have we already tried to redirect this specific lead in this tab session?
+    const redirectKey = "redirect_tried_" + leadId;
+    if (shouldRedirect && sessionStorage.getItem(redirectKey)) {
+      log("Already tried redirecting for this lead. Aborting redirect to avoid loop.");
+      shouldRedirect = false;
+    }
+
+    if (shouldRedirect) {
+      log("Redirecting:", redirectReason, "To:", expectedGmailAuthUser);
+      sessionStorage.setItem(redirectKey, "true");
+      
+      const hash = window.location.hash || "";
+      // CRITICAL: Prevent encodes of @ symbols in the /u/ section!
+      const encodedAccount = encodeURIComponent(expectedGmailAuthUser).replace(/%40/g, "@");
+      const targetUrl = "https://mail.google.com/mail/u/" + encodedAccount + "/" + (hash || "#inbox");
+      
+      log("Executing redirect to:", targetUrl);
+      window.location.href = targetUrl;
       return;
     }
 
+    log("Session verified or trusted. Current URL Auth:", currentAuthUser, "UI Email:", currentAccountEmail || "unknown", "Proceeding.");
+
     function hasConversationNoLongerExistsError() {
       const text = (document.body && document.body.innerText) || "";
-      return /conversation that you requested no longer exists/i.test(text);
+      return /conversation that you requested no longer exists/i.test(text) ||
+        /conversation that you requested could not be loaded/i.test(text);
     }
 
     if (openReply) {
       if (hasConversationNoLongerExistsError()) {
         log("Thread not found (conversation no longer exists); opening new compose");
-        const composeUrl = gmailBaseUrl + "/#inbox?compose=new" +
+        const composeUrl = gmailBaseUrl + "#inbox?compose=new" +
           "&to=" + encodeURIComponent(to || "") +
           "&su=" + encodeURIComponent(subject || "");
         window.location.href = composeUrl;
@@ -2713,14 +2841,12 @@
     }
 
     if (isFollowup) {
-      log("Validating follow-up eligibility with backend before sending...");
+      log("Validating follow-up eligibility with background before sending...");
       try {
-        const validateUrl = API_BASE_URL + "/api/validate-followup?leadId=" + encodeURIComponent(leadId);
-        const res = await fetch(validateUrl);
-        const resData = await res.json();
+        const resData = await chrome.runtime.sendMessage({ action: "validateFollowup", data: { leadId } });
 
-        if (!res.ok || !resData.success || !resData.eligible) {
-          logError("Pre-send validation failed. Lead is no longer eligible for a follow-up:", resData.error || "Already Followed Up / Replied");
+        if (!resData || !resData.success || !resData.eligible) {
+          logError("Pre-send validation failed. Lead is no longer eligible for a follow-up:", (resData && resData.error) || "Already Followed Up / Replied");
           try {
             await chrome.runtime.sendMessage({ action: "sendScheduleError", data: { email: data.to, error: "Follow-up no longer eligible (already sent or replied)" } });
           } catch (e) { }
@@ -2729,7 +2855,7 @@
         }
         log("Lead validation passed. Eligible for follow-up.");
       } catch (err) {
-        logError("Failed to reach pre-send validation API, proceeding anyway:", err.message);
+        logError("Failed to reach pre-send validation via background, proceeding anyway:", err.message);
       }
 
       // Safeguard: Check if we are accidentally replying to a mail-daemon or postmaster bounce email
@@ -2831,7 +2957,7 @@
 
     if (isFollowup && leadId) {
       try {
-        const sentAuthUser = getSenderIdentityForStorage();
+        const sentAuthUser = getSenderIdentityForStorage(expectedGmailAuthUser);
         const response = await chrome.runtime.sendMessage({
           action: "updateFollowup",
           data: { leadId: leadId, sentGmailAuthUser: sentAuthUser || "" },
@@ -2845,7 +2971,9 @@
         logError("updateFollowup error:", e.message);
       }
       log("Follow-up send flow completed");
-      log("Keeping follow-up Gmail tab open to avoid beforeunload close prompt");
+      // Wait 3s to let Gmail settle and avoid beforeunload prompt
+      await delay(3000);
+      await closeCurrentAutomationTab();
       return;
     }
 
@@ -2875,7 +3003,7 @@
     }
 
     if (leadId) {
-      await updateLead(leadId, to, subject, body, threadId, getSenderIdentityForStorage());
+      await updateLead(leadId, to, subject, body, threadId, getSenderIdentityForStorage(expectedGmailAuthUser));
     }
 
     log("Manual send flow completed");

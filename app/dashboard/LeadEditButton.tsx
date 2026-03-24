@@ -14,6 +14,9 @@ type Lead = {
   websiteUrl: string | null;
   niche: string | null;
   campaignId: string;
+  status: string;
+  step: number;
+  replied: boolean;
 };
 
 export function LeadEditButton({

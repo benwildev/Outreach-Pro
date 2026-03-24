@@ -8,49 +8,50 @@ datasource db {
 }
 
 model Campaign {
-  id          String   @id @default(cuid())
-  name        String
-  subject     String
-  body        String
+  id            String   @id @default(cuid())
+  name          String
+  subject       String
+  body          String
   chatGptChatId String?
   gmailAuthUser String?
-  followup1   String?
-  followup2   String?
-  signature   String?
-  delay1Days  Int      @default(3)
-  delay2Days  Int      @default(5)
-  provider    String   @default("gmail")
-  createdAt   DateTime @default(now())
-  leads       Lead[]
+  followup1     String?
+  followup2     String?
+  signature     String?
+  delay1Days    Int      @default(3)
+  delay2Days    Int      @default(5)
+  provider      String   @default("gmail")
+  createdAt     DateTime @default(now())
+  webhookUrl    String?
+  leads         Lead[]
 
   @@map("campaign")
 }
 
 model Lead {
-  id              String    @id @default(cuid())
-  campaignId      String
-  campaign        Campaign  @relation(fields: [campaignId], references: [id])
-  recipientName   String
-  recipientEmail  String
-  websiteUrl     String?
-  niche          String?
-  status         String    @default("pending")
-  step            Int       @default(1)
-  replied         Boolean   @default(false)
-  sentAt          DateTime?
+  id                String    @id @default(cuid())
+  campaignId        String
+  recipientName     String
+  recipientEmail    String
+  websiteUrl        String?
+  niche             String?
+  status            String    @default("pending")
+  step              Int       @default(1)
+  replied           Boolean   @default(false)
+  sentAt            DateTime?
   sentGmailAuthUser String?
-  sentSubject     String?   // Subject line that was actually sent (captured from extension)
-  sentBody        String?   // Email body that was actually sent (captured from extension)
+  sentSubject       String?
+  sentBody          String?
+  nextFollowup      DateTime?
+  gmailThreadId     String?
+  opened            Boolean   @default(false)
+  openedAt          DateTime?
+  clicked           Boolean   @default(false)
+  clickedAt         DateTime?
+  createdAt         DateTime  @default(now())
+  replyBody         String?
   sentFollowup1Body String?
   sentFollowup2Body String?
-  replyBody       String?
-  nextFollowup    DateTime?
-  gmailThreadId   String?   // Set when sending via Gmail API; used for reply-in-thread and reply detection
-  opened          Boolean   @default(false)
-  openedAt       DateTime?
-  clicked         Boolean   @default(false)
-  clickedAt      DateTime?
-  createdAt       DateTime  @default(now())
-  
+  campaign          Campaign  @relation(fields: [campaignId], references: [id])
+
   @@map("lead")
 }

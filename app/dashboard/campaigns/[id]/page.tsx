@@ -120,6 +120,15 @@ export default async function CampaignEditorPage({
                 className="resize-none"
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="webhookUrl">Webhook URL (optional)</Label>
+              <Input
+                id="webhookUrl"
+                name="webhookUrl"
+                defaultValue={campaign.webhookUrl ?? ""}
+                placeholder="Google Apps Script or Make.com webhook to sync sent data"
+              />
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="delay1Days">Delay 1 (days, 0 = due immediately for testing)</Label>

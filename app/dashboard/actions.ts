@@ -14,8 +14,8 @@ export async function createLead(formData: FormData) {
   const websiteUrl = trim(formData.get("websiteUrl") as string | null) || null;
   const niche = trim(formData.get("niche") as string | null) || null;
 
-  if (!campaignId || !recipientName || !recipientEmail) {
-    throw new Error("Campaign, recipient name, and recipient email are required.");
+  if (!campaignId || !recipientEmail) {
+    throw new Error("Campaign and recipient email are required.");
   }
 
   const campaign = await prisma.campaign.findUnique({ where: { id: campaignId } });
@@ -44,8 +44,8 @@ export async function updateLead(leadId: string, formData: FormData) {
   const niche = trim(formData.get("niche") as string | null) || null;
 
   if (!leadId) throw new Error("Lead ID is required.");
-  if (!campaignId || !recipientName || !recipientEmail) {
-    throw new Error("Campaign, recipient name, and recipient email are required.");
+  if (!campaignId || !recipientEmail) {
+    throw new Error("Campaign and recipient email are required.");
   }
 
   const campaign = await prisma.campaign.findUnique({ where: { id: campaignId } });
@@ -53,6 +53,10 @@ export async function updateLead(leadId: string, formData: FormData) {
 
   const existing = await prisma.lead.findUnique({ where: { id: leadId } });
   if (!existing) throw new Error("Lead not found.");
+
+  const status = trim(formData.get("status") as string | null) || existing.status;
+  const step = Number.parseInt(formData.get("step") as string || String(existing.step), 10);
+  const replied = formData.get("replied") === "true";
 
   await prisma.lead.update({
     where: { id: leadId },
@@ -62,6 +66,10 @@ export async function updateLead(leadId: string, formData: FormData) {
       recipientEmail,
       websiteUrl: websiteUrl || undefined,
       niche: niche || undefined,
+      status,
+      step: isNaN(step) ? existing.step : step,
+      replied,
+      ...(status === "replied" || replied ? { nextFollowup: null } : {}),
     },
   });
 

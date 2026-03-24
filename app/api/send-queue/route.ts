@@ -45,25 +45,38 @@ export async function GET(request: Request) {
       },
     });
 
-    const queue = leads.map((lead) => ({
-      leadId: lead.id,
-      campaignId: lead.campaignId,
-      campaignName: lead.campaign.name,
-      campaignChatId: lead.campaign.chatGptChatId ?? "",
-      campaignGmailAuthUser: lead.campaign.gmailAuthUser ?? "",
-      gmailThreadId: lead.gmailThreadId ?? "",
-      recipientName: lead.recipientName,
-      recipientEmail: lead.recipientEmail,
-      websiteUrl: lead.websiteUrl ?? "",
-      website: lead.websiteUrl ?? "",
-      niche: lead.niche ?? "",
-      step: lead.step,
-      campaignBody: lead.campaign.body ?? "",
-      campaignSubject: lead.campaign.subject ?? "",
-      followup1: lead.campaign.followup1 ?? "",
-      followup2: lead.campaign.followup2 ?? "",
-      campaignSignature: lead.campaign.signature ?? "",
-    }));
+    const queue = leads.map((lead, index) => {
+      const authUserRaw = lead.campaign.gmailAuthUser ?? "";
+      const accounts = authUserRaw.split(",").map((s) => s.trim()).filter(Boolean);
+      
+      // Rotate through accounts if multiple are provided
+      let selectedAuthUser = authUserRaw;
+      if (accounts.length > 1) {
+        selectedAuthUser = accounts[index % accounts.length];
+      } else if (accounts.length === 1) {
+        selectedAuthUser = accounts[0];
+      }
+
+      return {
+        leadId: lead.id,
+        campaignId: lead.campaignId,
+        campaignName: lead.campaign.name,
+        campaignChatId: lead.campaign.chatGptChatId ?? "",
+        campaignGmailAuthUser: selectedAuthUser || "",
+        gmailThreadId: lead.gmailThreadId ?? "",
+        recipientName: lead.recipientName,
+        recipientEmail: lead.recipientEmail,
+        websiteUrl: lead.websiteUrl ?? "",
+        website: lead.websiteUrl ?? "",
+        niche: lead.niche ?? "",
+        step: lead.step,
+        campaignBody: lead.campaign.body ?? "",
+        campaignSubject: lead.campaign.subject ?? "",
+        followup1: lead.campaign.followup1 ?? "",
+        followup2: lead.campaign.followup2 ?? "",
+        campaignSignature: lead.campaign.signature ?? "",
+      };
+    });
 
     return NextResponse.json({
       success: true,

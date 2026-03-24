@@ -8,6 +8,8 @@ export type SendEmailOptions = {
   html?: string;
   /** When set and provider is gmail_api, the message is sent as a reply in this thread. */
   threadId?: string;
+  /** Gmail auth user index or email address */
+  authUser?: string | null;
 };
 
 export type SendEmailResult =
@@ -15,11 +17,18 @@ export type SendEmailResult =
   | { type: "success"; threadId?: string };
 
 export async function sendEmail(options: SendEmailOptions): Promise<SendEmailResult> {
-  const { provider, to, subject, body, html } = options;
+  const { provider, to, subject, body, html, authUser } = options;
   const content = html ?? body;
+  const emailList = to.split(",").map((e) => e.trim()).filter(Boolean);
+  const primaryRecipient = emailList[0] || "";
+  const ccRecipients = emailList.slice(1).join(",");
 
   if (provider === "gmail_manual" || provider === "gmail") {
-    const url = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(to)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(content)}`;
+    const userPart = authUser ? `u/${encodeURIComponent(authUser).replace(/%40/g, "@")}/` : "";
+    let url = `https://mail.google.com/mail/${userPart}?view=cm&fs=1&to=${encodeURIComponent(primaryRecipient)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(content)}`;
+    if (ccRecipients) {
+      url += `&cc=${encodeURIComponent(ccRecipients)}`;
+    }
     return { type: "redirect", url };
   }
 
@@ -42,7 +51,8 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
 
     await transport.sendMail({
       from: user,
-      to,
+      to: primaryRecipient,
+      cc: ccRecipients || undefined,
       subject,
       text: body,
       ...(html ? { html } : {}),

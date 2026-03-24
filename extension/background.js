@@ -216,8 +216,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true;
   }
+  if (message.action === "validateFollowup") {
+    handleValidateFollowup(message.data)
+      .then(sendResponse)
+      .catch((err) => {
+        console.error("[Leads Extension Background]", err);
+        sendResponse({ success: false, error: String(err.message) });
+      });
+    return true;
+  }
   if (message.action === "getBulkAutomationState") {
     handleGetBulkAutomationState()
+      .then(sendResponse)
+      .catch((err) => {
+        console.error("[Leads Extension Background]", err);
+        sendResponse({ success: false, error: String(err.message) });
+      });
+    return true;
+  }
+  if (message.action === "triggerReplySweep") {
+    runDailyReplySweep("manual")
+      .then(sendResponse)
+      .catch((err) => {
+        console.error("[Leads Extension Background]", err);
+        sendResponse({ success: false, error: String(err.message) });
+      });
+    return true;
+  }
+  if (message.action === "chatgptLoadError") {
+    handleChatGptLoadError(message.data, sender.tab?.id)
       .then(sendResponse)
       .catch((err) => {
         console.error("[Leads Extension Background]", err);
@@ -296,6 +323,7 @@ async function handleStartWorkflow(data) {
     recipientName: data.recipientName,
     recipientEmail: data.recipientEmail,
     leadId: data.leadId,
+    campaignId: campaignId,
     campaignBody: data.campaignBody || "",
     campaignSignature: data.campaignSignature || "",
   }, 5, 700);
@@ -410,6 +438,11 @@ function normalizeGmailAuthUser(value) {
   const raw = String(value || "").trim();
   if (!raw) return "0";
 
+  // If it's already an email, return it (Gmail URLs support /u/email@gmail.com)
+  if (raw.includes("@")) {
+    return raw;
+  }
+
   if (/^https?:\/\//i.test(raw)) {
     try {
       const parsed = new URL(raw);
@@ -431,7 +464,10 @@ function normalizeGmailAuthUser(value) {
 
 function getGmailBaseUrl(authUserValue) {
   const authUser = normalizeGmailAuthUser(authUserValue);
-  return "https://mail.google.com/mail/u/" + encodeURIComponent(authUser);
+  // Gmail handles the @ symbol raw in /u/ URLs better than %40.
+  // CRITICAL: A trailing slash after the email/index is required to prevent redirects to /u/0.
+  const encoded = encodeURIComponent(authUser).replace(/%40/g, "@");
+  return "https://mail.google.com/mail/u/" + encoded + "/";
 }
 
 function normalizeChatGptUrl(rawUrl) {
@@ -541,6 +577,30 @@ async function setCampaignChatUrl(campaignId, chatUrl) {
   map[key] = normalized;
   await chrome.storage.local.set({ [CAMPAIGN_CHAT_URLS_KEY]: map });
   return { success: true, campaignId: key, chatUrl: normalized };
+}
+
+async function deleteCampaignChatUrl(campaignId) {
+  const key = String(campaignId || "").trim();
+  if (!key) return { success: false, error: "campaignId is required" };
+  const stored = await chrome.storage.local.get({ [CAMPAIGN_CHAT_URLS_KEY]: {} });
+  const map = stored && typeof stored[CAMPAIGN_CHAT_URLS_KEY] === "object" && stored[CAMPAIGN_CHAT_URLS_KEY]
+    ? stored[CAMPAIGN_CHAT_URLS_KEY]
+    : {};
+  delete map[key];
+  await chrome.storage.local.set({ [CAMPAIGN_CHAT_URLS_KEY]: map });
+  return { success: true, campaignId: key };
+}
+
+async function handleChatGptLoadError(data, tabId) {
+  const campaignId = data && data.campaignId ? String(data.campaignId).trim() : "";
+  if (campaignId) {
+    await deleteCampaignChatUrl(campaignId);
+    console.log("[Leads Extension] Cleared ChatGPT mapping for campaign due to load error:", campaignId);
+  }
+  if (tabId) {
+    chrome.tabs.update(tabId, { url: CHATGPT_DEFAULT_URL }).catch(() => { });
+  }
+  return { success: true };
 }
 
 async function captureCampaignChatUrlFromTab(campaignId, tabId) {
@@ -1307,13 +1367,14 @@ async function handleStartFollowupWorkflow(data) {
   const tid = threadId ? String(threadId).trim().replace(/^#+/, "") : "";
   if (tid) {
     // Try opening the thread first (works with alphanumeric ID; numeric may show "no longer exists").
-    gmailUrl = gmailBaseUrl + "/#sent/" + tid;
+    // Use the base URL which already has a trailing slash.
+    gmailUrl = gmailBaseUrl + "#all/" + tid;
     openReply = true;
   } else {
     // No thread ID: open new compose (e.g. first email was sent outside extension)
     const encodedTo = encodeURIComponent(to || "");
     const encodedSu = encodeURIComponent(subject || "");
-    gmailUrl = gmailBaseUrl + "/#inbox?compose=new&to=" + encodedTo + "&su=" + encodedSu;
+    gmailUrl = gmailBaseUrl + "#inbox?compose=new&to=" + encodedTo + "&su=" + encodedSu;
   }
   const tab = await chrome.tabs.create({ url: gmailUrl, active: !RUN_TABS_IN_BACKGROUND });
   await waitForTabReady(tab.id);
@@ -1463,7 +1524,7 @@ async function handleCheckReplyByThread(data) {
   }
 
   const gmailBaseUrl = getGmailBaseUrl(campaignGmailAuthUser);
-  const gmailUrl = gmailBaseUrl + "/#all/" + encodeURIComponent(threadId);
+  const gmailUrl = gmailBaseUrl + "#all/" + encodeURIComponent(threadId);
   const tab = await chrome.tabs.create({ url: gmailUrl, active: !RUN_TABS_IN_BACKGROUND });
   await waitForTabReady(tab.id);
   await delay(2200);
@@ -1489,6 +1550,10 @@ async function handleCheckReplyByThread(data) {
 
   if (response.replied && leadId) {
     await handleMarkLeadReplied({ leadId: leadId, replyBody: response.replyBody || null });
+  }
+
+  if (response.bounced && leadId) {
+    await handleMarkLeadBounced({ leadId: leadId });
   }
 
   return {
@@ -1517,6 +1582,36 @@ async function handleMarkLeadReplied(data) {
     const errorMessage =
       (result && (result.error || result.message)) ||
       "Update replied failed with status " + response.status;
+    throw new Error(errorMessage);
+  }
+
+  const updatedLead = result && result.lead ? result.lead : null;
+  if (updatedLead) {
+    notifyDashboardTabs(updatedLead);
+  }
+
+  return { success: true, data: result };
+}
+
+async function handleMarkLeadBounced(data) {
+  const baseUrl = API_BASE_URL;
+  const response = await fetch(baseUrl + "/api/update-bounced", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data || {}),
+  });
+
+  let result = null;
+  try {
+    result = await response.json();
+  } catch (_) {
+    result = null;
+  }
+
+  if (!response.ok) {
+    const errorMessage =
+      (result && (result.error || result.message)) ||
+      "Update bounced failed with status " + response.status;
     throw new Error(errorMessage);
   }
 
@@ -1582,12 +1677,29 @@ async function handleUpdateFollowup(data) {
   }
 
   const updatedLead = result && result.lead ? result.lead : null;
-  if (updatedLead) {
-    resolveBulkWorkflowCompletion(updatedLead.id, { success: true, lead: updatedLead, type: "followup" });
-    notifyDashboardTabs(updatedLead);
+  const leadId = (data && data.leadId) ? String(data.leadId).trim() : (updatedLead && updatedLead.id ? String(updatedLead.id) : "");
+  if (leadId) {
+    resolveBulkWorkflowCompletion(leadId, { success: true, lead: updatedLead, type: "followup" });
+    if (updatedLead) {
+      notifyDashboardTabs(updatedLead);
+    }
   }
 
   return { success: true, data: result };
+}
+
+async function handleValidateFollowup(data) {
+  const leadId = data && data.leadId;
+  if (!leadId) throw new Error("Missing leadId for validation");
+
+  const response = await fetch(API_BASE_URL + "/api/validate-followup?leadId=" + encodeURIComponent(leadId));
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw new Error(result.error || "Validation failed");
+  }
+
+  return result;
 }
 
 async function handleUpdateLeadStatus(data) {
@@ -1612,9 +1724,12 @@ async function handleUpdateLeadStatus(data) {
   }
 
   const updatedLead = result && result.lead ? result.lead : null;
-  if (updatedLead) {
-    resolveBulkWorkflowCompletion(updatedLead.id, { success: true, lead: updatedLead, type: "send" });
-    notifyDashboardTabs(updatedLead);
+  const leadId = (data && data.leadId) ? String(data.leadId).trim() : (updatedLead && updatedLead.id ? String(updatedLead.id) : "");
+  if (leadId) {
+    resolveBulkWorkflowCompletion(leadId, { success: true, lead: updatedLead, type: "send" });
+    if (updatedLead) {
+      notifyDashboardTabs(updatedLead);
+    }
   }
 
   return { success: true, data: result };

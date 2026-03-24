@@ -70,6 +70,27 @@ export async function POST(request: Request) {
       },
     });
 
+    // Trigger webhook if present and email was actually sent
+    if (targetStatus === "sent" && lead.campaign?.webhookUrl) {
+      try {
+        await fetch(lead.campaign.webhookUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: lead.recipientEmail,
+            account: sentGmailAuthUser || "SMTP",
+            date: now.toISOString(),
+            status: targetStatus,
+            isFollowup: false,
+          }),
+        });
+        console.log(`[Webhook] Successfully triggered webhook for ${lead.recipientEmail}`);
+      } catch (webhookError) {
+        console.error(`[Webhook] Failed to trigger webhook for ${lead.recipientEmail}:`, webhookError);
+        // Continue even if webhook fails (we still successfully updated our DB)
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: "Lead marked as sent with email details",

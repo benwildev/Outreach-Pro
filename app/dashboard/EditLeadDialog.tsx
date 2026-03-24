@@ -23,6 +23,9 @@ type Lead = {
   websiteUrl: string | null;
   niche: string | null;
   campaignId: string;
+  status: string;
+  step: number;
+  replied: boolean;
 };
 
 export function EditLeadDialog({
@@ -47,6 +50,9 @@ export function EditLeadDialog({
       (formRef.current.elements.namedItem("campaignId") as HTMLSelectElement).value = lead.campaignId;
       (formRef.current.elements.namedItem("websiteUrl") as HTMLInputElement).value = lead.websiteUrl ?? "";
       (formRef.current.elements.namedItem("niche") as HTMLInputElement).value = lead.niche ?? "";
+      (formRef.current.elements.namedItem("status") as HTMLSelectElement).value = lead.status;
+      (formRef.current.elements.namedItem("step") as HTMLInputElement).value = String(lead.step);
+      (formRef.current.elements.namedItem("replied") as HTMLInputElement).checked = lead.replied;
     }
   }, [open, lead]);
 
@@ -86,12 +92,11 @@ export function EditLeadDialog({
             </select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="edit-recipientName">Recipient Name (required)</Label>
+            <Label htmlFor="edit-recipientName">Recipient Name (optional)</Label>
             <Input
               id="edit-recipientName"
               name="recipientName"
               placeholder="John Doe"
-              required
               defaultValue={lead.recipientName}
             />
           </div>
@@ -101,6 +106,7 @@ export function EditLeadDialog({
               id="edit-recipientEmail"
               name="recipientEmail"
               type="email"
+              multiple
               placeholder="john@example.com"
               required
               defaultValue={lead.recipientEmail}
@@ -111,8 +117,8 @@ export function EditLeadDialog({
             <Input
               id="edit-websiteUrl"
               name="websiteUrl"
-              type="url"
-              placeholder="https://example.com"
+              type="text"
+              placeholder="example.com"
               defaultValue={lead.websiteUrl ?? ""}
             />
           </div>
@@ -124,6 +130,46 @@ export function EditLeadDialog({
               placeholder="e.g. marketing, SaaS, real estate"
               defaultValue={lead.niche ?? ""}
             />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-status">Status</Label>
+              <select
+                id="edit-status"
+                name="status"
+                defaultValue={lead.status}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="pending">Pending</option>
+                <option value="sent">Sent</option>
+                <option value="replied">Replied</option>
+                <option value="bounced">Bounced</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-step">Step (1-3)</Label>
+              <Input
+                id="edit-step"
+                name="step"
+                type="number"
+                min="1"
+                max="3"
+                defaultValue={lead.step}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <input
+              id="edit-replied"
+              name="replied"
+              type="checkbox"
+              value="true"
+              defaultChecked={lead.replied}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <Label htmlFor="edit-replied">Mark as Replied</Label>
           </div>
           <DialogFooter>
             <Button

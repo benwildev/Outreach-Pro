@@ -135,6 +135,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
   const [scheduleTime, setScheduleTime] = useState("");
   const [state, setState] = useState<BulkState>({});
   const [error, setError] = useState("");
+  const [isCheckingReplies, setIsCheckingReplies] = useState(false);
   const [hasRuntime, setHasRuntime] = useState(false);
 
   useEffect(() => {
@@ -253,6 +254,23 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
     }
   }
 
+  async function handleManualReplyCheck() {
+    setIsCheckingReplies(true);
+    setError("");
+    try {
+      const response = await sendRuntimeMessage({ action: "triggerReplySweep" });
+      if (response?.success) {
+        alert(`Reply check completed: checked ${response.checked || 0}, marked ${response.marked || 0} as replied.`);
+      } else {
+        setError(response?.error || "Failed to trigger reply check");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to trigger reply check");
+    } finally {
+      setIsCheckingReplies(false);
+    }
+  }
+
   const statusValue = String(state.status || "idle").toLowerCase();
   const isActive =
     statusValue === "running" ||
@@ -285,8 +303,9 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
             type="number"
             min={5}
             max={600}
-            value={delayMinSeconds}
-            onChange={(e) => setDelayMinSeconds(clamp(Number.parseInt(e.target.value || "45", 10) || 45, 5, 600))}
+            value={delayMinSeconds || ""}
+            onChange={(e) => setDelayMinSeconds(e.target.value ? Number.parseInt(e.target.value, 10) : 0)}
+            onBlur={() => setDelayMinSeconds(clamp(delayMinSeconds, 5, 600))}
             className="h-8 w-20 rounded border bg-white px-2 text-xs"
           />
         </label>
@@ -296,8 +315,9 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
             type="number"
             min={5}
             max={600}
-            value={delayMaxSeconds}
-            onChange={(e) => setDelayMaxSeconds(clamp(Number.parseInt(e.target.value || "45", 10) || 45, 5, 600))}
+            value={delayMaxSeconds || ""}
+            onChange={(e) => setDelayMaxSeconds(e.target.value ? Number.parseInt(e.target.value, 10) : 0)}
+            onBlur={() => setDelayMaxSeconds(clamp(delayMaxSeconds, 5, 600))}
             className="h-8 w-20 rounded border bg-white px-2 text-xs"
           />
         </label>
@@ -307,8 +327,9 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
             type="number"
             min={1}
             max={500}
-            value={limit}
-            onChange={(e) => setLimit(clamp(Number.parseInt(e.target.value || "50", 10) || 50, 1, 500))}
+            value={limit || ""}
+            onChange={(e) => setLimit(e.target.value ? Number.parseInt(e.target.value, 10) : 0)}
+            onBlur={() => setLimit(clamp(limit, 1, 500))}
             className="h-8 w-20 rounded border bg-white px-2 text-xs"
           />
         </label>
@@ -339,6 +360,16 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("pause")} disabled={!(statusValue === "running" || statusValue === "waiting-window")}>Pause</Button>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("resume")} disabled={statusValue !== "paused"}>Resume</Button>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("stop")} disabled={!isActive || statusValue === "stopping"}>Stop</Button>
+        <div className="w-px h-6 bg-blue-200 mx-1"></div>
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-8 px-3 text-xs bg-white hover:bg-slate-50 border-blue-200 text-blue-700"
+          onClick={handleManualReplyCheck}
+          disabled={isActive || isCheckingReplies || !hasRuntime}
+        >
+          {isCheckingReplies ? "Checking..." : "Check Replies"}
+        </Button>
         <div className="flex-1"></div>
         <Button
           type="button"

@@ -7,6 +7,7 @@ export async function GET(request: Request) {
     try {
         const url = new URL(request.url);
         const leadId = url.searchParams.get("leadId");
+        console.log(`/api/validate-followup request for leadId: ${leadId}`);
 
         if (!leadId) {
             return NextResponse.json({ error: "Missing leadId" }, { status: 400 });
@@ -25,6 +26,7 @@ export async function GET(request: Request) {
         });
 
         if (!lead) {
+            console.error(`/api/validate-followup: Lead not found: ${leadId}`);
             return NextResponse.json({ error: "Lead not found" }, { status: 404 });
         }
 
@@ -33,6 +35,8 @@ export async function GET(request: Request) {
         const now = new Date();
         const isDue = lead.nextFollowup ? new Date(lead.nextFollowup) <= now : false;
         const isEligibleForFollowup = lead.status === "sent" && !lead.replied && lead.step < 3 && isDue;
+
+        console.log(`/api/validate-followup result for ${leadId}: eligible=${isEligibleForFollowup}, status=${lead.status}, step=${lead.step}, replied=${lead.replied}, isDue=${isDue}`);
 
         return NextResponse.json({
             success: true,

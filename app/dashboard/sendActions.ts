@@ -46,6 +46,7 @@ export async function sendLead(leadId: string): Promise<SendLeadResult> {
       subject: campaign.subject,
       body: campaign.body,
       html: trackedBody,
+      authUser: (campaign.gmailAuthUser ?? "").split(",")[0].trim() || "0",
     });
   } catch (err) {
     return {

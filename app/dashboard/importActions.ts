@@ -22,17 +22,22 @@ function rowToLead(
   websiteUrl?: string | null;
   niche?: string | null;
 } | null {
-  const recipientName = getCell(row, "Recipient Name", "recipientName");
-  const recipientEmail = getCell(row, "Recipient Email", "recipientEmail");
-  const websiteUrl = getCell(row, "Website URL", "websiteUrl", "Website") || null;
+  const recipientName = getCell(row, "Recipient Name", "recipientName", "Name", "Name ");
+  const email1 = getCell(row, "Recipient Email", "recipientEmail", "Email");
+  const email2 = getCell(row, "Contact us", "Secondary Email") || null;
+  const websiteUrl = getCell(row, "Website URL", "websiteUrl", "Website", "Root Domain", "Target Sites", "Extracted Websites from Competitors \nListed on A Column") || null;
   const niche = getCell(row, "Niche", "niche") || null;
 
-  if (!recipientEmail) return null;
+  if (!email1 && !email2) return null;
+
+  const primaryEmail = email1 || email2;
+  const secondaryEmail = (email1 && email2 && email1 !== email2) ? email2 : null;
+  const recipientEmail = secondaryEmail ? `${primaryEmail},${secondaryEmail}` : primaryEmail;
 
   return {
     campaignId,
     recipientName: recipientName || "", // Don't fallback to email
-    recipientEmail,
+    recipientEmail: recipientEmail as string,
     websiteUrl: websiteUrl || undefined,
     niche: niche || undefined,
   };
@@ -70,13 +75,41 @@ export async function importLeads(formData: FormData): Promise<ImportResult> {
     return { success: false, error: "Invalid or unsupported file format." };
   }
 
-  const firstSheetName = workbook.SheetNames[0];
-  if (!firstSheetName) {
+  const startRowStr = formData.get("startRow");
+  const endRowStr = formData.get("endRow");
+
+  let startRow = 2; // Default excel start row (row 2, index 0 in sheetRows)
+  if (startRowStr && typeof startRowStr === "string" && startRowStr.trim()) {
+    const parsed = parseInt(startRowStr.trim(), 10);
+    if (!isNaN(parsed) && parsed >= 2) startRow = parsed;
+  }
+
+  let endRow = Infinity;
+  if (endRowStr && typeof endRowStr === "string" && endRowStr.trim()) {
+    const parsed = parseInt(endRowStr.trim(), 10);
+    if (!isNaN(parsed) && parsed >= 2) endRow = parsed;
+  }
+
+  if (startRow > endRow) {
+    const temp = startRow;
+    startRow = endRow;
+    endRow = temp;
+  }
+
+  if (workbook.SheetNames.length === 0) {
     return { success: false, error: "No sheets found in file." };
   }
 
-  const sheet = workbook.Sheets[firstSheetName];
-  const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+  let rows: Record<string, unknown>[] = [];
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    const sheetRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+
+    const startIndex = startRow - 2;
+    const endIndex = endRow === Infinity ? undefined : endRow - 1;
+
+    rows = rows.concat(sheetRows.slice(startIndex, endIndex));
+  }
 
   const toInsert: Array<{
     campaignId: string;
@@ -86,10 +119,46 @@ export async function importLeads(formData: FormData): Promise<ImportResult> {
     niche?: string | null;
   }> = [];
 
+  const existingLeads = await prisma.lead.findMany({
+    where: { campaignId: campaignId.trim() },
+    select: { recipientEmail: true },
+  });
+
+  const existingEmails = new Set(
+    existingLeads.map(l => l.recipientEmail.split(',')[0].trim().toLowerCase())
+  );
+  const existingDomains = new Set(
+    existingLeads
+      .map(l => l.recipientEmail.split(',')[0].trim().toLowerCase().split('@')[1]?.trim())
+      .filter(Boolean)
+  );
+
+  const seenEmailsInSheet = new Set<string>();
+  const seenDomainsInSheet = new Set<string>();
+  const PUBLIC_DOMAINS = new Set([
+    'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com',
+    'icloud.com', 'aol.com', 'ymail.com', 'live.com', 'msn.com'
+  ]);
+
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
     const lead = rowToLead(row, campaignId.trim());
-    if (lead) toInsert.push(lead);
+    if (lead) {
+      const primaryEmailLower = lead.recipientEmail.split(',')[0].trim().toLowerCase();
+      const domainLower = primaryEmailLower.split('@')[1]?.trim() || '';
+      const isPublic = PUBLIC_DOMAINS.has(domainLower);
+
+      const isDuplicateEmail = existingEmails.has(primaryEmailLower) || seenEmailsInSheet.has(primaryEmailLower);
+      const isDuplicateDomain = !isPublic && domainLower ? (existingDomains.has(domainLower) || seenDomainsInSheet.has(domainLower)) : false;
+
+      if (!isDuplicateEmail && !isDuplicateDomain) {
+        toInsert.push(lead);
+        seenEmailsInSheet.add(primaryEmailLower);
+        if (domainLower && !isPublic) {
+          seenDomainsInSheet.add(domainLower);
+        }
+      }
+    }
   }
 
   if (toInsert.length === 0) {

@@ -65,7 +65,7 @@ export async function GET(request: Request) {
           campaignId: lead.campaignId,
           campaignName: lead.campaign.name,
           campaignChatId: lead.campaign.chatGptChatId ?? "",
-          campaignGmailAuthUser: lead.campaign.gmailAuthUser ?? "",
+          campaignGmailAuthUser: lead.sentGmailAuthUser || (lead.campaign.gmailAuthUser ?? "").split(",")[0].trim() || "",
           gmailThreadId: lead.gmailThreadId ?? "",
           recipientName: lead.recipientName,
           recipientEmail: lead.recipientEmail,

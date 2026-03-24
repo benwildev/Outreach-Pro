@@ -193,6 +193,7 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                     data-followup2={lead.campaign.followup2 ?? ""}
                                     data-campaign-signature={lead.campaign.signature ?? ""}
                                     data-gmail-thread-id={lead.gmailThreadId ?? ""}
+                                    data-sent-gmail-auth-user={lead.sentGmailAuthUser ?? ""}
                                     className={`border-b border-gray-100 transition-colors duration-150 ${selectedIds.has(lead.id) ? 'bg-blue-50/50 hover:bg-blue-50' : 'hover:bg-slate-50'}`}
                                     onClick={(e) => {
                                         // Ignore clicks on buttons/links
@@ -254,7 +255,7 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                     <TableCell className="truncate text-xs font-mono" title={lead.gmailThreadId ?? undefined}>
                                         {lead.gmailThreadId ? (
                                             <a
-                                                href={`https://mail.google.com/mail/u/${lead.sentGmailAuthUser || 0}/#all/${lead.gmailThreadId}`}
+                                                href={`https://mail.google.com/mail/u/${(lead.sentGmailAuthUser || "0").replace(/@/g, "%40").replace(/%40/g, "@")}/#all/${encodeURIComponent(lead.gmailThreadId)}`}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
                                                 className="text-blue-600 hover:text-blue-800 hover:underline"
@@ -304,6 +305,9 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                                     websiteUrl: lead.websiteUrl,
                                                     niche: lead.niche,
                                                     campaignId: lead.campaign.id,
+                                                    status: lead.status,
+                                                    step: lead.step,
+                                                    replied: lead.replied,
                                                 }}
                                                 campaigns={campaigns}
                                             />

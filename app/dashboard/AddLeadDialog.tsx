@@ -56,12 +56,11 @@ export function AddLeadDialog({ campaigns }: { campaigns: Campaign[] }) {
             </select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="recipientName">Recipient Name (required)</Label>
+            <Label htmlFor="recipientName">Recipient Name (optional)</Label>
             <Input
               id="recipientName"
               name="recipientName"
               placeholder="John Doe"
-              required
             />
           </div>
           <div className="space-y-2">
@@ -70,6 +69,7 @@ export function AddLeadDialog({ campaigns }: { campaigns: Campaign[] }) {
               id="recipientEmail"
               name="recipientEmail"
               type="email"
+              multiple
               placeholder="john@example.com"
               required
             />
@@ -79,8 +79,8 @@ export function AddLeadDialog({ campaigns }: { campaigns: Campaign[] }) {
             <Input
               id="websiteUrl"
               name="websiteUrl"
-              type="url"
-              placeholder="https://example.com"
+              type="text"
+              placeholder="example.com"
             />
           </div>
           <div className="space-y-2">

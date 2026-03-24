@@ -19,6 +19,18 @@
   let pendingPrompt = null;
   let pendingRecipientEmail = null;
   let pendingLeadId = null;
+  let pendingCampaignId = null;
+  let alreadyReportedError = false;
+
+  function checkForLoadingError() {
+    const text = document.body.innerText || "";
+    if (text.includes("The conversation that you requested could not be loaded") ||
+      text.includes("Conversation not found") ||
+      text.includes("There was an error generating a response") && document.querySelectorAll('.markdown').length === 0) {
+      return true;
+    }
+    return false;
+  }
 
   function isPromptEchoText(text) {
     const value = String(text || "").toLowerCase();
@@ -69,6 +81,8 @@
     const recipientName = message.recipientName;
     pendingRecipientEmail = message.recipientEmail;
     pendingLeadId = message.leadId;
+    pendingCampaignId = message.campaignId;
+    alreadyReportedError = false;
     const campaignBodyText = message.campaignBody || "";
     const templateHasSignature = templateHasSignatureBlock(campaignBodyText);
     const signatureBlock = extractTemplateSignatureBlock(campaignBodyText);
@@ -232,6 +246,17 @@
       if (found) return resolve(found);
       const end = Date.now() + timeoutMs;
       const t = setInterval(() => {
+        if (checkForLoadingError() && !alreadyReportedError) {
+          alreadyReportedError = true;
+          logError("ChatGPT", "Detected loading error, notifying background");
+          chrome.runtime.sendMessage({
+            action: "chatgptLoadError",
+            data: { campaignId: pendingCampaignId, leadId: pendingLeadId }
+          }).catch(() => { });
+          clearInterval(t);
+          resolve(null);
+          return;
+        }
         const el = tryFind();
         if (el) {
           clearInterval(t);
