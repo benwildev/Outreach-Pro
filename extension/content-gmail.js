@@ -1773,13 +1773,31 @@
       return Array.from(root.querySelectorAll('input')).filter(isVisible);
     }
 
-    // Verify the date picker dialog actually opened before filling
-    const datePickerRoot = getDatePickerRoot();
+    // Wait for the date picker dialog to fully open (retry up to 6s)
+    let datePickerRoot = null;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      datePickerRoot = getDatePickerRoot();
+      if (datePickerRoot) { log("(v28) Date picker ready on attempt", attempt + 1); break; }
+      // Also check: any visible inputs that aren't compose fields (broader fallback)
+      if (!datePickerRoot) {
+        const allInputs = Array.from(document.querySelectorAll('input')).filter(isVisible);
+        const nonComposeInputs = allInputs.filter(inp =>
+          !COMPOSE_FIELDS.some(w => (inp.getAttribute('aria-label') || '').toLowerCase().includes(w))
+        );
+        if (nonComposeInputs.length > 0) {
+          // Found non-compose inputs — use their closest dialog or document as root
+          datePickerRoot = nonComposeInputs[0].closest('[role="dialog"]') || document;
+          log("(v28) Date picker found via input scan attempt", attempt + 1);
+          break;
+        }
+      }
+      log("(v28) Waiting for date picker dialog... attempt", attempt + 1);
+      await delay(500);
+    }
     if (!datePickerRoot) {
-      logError("(v26) Date picker dialog did not open — cannot fill date/time.");
+      logError("(v28) Date picker dialog did not open after 4s.");
       return { success: false, error: "Date picker dialog not found" };
     }
-    log("(v26) Date picker dialog confirmed open.");
 
     // Fill the DATE field first (if we have a date to set)
     if (parsed.gmailDate) {
