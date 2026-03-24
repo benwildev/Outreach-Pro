@@ -30,7 +30,10 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
   const [hasRuntime, setHasRuntime] = useState(false);
 
   useEffect(() => {
-    setLimit(clamp(readStorageInt(K_SCHED_LIMIT, 50), 1, 500));
+    // Fall back to the automation limit if scheduling limit has never been saved
+    const schedLimitRaw = typeof window !== "undefined" ? window.localStorage.getItem(K_SCHED_LIMIT) : null;
+    const fallbackLimit = schedLimitRaw !== null ? readStorageInt(K_SCHED_LIMIT, 50) : readStorageInt("leadsExtensionBulkLimit", 50);
+    setLimit(clamp(fallbackLimit, 1, 500));
     if (typeof window !== "undefined") {
       const saved = window.localStorage.getItem(K_SCHEDULE_TIME) || "";
       if (saved.includes("T")) {

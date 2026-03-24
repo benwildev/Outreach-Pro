@@ -2,8 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { deletePendingLeads } from "./actions";
-import { Trash2 } from "lucide-react";
 import {
   BulkState,
   clamp,
@@ -34,7 +32,6 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
   const [windowEnd, setWindowEnd] = useState("18:00");
   const [state, setState] = useState<BulkState>({});
   const [error, setError] = useState("");
-  const [isCheckingReplies, setIsCheckingReplies] = useState(false);
   const [hasRuntime, setHasRuntime] = useState(false);
 
   useEffect(() => {
@@ -142,23 +139,6 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
     }
   }
 
-  async function handleManualReplyCheck() {
-    setIsCheckingReplies(true);
-    setError("");
-    try {
-      const response = await sendRuntimeMessage({ action: "triggerReplySweep" });
-      if (response?.success) {
-        alert(`Reply check completed: checked ${response.checked || 0}, marked ${response.marked || 0} as replied.`);
-      } else {
-        setError(response?.error || "Failed to trigger reply check");
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to trigger reply check");
-    } finally {
-      setIsCheckingReplies(false);
-    }
-  }
-
   const statusValue = String(state.status || "idle").toLowerCase();
   const isActive =
     statusValue === "running" ||
@@ -233,32 +213,6 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("pause")} disabled={!(statusValue === "running" || statusValue === "waiting-window")}>Pause</Button>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("resume")} disabled={statusValue !== "paused"}>Resume</Button>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("stop")} disabled={!isActive || statusValue === "stopping"}>Stop</Button>
-        <div className="w-px h-6 bg-blue-200 mx-1" />
-        <Button
-          type="button"
-          variant="secondary"
-          className="h-8 px-3 text-xs bg-white hover:bg-slate-50 border-blue-200 text-blue-700"
-          onClick={handleManualReplyCheck}
-          disabled={isActive || isCheckingReplies || !hasRuntime}
-        >
-          {isCheckingReplies ? "Checking..." : "Check Replies"}
-        </Button>
-        <div className="flex-1" />
-        <Button
-          type="button"
-          variant="ghost"
-          className="h-8 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 gap-1"
-          onClick={async () => {
-            if (window.confirm("Are you sure you want to delete ALL pending leads for this campaign? This cannot be undone.")) {
-              await deletePendingLeads(currentCampaignId);
-              window.location.reload();
-            }
-          }}
-          disabled={isActive}
-        >
-          <Trash2 className="w-3 h-3" />
-          Clear Pending Leads
-        </Button>
       </div>
       <div className="mt-2 text-slate-700">Status: {formatStatus(state.status)} • Phase: {state.phase || "send"}</div>
       <div className="text-slate-600">{progressText}</div>
