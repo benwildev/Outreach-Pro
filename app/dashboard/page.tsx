@@ -26,15 +26,14 @@ import { LeadCheckReplyButton } from "./LeadCheckReplyButton";
 import { LeadEditButton } from "./LeadEditButton";
 import { LeadDeleteButton } from "./LeadDeleteButton";
 import { LeadMessagePreviewButton } from "./LeadMessagePreviewButton";
-import { DashboardTabs } from "./DashboardTabs";
 import { ClientDate } from "./ClientDate";
 import { Badge } from "@/components/ui/badge";
-import { CampaignFilter } from "./CampaignFilter";
 import { StatsCards } from "./StatsCards";
 import { BulkAutomationPanel } from "./BulkAutomationPanel";
 import { BulkSchedulePanel } from "./BulkSchedulePanel";
 import { BulkActionsRow } from "./BulkActionsRow";
 import { LeadsTableClient } from "./LeadsTableClient";
+import { AdvancedFilters } from "./AdvancedFilters";
 import { Settings } from "lucide-react";
 
 const VALID_STATUSES = ["pending", "sent", "replied"] as const;
@@ -81,7 +80,14 @@ function getStepLabel(lead: { status: string; step: number; replied?: boolean })
 }
 
 interface DashboardPageProps {
-  searchParams: { status?: string; filter?: string; campaign?: string };
+  searchParams: {
+    status?: string;
+    filter?: string;
+    campaign?: string;
+    email?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  };
 }
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
@@ -92,6 +98,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       : null;
   const filter = searchParams.filter ?? null;
   const campaignId = searchParams.campaign ?? null;
+  const emailSearch = searchParams.email?.trim() ?? null;
+  const dateFrom = searchParams.dateFrom ?? null;
+  const dateTo = searchParams.dateTo ?? null;
 
   const campaigns = await prisma.campaign.findMany({
     orderBy: { name: "asc" },
@@ -100,12 +109,25 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   const isFollowUpDueFilter = filter === "followup-due";
   const where: Prisma.LeadWhereInput = {};
+
   if (campaignId) where.campaignId = campaignId;
+
   if (isFollowUpDueFilter) {
     where.status = "sent";
     where.nextFollowup = { lte: new Date() };
   } else if (status) {
     where.status = status;
+  }
+
+  if (emailSearch) {
+    where.email = { contains: emailSearch, mode: "insensitive" };
+  }
+
+  if (dateFrom || dateTo) {
+    const sentAtFilter: Prisma.DateTimeNullableFilter = {};
+    if (dateFrom) sentAtFilter.gte = new Date(dateFrom + "T00:00:00");
+    if (dateTo) sentAtFilter.lte = new Date(dateTo + "T23:59:59");
+    where.sentAt = sentAtFilter;
   }
 
   const leads = (await prisma.lead.findMany({
@@ -167,16 +189,19 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
         {/* Main Content Card */}
         <Card className="border-0 shadow-lg">
-          <CardHeader className="border-b border-gray-100 bg-gradient-to-r from-slate-50 to-blue-50">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <CardTitle className="text-xl">Leads List</CardTitle>
-              <div className="flex flex-col md:flex-row gap-3">
-                <DashboardTabs currentStatus={status} filter={filter} />
-                <CampaignFilter campaigns={campaigns} currentCampaignId={campaignId} />
-              </div>
-            </div>
+          <CardHeader className="border-b border-gray-100 bg-gradient-to-r from-slate-50 to-blue-50 pb-3">
+            <CardTitle className="text-xl">Leads List</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
+            <AdvancedFilters
+              campaigns={campaigns}
+              currentStatus={status}
+              currentFilter={filter}
+              currentCampaignId={campaignId}
+              currentEmail={emailSearch}
+              currentDateFrom={dateFrom}
+              currentDateTo={dateTo}
+            />
             <BulkAutomationPanel currentCampaignId={campaignId} />
             <BulkSchedulePanel currentCampaignId={campaignId} />
             <BulkActionsRow currentCampaignId={campaignId} />
