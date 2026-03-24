@@ -1475,6 +1475,43 @@
     return false;
   }
 
+  function parseScheduleDateTime(raw) {
+    const str = String(raw || "").trim();
+    const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+    // Full ISO-like format: YYYY-MM-DDTHH:MM
+    const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+    if (isoMatch) {
+      const year  = isoMatch[1];
+      const month = parseInt(isoMatch[2], 10);
+      const day   = parseInt(isoMatch[3], 10);
+      const hour24 = parseInt(isoMatch[4], 10);
+      const min   = isoMatch[5];
+      const period = hour24 >= 12 ? "PM" : "AM";
+      const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
+      return {
+        gmailDate: MONTH_NAMES[month - 1] + " " + day + ", " + year,
+        gmailTime: hour12 + ":" + min + " " + period,
+      };
+    }
+
+    // Time-only format: HH:MM (24-hour) — no date, Gmail will pick its default
+    const timeMatch = str.match(/^(\d{1,2}):(\d{2})$/);
+    if (timeMatch) {
+      const hour24 = parseInt(timeMatch[1], 10);
+      const min   = timeMatch[2];
+      const period = hour24 >= 12 ? "PM" : "AM";
+      const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
+      return {
+        gmailDate: null,
+        gmailTime: hour12 + ":" + min + " " + period,
+      };
+    }
+
+    // Unknown format — pass through as-is for the time field
+    return { gmailDate: null, gmailTime: str };
+  }
+
   async function clickScheduleSendButton(composeRoot, bodyEl, scheduleTime) {
     function isVisible(node) {
       if (!node) return false;
@@ -1485,7 +1522,8 @@
       return !isDisplayNone && !isVisibilityHidden;
     }
 
-    log("(v18) clickScheduleSendButton start:", scheduleTime);
+    const parsed = parseScheduleDateTime(scheduleTime);
+    log("(v21) clickScheduleSendButton start:", scheduleTime, "→ date:", parsed.gmailDate, "time:", parsed.gmailTime);
 
     // 1. Find and click "More send options"
     let moreOptionsBtn = composeRoot.querySelector('div[aria-label*="More send options" i], div[data-tooltip*="More send options" i], div[aria-haspopup="true"][role="button"]');
@@ -1597,25 +1635,54 @@
 
     await delay(1800);
 
-    // 4. Input Time (v18: Expanded search)
-    let timeInputFilled = false;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const allInputs = document.querySelectorAll('input');
-      const timeInput = Array.from(allInputs).find(inp => {
-        if (!isVisible(inp)) return false;
+    // 4. Fill date and time inputs in Gmail's "Pick date & time" dialog
+    function fillInput(input, value) {
+      input.focus();
+      // Select all existing text then replace
+      input.setSelectionRange(0, input.value.length);
+      document.execCommand("selectAll", false);
+      document.execCommand("delete", false);
+      document.execCommand("insertText", false, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      input.blur();
+    }
+
+    const allVisibleInputs = Array.from(document.querySelectorAll('input')).filter(isVisible);
+
+    // Fill the DATE field first (if we have a date to set)
+    if (parsed.gmailDate) {
+      const dateInput = allVisibleInputs.find(inp => {
         const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
-        return lbl.includes('time') || inp.type === 'text';
+        return lbl.includes('date') && !lbl.includes('time');
+      }) || allVisibleInputs.find(inp => {
+        // Fallback: find the first visible text/date input that isn't the time field
+        const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
+        return !lbl.includes('time') && (inp.type === 'text' || inp.type === 'date');
       });
 
+      if (dateInput) {
+        fillInput(dateInput, parsed.gmailDate);
+        log("(v21) Filled date input:", parsed.gmailDate);
+        await delay(600);
+      } else {
+        log("(v21) Date input not found — Gmail will use its default date");
+      }
+    }
+
+    // Fill the TIME field
+    let timeInputFilled = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const inputs = Array.from(document.querySelectorAll('input')).filter(isVisible);
+      const timeInput = inputs.find(inp => {
+        const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
+        return lbl.includes('time');
+      }) || inputs.find(inp => inp.type === 'text');
+
       if (timeInput) {
-        timeInput.focus();
-        timeInput.value = "";
-        document.execCommand("insertText", false, scheduleTime);
-        timeInput.dispatchEvent(new Event("input", { bubbles: true }));
-        timeInput.dispatchEvent(new Event("change", { bubbles: true }));
-        timeInput.blur();
+        fillInput(timeInput, parsed.gmailTime);
         timeInputFilled = true;
-        log("Filled time input:", scheduleTime);
+        log("(v21) Filled time input:", parsed.gmailTime);
         break;
       }
       await delay(800);

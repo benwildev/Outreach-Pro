@@ -56,13 +56,17 @@ function normalizeTime(value: string, fallback: string): string {
   return `${String(match[1]).padStart(2, "0")}:${String(match[2]).padStart(2, "0")}`;
 }
 
+function getTomorrowDate(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 function readStorageInt(key: string, fallback: number): number {
   if (typeof window === "undefined") return fallback;
   const n = Number.parseInt(window.localStorage.getItem(key) ?? "", 10);
   return Number.isNaN(n) ? fallback : n;
 }
-
-
 
 function formatStatus(value: string | undefined): string {
   const s = String(value || "idle").toLowerCase();
@@ -84,6 +88,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
   const [windowEnabled, setWindowEnabled] = useState(false);
   const [windowStart, setWindowStart] = useState("09:00");
   const [windowEnd, setWindowEnd] = useState("18:00");
+  const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
   const [state, setState] = useState<BulkState>({});
   const [error, setError] = useState("");
@@ -99,10 +104,28 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
       setWindowEnabled((window.localStorage.getItem(K_WINDOW_ENABLED) ?? "0") === "1");
       setWindowStart(normalizeTime(window.localStorage.getItem(K_WINDOW_START) ?? "", "09:00"));
       setWindowEnd(normalizeTime(window.localStorage.getItem(K_WINDOW_END) ?? "", "18:00"));
+
       const savedSchedule = window.localStorage.getItem(K_SCHEDULE_TIME) || "";
-      setScheduleTime(savedSchedule ? normalizeTime(savedSchedule, "") : "");
+      if (savedSchedule.includes("T")) {
+        const [datePart, timePart] = savedSchedule.split("T");
+        setScheduleDate(datePart || "");
+        setScheduleTime(normalizeTime(timePart || "", ""));
+      } else if (savedSchedule) {
+        setScheduleDate(getTomorrowDate());
+        setScheduleTime(normalizeTime(savedSchedule, ""));
+      }
     }
   }, []);
+
+  function buildScheduleSendTime(): string {
+    if (scheduleDate && scheduleTime) {
+      return `${scheduleDate}T${scheduleTime}`;
+    }
+    if (scheduleTime) {
+      return scheduleTime;
+    }
+    return "";
+  }
 
   async function refreshState(customError = "") {
     try {
@@ -150,6 +173,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
         const maxLeads = clamp(limit, 1, 500);
         const start = normalizeTime(windowStart, "09:00");
         const end = normalizeTime(windowEnd, "18:00");
+        const combinedSchedule = buildScheduleSendTime();
 
         window.localStorage.setItem(K_DELAY_MIN, String(minSec * 1000));
         window.localStorage.setItem(K_DELAY_MAX, String(maxSec * 1000));
@@ -158,8 +182,8 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
         window.localStorage.setItem(K_WINDOW_ENABLED, windowEnabled ? "1" : "0");
         window.localStorage.setItem(K_WINDOW_START, start);
         window.localStorage.setItem(K_WINDOW_END, end);
-        if (scheduleTime) {
-          window.localStorage.setItem(K_SCHEDULE_TIME, normalizeTime(scheduleTime, ""));
+        if (combinedSchedule) {
+          window.localStorage.setItem(K_SCHEDULE_TIME, combinedSchedule);
         } else {
           window.localStorage.removeItem(K_SCHEDULE_TIME);
         }
@@ -175,7 +199,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
             windowEnabled,
             sendWindowStart: start,
             sendWindowEnd: end,
-            scheduleSendTime: scheduleTime ? normalizeTime(scheduleTime, "") : undefined,
+            scheduleSendTime: combinedSchedule || undefined,
           },
         });
         if (!response?.success) {
@@ -242,6 +266,8 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
     return text;
   }, [state, isActive]);
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+
   return (
     <div className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs">
       <div className="flex flex-wrap items-center gap-2">
@@ -299,10 +325,22 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
           <input type="time" value={windowEnd} onChange={(e) => setWindowEnd(normalizeTime(e.target.value, "18:00"))} className="h-8 rounded border bg-white px-2 text-xs" />
         </label>
         <div className="w-px h-6 bg-blue-200 mx-1"></div>
-        <label className="inline-flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded border border-yellow-200" title="Leave blank to send immediately">
+        <div className="inline-flex items-center gap-1 bg-yellow-50 px-2 py-1 rounded border border-yellow-200" title="Leave blank to send immediately. Set date + time to use Gmail schedule send.">
           <span className="text-slate-700 font-medium">Schedule At:</span>
-          <input type="time" value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value ? normalizeTime(e.target.value, "") : "")} className="h-8 rounded border bg-white px-2 text-xs" />
-        </label>
+          <input
+            type="date"
+            value={scheduleDate}
+            min={todayStr}
+            onChange={(e) => setScheduleDate(e.target.value)}
+            className="h-8 rounded border bg-white px-2 text-xs"
+          />
+          <input
+            type="time"
+            value={scheduleTime}
+            onChange={(e) => setScheduleTime(e.target.value ? normalizeTime(e.target.value, "") : "")}
+            className="h-8 rounded border bg-white px-2 text-xs"
+          />
+        </div>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("start")} disabled={isActive || !hasRuntime}>Start</Button>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("pause")} disabled={!(statusValue === "running" || statusValue === "waiting-window")}>Pause</Button>
         <Button type="button" variant="outline" className="h-8 px-3 text-xs" onClick={() => doAction("resume")} disabled={statusValue !== "paused"}>Resume</Button>
