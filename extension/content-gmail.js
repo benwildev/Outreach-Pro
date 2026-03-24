@@ -6,7 +6,7 @@
 (function () {
   "use strict";
 
-  const SCRIPT_VERSION = "gmail-content-v26-SCHED-CLICK-URL";
+  const SCRIPT_VERSION = "gmail-content-v27-NUMERIC-ACCT-IDX";
   const LOG_PREFIX = "[Gmail Extension]";
   const FALLBACK_API_BASE_URL = "https://automation.benwil.store";
   async function getApiBaseUrl() {
@@ -142,17 +142,42 @@
   }
 
   function resolveSenderIdentity(expected) {
-    // 1. Prefer URL-based identity if it's already an email (most reliable)
+    // Gmail multi-account URLs use a numeric index: /mail/u/0/, /mail/u/3/, etc.
+    // The numeric index is the ONLY reliable identifier to use in links — Gmail does
+    // NOT honour email-format /u/email@gmail.com/ identifiers and redirects them all
+    // to /u/0/ (the first logged-in account), which breaks thread navigation.
+    //
+    // Priority:
+    //   1. Numeric index from the current URL  → store "3"
+    //   2. Email from the current URL (fallback for Workspace single-account setups)
+    //   3. Email detected from the page UI
+    //   4. Expected value passed in (last resort)
+
     const authFromUrl = getCurrentAuthUser();
+
+    // If URL has a numeric index (e.g. "3"), always prefer that.
+    if (authFromUrl && /^\d+$/.test(authFromUrl.trim())) {
+      return authFromUrl.trim();
+    }
+
+    // If URL contains an email but we are inside the extension running on the Gmail tab,
+    // we can still store the email — but note the dashboard link will need to resolve it.
+    // Prefer numeric if detectable from a different source first.
+    const emailFromUI = getCurrentAccountEmail();
+    if (emailFromUI) {
+      // Still try to get numeric index from the URL as a cross-check.
+      // If URL gave us a non-numeric, non-email value, fall through.
+      if (authFromUrl && /^\d+$/.test(authFromUrl.trim())) {
+        return authFromUrl.trim();
+      }
+      return emailFromUI.toLowerCase().trim();
+    }
+
     if (authFromUrl && authFromUrl.includes("@")) {
       return authFromUrl.toLowerCase().trim();
     }
 
-    // 2. Otherwise try to find it in the UI
-    const emailFromUI = getCurrentAccountEmail();
-    if (emailFromUI) return emailFromUI.toLowerCase().trim();
-
-    // 3. Last fallback: use expected email if valid
+    // 3. Last fallback: use expected value if valid
     if (expected && String(expected).includes("@")) {
       return String(expected).toLowerCase().trim();
     }
