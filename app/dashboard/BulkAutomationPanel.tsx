@@ -56,10 +56,17 @@ function normalizeTime(value: string, fallback: string): string {
   return `${String(match[1]).padStart(2, "0")}:${String(match[2]).padStart(2, "0")}`;
 }
 
+function localDateString(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function getTomorrowDate(): string {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+  return localDateString(d);
 }
 
 function readStorageInt(key: string, fallback: number): number {
@@ -267,7 +274,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
     return text;
   }, [state, isActive]);
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = localDateString(new Date());
 
   return (
     <div className="mb-3 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs">

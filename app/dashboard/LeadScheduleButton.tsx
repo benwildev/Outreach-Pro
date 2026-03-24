@@ -12,10 +12,17 @@ interface LeadScheduleButtonProps {
     status: string;
 }
 
+function localDateString(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+}
+
 function getTomorrowDate(): string {
     const d = new Date();
     d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
+    return localDateString(d);
 }
 
 export function LeadScheduleButton({ leadId, status }: LeadScheduleButtonProps) {
@@ -92,7 +99,7 @@ export function LeadScheduleButton({ leadId, status }: LeadScheduleButtonProps) 
                             <input
                                 type="date"
                                 value={scheduleDate}
-                                min={new Date().toISOString().slice(0, 10)}
+                                min={localDateString(new Date())}
                                 onChange={(e) => setScheduleDate(e.target.value)}
                                 className="h-9 rounded border border-slate-300 px-2 text-sm w-full bg-slate-50 focus:bg-white focus:ring-1 focus:ring-blue-500 outline-none"
                             />

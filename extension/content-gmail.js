@@ -1638,11 +1638,18 @@
     // 4. Fill date and time inputs in Gmail's "Pick date & time" dialog
     function fillInput(input, value) {
       input.focus();
-      // Select all existing text then replace
-      input.setSelectionRange(0, input.value.length);
-      document.execCommand("selectAll", false);
-      document.execCommand("delete", false);
-      document.execCommand("insertText", false, value);
+      try {
+        // setSelectionRange only works on text-like inputs
+        if (typeof input.setSelectionRange === "function" && input.type !== "date") {
+          input.setSelectionRange(0, (input.value || "").length);
+        }
+        document.execCommand("selectAll", false);
+        document.execCommand("delete", false);
+        document.execCommand("insertText", false, value);
+      } catch (e) {
+        // Fallback for non-standard inputs (e.g. native date pickers)
+        input.value = value;
+      }
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
       input.blur();
