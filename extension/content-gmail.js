@@ -1669,6 +1669,7 @@
     if (parsed.gmailDate) {
       const dialogRoot = getDialogRoot();
       const dialogInputs = visibleInputsIn(dialogRoot);
+      log("(v21) Dialog inputs found for date search:", dialogInputs.map(i => `[${i.type}] aria-label="${i.getAttribute('aria-label')}"`).join(", "));
       const dateInput = dialogInputs.find(inp => {
         const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
         return lbl.includes('date') && !lbl.includes('time');
@@ -1679,10 +1680,10 @@
 
       if (dateInput) {
         fillInput(dateInput, parsed.gmailDate);
-        log("(v21) Filled date input:", parsed.gmailDate);
+        log("(v21) Filled date input:", parsed.gmailDate, "| aria-label:", dateInput.getAttribute('aria-label'));
         await delay(600);
       } else {
-        log("(v21) Date input not found — Gmail will use its default date");
+        logError("(v21) Date input not found in dialog — Gmail will use its default date. Inputs seen:", dialogInputs.length);
       }
     }
 
@@ -1704,14 +1705,15 @@
       if (timeInput) {
         fillInput(timeInput, parsed.gmailTime);
         timeInputFilled = true;
-        log("(v21) Filled time input:", parsed.gmailTime);
+        log("(v21) Filled time input:", parsed.gmailTime, "| aria-label:", timeInput.getAttribute('aria-label'), "| type:", timeInput.type);
         break;
       }
+      log(`(v21) Time input not found on attempt ${attempt + 1} — inputs in dialog:`, inputs.map(i => `[${i.type}] aria-label="${i.getAttribute('aria-label')}"`).join(", "));
       await delay(800);
     }
 
     if (!timeInputFilled) {
-      logError("Time input not found.");
+      logError("(v21) Time input not found after 3 attempts — scheduling cannot proceed.");
       return { success: false, error: "Time input not found" };
     }
 
