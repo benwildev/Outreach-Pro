@@ -254,17 +254,23 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                         </div>
                                     </TableCell>
                                     <TableCell className="truncate text-xs font-mono" title={lead.gmailThreadId ?? undefined}>
-                                        {lead.gmailThreadId ? (
-                                            <a
-                                                href={`https://mail.google.com/mail/u/${(lead.sentGmailAuthUser || "0").replace(/@/g, "%40").replace(/%40/g, "@")}/#all/${encodeURIComponent(lead.gmailThreadId)}`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-blue-600 hover:text-blue-800 hover:underline"
-                                                onClick={(e) => e.stopPropagation()}
-                                            >
-                                                {lead.gmailThreadId}
-                                            </a>
-                                        ) : (
+                                        {lead.gmailThreadId ? (() => {
+                                            const acct = (lead.sentGmailAuthUser || "0").replace(/@/g, "%40");
+                                            const isScheduled = lead.sentAt && new Date(lead.sentAt) > new Date();
+                                            const folder = isScheduled ? "scheduled" : "all";
+                                            const gmailUrl = `https://mail.google.com/mail/u/${acct}/#${folder}/${encodeURIComponent(lead.gmailThreadId)}`;
+                                            return (
+                                                <a
+                                                    href={gmailUrl}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-blue-600 hover:text-blue-800 hover:underline"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    {lead.gmailThreadId}
+                                                </a>
+                                            );
+                                        })() : (
                                             "—"
                                         )}
                                     </TableCell>
