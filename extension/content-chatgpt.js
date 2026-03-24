@@ -360,7 +360,8 @@
       function looksLikeEmailOutput(text) {
         if (!text || text.length < 40) return false;
         if (/(?:^|\n)\s*\*{0,2}subject\*{0,2}\s*[:\-]/i.test(text)) return true;
-        if (/(?:^|\n)\s*\*{0,2}body\*{0,2}\s*[:\-]/i.test(text)) return true;
+        if (/(?:^|\n)\s*subject\s+(?:option|line)\s*\d+\s*:/i.test(text)) return true;
+        if (/(?:^|\n)\s*\*{0,2}(?:email\s+)?body\*{0,2}\s*[:\-]/i.test(text)) return true;
         if (/^hi\s+[^\n,]+,/im.test(text) && /(?:^|\n)\s*best(?: regards)?[,]?/im.test(text)) return true;
         return false;
       }
@@ -419,6 +420,10 @@
    * Looks for "Subject:" and "Body:" in the response text
    * Works even if ChatGPT returns extra instructions before the email
    */
+  function isMetaLine(line) {
+    return /^\*{0,2}(subject(\s+(option|line)\s*\d+)?|body|email\s*body|suggested\s+subject\s+lines?|email)\*{0,2}\s*[:\-]/i.test(line);
+  }
+
   function parseEmailResponse(text) {
     if (!text || typeof text !== "string") {
       return { subject: "", body: "" };
@@ -426,10 +431,50 @@
 
     const trimmed = text.trim().replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 
+    // --- Body extraction (try labeled sections first) ---
+    const bodyPatterns = [
+      /(?:^|\n)\s*\*{0,2}(?:email\s+)?body\*{0,2}\s*:\s*([\s\S]*)$/i,
+      /(?:^|\n)\s*email\s*:\s*([\s\S]*)$/i,
+    ];
+    let body = "";
+    for (let i = 0; i < bodyPatterns.length; i++) {
+      const m = trimmed.match(bodyPatterns[i]);
+      if (m && m[1] && m[1].trim().length > 20) {
+        body = m[1].trim();
+        break;
+      }
+    }
+
+    // If no labeled body found, look for where the actual email greeting starts
+    // (e.g. "Hi Amanda," / "Hello Joyce," / "Dear Amanda,") — that is the real email body.
+    if (!body) {
+      const lines = trimmed.split("\n");
+      let greetingIndex = -1;
+      for (let i = 0; i < lines.length; i++) {
+        if (/^(hi|hello|dear)\s+\S/i.test(lines[i].trim())) {
+          greetingIndex = i;
+          break;
+        }
+      }
+      if (greetingIndex !== -1) {
+        body = lines.slice(greetingIndex).join("\n").trim();
+      } else {
+        // Last resort: strip all known meta-lines and use the rest
+        const filtered = lines.filter((line) => {
+          const l = line.trim();
+          if (!l) return false;
+          return !isMetaLine(l);
+        });
+        body = filtered.join("\n").trim();
+      }
+    }
+
+    // --- Subject extraction ---
     const subjectPatterns = [
       /(?:^|\n)\s*\*{0,2}subject\*{0,2}\s*:\s*(.+?)(?=\n|$)/i,
-      /(?:^|\n)\s*subject\s*-\s*(.+?)(?=\n|$)/i,
-      /(?:^|\n)\s*title\s*:\s*(.+?)(?=\n|$)/i
+      /(?:^|\n)\s*subject\s+(?:option|line)\s*1\s*:\s*(.+?)(?=\n|$)/i,
+      /(?:^|\n)\s*subject\s*[-–]\s*(.+?)(?=\n|$)/i,
+      /(?:^|\n)\s*title\s*:\s*(.+?)(?=\n|$)/i,
     ];
     let subject = "";
     for (let i = 0; i < subjectPatterns.length; i++) {
@@ -440,28 +485,6 @@
       }
     }
 
-    const bodyPatterns = [
-      /(?:^|\n)\s*\*{0,2}body\*{0,2}\s*:\s*([\s\S]*)$/i,
-      /(?:^|\n)\s*email\s*:\s*([\s\S]*)$/i
-    ];
-    let body = "";
-    for (let i = 0; i < bodyPatterns.length; i++) {
-      const m = trimmed.match(bodyPatterns[i]);
-      if (m && m[1]) {
-        body = m[1].trim();
-        break;
-      }
-    }
-
-    if (!body) {
-      const lines = trimmed.split("\n").map((l) => l.trim());
-      const filtered = lines.filter((line) => {
-        if (!line) return false;
-        return !/^\*{0,2}(subject|body)\*{0,2}\s*[:\-]/i.test(line);
-      });
-      body = filtered.join("\n").trim();
-    }
-
     if (isPromptEchoText(body)) {
       body = body
         .replace(/return output exactly in this format:[\s\S]*$/i, "")
@@ -469,16 +492,15 @@
         .trim();
     }
 
-    if (isPlaceholderOnlyValue(subject, "subject")) {
-      subject = "";
-    }
-    if (isPlaceholderOnlyValue(body, "body")) {
-      body = "";
-    }
+    if (isPlaceholderOnlyValue(subject, "subject")) subject = "";
+    if (isPlaceholderOnlyValue(body, "body")) body = "";
 
+    // Subject fallback: use the first short line of the body only if it looks like
+    // a subject line (not a greeting, not a meta-label, not longer than 120 chars).
     if (!subject && body) {
       const firstLine = body.split("\n")[0].trim();
-      if (firstLine && firstLine.length <= 120) {
+      const looksLikeGreeting = /^(hi|hello|dear)\s+/i.test(firstLine);
+      if (firstLine && !looksLikeGreeting && !isMetaLine(firstLine) && firstLine.length <= 120) {
         subject = firstLine.replace(/[*_`]/g, "").trim();
       }
     }
