@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
   }));
 
   return NextResponse.json({
-    campaign: { id: campaign.id, name: campaign.name },
+    campaign: { id: campaign.id, name: campaign.name, googleSheetId: campaign.googleSheetId },
     totalLeads: rows.length,
     exportedAt: new Date().toISOString(),
     leads: rows,

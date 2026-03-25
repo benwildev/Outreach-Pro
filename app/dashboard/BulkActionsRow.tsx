@@ -12,7 +12,7 @@ export function BulkActionsRow({ currentCampaignId }: { currentCampaignId: strin
   const [hasRuntime, setHasRuntime] = useState(false);
   const [error, setError] = useState("");
   const [showSyncModal, setShowSyncModal] = useState(false);
-  const [syncCampaign, setSyncCampaign] = useState<{ name: string; googleSheetId: string | null } | null>(null);
+  const [syncCampaign, setSyncCampaign] = useState<{ name: string; googleSheetId: string | null; totalLeads: number } | null>(null);
   const [syncLoading, setSyncLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -76,13 +76,9 @@ export function BulkActionsRow({ currentCampaignId }: { currentCampaignId: strin
       const data = await res.json();
       setSyncCampaign({
         name: data.campaign?.name ?? "",
-        googleSheetId: null,
+        googleSheetId: data.campaign?.googleSheetId ?? null,
+        totalLeads: data.totalLeads ?? 0,
       });
-      const campRes = await fetch(`/api/import-logs?campaignId=${currentCampaignId}`);
-      if (campRes.ok) {
-        const campData = await campRes.json();
-        setSyncCampaign((prev) => prev ? { ...prev, googleSheetId: campData.googleSheetId ?? null } : prev);
-      }
     } catch {
     } finally {
       setSyncLoading(false);
@@ -232,15 +228,32 @@ function capitalize(str) {
                 <p className="text-sm text-amber-700 bg-amber-50 rounded-lg px-4 py-3 border border-amber-200">
                   Please filter the dashboard by a specific campaign first, then click Sync to Sheet.
                 </p>
+              ) : syncLoading ? (
+                <div className="flex items-center justify-center py-8 text-sm text-slate-400">Loading campaign data…</div>
               ) : (
                 <>
+                  {syncCampaign && (
+                    <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 rounded-lg border border-slate-200">
+                      <Sheet className="w-4 h-4 text-green-600 shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-slate-800 truncate">{syncCampaign.name}</p>
+                        <p className="text-xs text-slate-500">
+                          {syncCampaign.totalLeads} lead{syncCampaign.totalLeads !== 1 ? "s" : ""} ready to sync
+                          {syncCampaign.googleSheetId && (
+                            <> · <a href={syncCampaign.googleSheetId} target="_blank" rel="noopener noreferrer" className="text-green-600 hover:underline">Open Sheet ↗</a></>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="rounded-lg bg-green-50 border border-green-200 px-4 py-3 text-sm text-green-800 space-y-1">
                     <p className="font-semibold">How it works — no login required</p>
                     <ol className="list-decimal list-inside space-y-0.5 text-green-700">
                       <li>Open your Google Sheet → Extensions → Apps Script</li>
                       <li>Paste the code below and click Save</li>
                       <li>Run <code className="bg-green-100 px-1 rounded font-mono text-xs">syncBenwillData()</code> to sync now</li>
-                      <li>Optionally set a time-based trigger to run it automatically</li>
+                      <li>Optionally set a time-based trigger to auto-sync on a schedule</li>
                     </ol>
                   </div>
 
