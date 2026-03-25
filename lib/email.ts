@@ -26,7 +26,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
   const ccRecipients = emailList.slice(1).join(",");
 
   if (provider === "gmail_manual" || provider === "gmail") {
-    const userPart = authUser ? `u/${encodeURIComponent(authUser).replace(/%40/g, "@")}/` : "";
+    const userPart = (authUser !== null && authUser !== undefined && authUser !== "") ? `u/${encodeURIComponent(authUser).replace(/%40/g, "@")}/` : "";
     let url = `https://mail.google.com/mail/${userPart}?view=cm&fs=1&to=${encodeURIComponent(primaryRecipient)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(content)}`;
     if (ccRecipients) {
       url += `&cc=${encodeURIComponent(ccRecipients)}`;

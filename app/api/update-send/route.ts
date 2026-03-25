@@ -78,7 +78,7 @@ export async function POST(request: Request) {
           nextFollowup: nextFollowupDate
         } : {}),
         ...(threadId ? { gmailThreadId: threadId } : {}),
-        ...(sentGmailAuthUser ? { sentGmailAuthUser: String(sentGmailAuthUser).trim() } : {}),
+        ...(sentGmailAuthUser !== undefined && sentGmailAuthUser !== null ? { sentGmailAuthUser: String(sentGmailAuthUser).trim() } : {}),
         ...(subject ? { sentSubject: subject } : {}),
         ...(emailBody ? { sentBody: emailBody } : {}),
       },
@@ -92,7 +92,7 @@ export async function POST(request: Request) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email: lead.recipientEmail,
-            account: sentGmailAuthUser || "SMTP",
+            account: (sentGmailAuthUser !== undefined && sentGmailAuthUser !== null) ? String(sentGmailAuthUser) : "SMTP",
             date: now.toISOString(),
             status: targetStatus,
             isFollowup: false,

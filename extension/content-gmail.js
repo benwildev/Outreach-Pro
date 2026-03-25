@@ -193,11 +193,16 @@
       return true;
     }
     const current = normalizeAuthUser(currentAuthUser);
-    // If both are emails, compare case-insensitively (normalizeAuthUser does toLowerCase)
-    if (expected.includes("@") && current.includes("@")) {
-      return current === expected;
+    const expectedIsEmail = expected.includes("@");
+    const currentIsEmail = current.includes("@");
+
+    // If one is an index (e.g., '0') and the other is an email address,
+    // we cannot verify if they mismatch without a mapping, so we assume they match
+    // to avoid infinite redirect loops. The URL-based checks will handle most indices correctly.
+    if (expectedIsEmail !== currentIsEmail) {
+      return true;
     }
-    // Fallback for index-based comparisons
+
     return current === expected;
   }
 

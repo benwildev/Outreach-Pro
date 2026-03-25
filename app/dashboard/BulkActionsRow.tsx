@@ -129,9 +129,9 @@ export function BulkActionsRow({ currentCampaignId }: { currentCampaignId: strin
     }
   }
 
-  const dataUrl = typeof window !== "undefined"
-    ? `${window.location.origin}/api/sheets-data?campaignId=${currentCampaignId ?? "YOUR_CAMPAIGN_ID"}`
-    : `/api/sheets-data?campaignId=${currentCampaignId ?? "YOUR_CAMPAIGN_ID"}`;
+  // Use the production domain to ensure the generated Apps Script always targets the live server
+  const appDomain = process.env.NEXT_PUBLIC_APP_URL || "https://automation.benwil.store";
+  const dataUrl = `${appDomain}/api/sheets-data?campaignId=${currentCampaignId ?? "YOUR_CAMPAIGN_ID"}`;
 
   const appsScript = `// ============================================================
 // Benwill Outreach → Google Sheets Sync Script
