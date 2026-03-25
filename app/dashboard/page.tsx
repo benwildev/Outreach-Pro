@@ -33,6 +33,7 @@ interface DashboardPageProps {
     email?: string;
     dateFrom?: string;
     dateTo?: string;
+    page?: string;
   };
 }
 
@@ -49,6 +50,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const emailSearch = searchParams.email?.trim() ?? null;
   const dateFrom = searchParams.dateFrom ?? null;
   const dateTo = searchParams.dateTo ?? null;
+  const currentPage = Math.max(1, parseInt(searchParams.page ?? "1", 10) || 1);
 
   const campaigns = await prisma.campaign.findMany({
     orderBy: { name: "asc" },
@@ -78,12 +80,20 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     where.sentAt = sentAtFilter;
   }
 
-  const leads = (await prisma.lead.findMany({
-    where,
-    orderBy: { createdAt: status === "pending" ? "asc" : "desc" },
-    take: PAGE_SIZE,
-    include: { campaign: true },
-  })) as LeadRow[];
+  const skip = (currentPage - 1) * PAGE_SIZE;
+
+  const [leads, filteredTotal] = await Promise.all([
+    prisma.lead.findMany({
+      where,
+      orderBy: { createdAt: status === "pending" ? "asc" : "desc" },
+      take: PAGE_SIZE,
+      skip,
+      include: { campaign: true },
+    }) as Promise<LeadRow[]>,
+    prisma.lead.count({ where }),
+  ]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
 
   const [totalLeads, sentLeads, repliedLeads, pendingLeads, bouncedLeads, scheduledLeads, failedLeads] = await Promise.all([
     prisma.lead.count(),
@@ -118,6 +128,20 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     account,
     count,
   }));
+
+  function buildPageUrl(page: number) {
+    const params = new URLSearchParams({
+      ...(statusFilter ? { status: statusFilter } : {}),
+      ...(filter ? { filter } : {}),
+      ...(campaignId ? { campaign: campaignId } : {}),
+      ...(emailSearch ? { email: emailSearch } : {}),
+      ...(dateFrom ? { dateFrom } : {}),
+      ...(dateTo ? { dateTo } : {}),
+      ...(page > 1 ? { page: String(page) } : {}),
+    });
+    const qs = params.toString();
+    return `/dashboard${qs ? `?${qs}` : ""}`;
+  }
 
   const exportParams = new URLSearchParams({
     ...(statusFilter ? { status: statusFilter } : {}),
@@ -209,7 +233,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               <LayoutDashboard className="w-4 h-4 text-indigo-500" />
               <span className="text-sm font-semibold text-gray-800">Leads</span>
               <span className="text-xs text-gray-400 font-normal">
-                — showing up to {PAGE_SIZE} results
+                — showing {skip + 1}–{Math.min(skip + leads.length, filteredTotal)} of {filteredTotal.toLocaleString()}
               </span>
             </div>
           </div>
@@ -234,6 +258,41 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
           {/* Table */}
           <LeadsTableClient leads={leads} campaigns={campaigns} />
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50/60">
+              <span className="text-xs text-gray-500">
+                Page {currentPage} of {totalPages}
+              </span>
+              <div className="flex items-center gap-2">
+                {currentPage > 1 ? (
+                  <Link
+                    href={buildPageUrl(currentPage - 1)}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 border border-indigo-200 hover:border-indigo-400 bg-white hover:bg-indigo-50 rounded-lg px-3 py-1.5 transition-all duration-150"
+                  >
+                    ← Previous
+                  </Link>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-300 border border-gray-200 bg-white rounded-lg px-3 py-1.5 cursor-not-allowed">
+                    ← Previous
+                  </span>
+                )}
+                {currentPage < totalPages ? (
+                  <Link
+                    href={buildPageUrl(currentPage + 1)}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 border border-indigo-200 hover:border-indigo-400 bg-white hover:bg-indigo-50 rounded-lg px-3 py-1.5 transition-all duration-150"
+                  >
+                    Next →
+                  </Link>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-gray-300 border border-gray-200 bg-white rounded-lg px-3 py-1.5 cursor-not-allowed">
+                    Next →
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </main>
     </div>
