@@ -2968,8 +2968,15 @@
       if (threadId) {
         payload.threadId = threadId;
       }
-      if (scheduledSendAt) {
-        payload.scheduledSendAt = scheduledSendAt;
+      if (scheduledSendAt && scheduledSendAt.trim()) {
+        // The datetime string is in the browser's local timezone (e.g. "2026-03-25T20:00").
+        // new Date() parses timezone-less ISO strings as LOCAL time in browsers, so
+        // .toISOString() gives us the correct UTC equivalent to send to the server.
+        const schedDate = new Date(scheduledSendAt.trim());
+        payload.scheduledSendAt = isNaN(schedDate.getTime())
+          ? scheduledSendAt
+          : schedDate.toISOString();
+        log("scheduledSendAt (UTC):", payload.scheduledSendAt);
       }
 
       log("Payload:", JSON.stringify(payload).substring(0, 200));
