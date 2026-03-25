@@ -267,16 +267,25 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
   if (message.action === "setReplySweepEnabled") {
-    // Bridge wraps params in message.data; direct callers may use message.enabled.
-    const rawEnabled = (message.data && "enabled" in message.data) ? message.data.enabled : message.enabled;
-    const enable = rawEnabled !== false && rawEnabled !== 0;
-    replySweepDisabled = !enable;
-    if (enable) {
-      ensureReplyCheckAlarm().catch(() => {});
-    } else {
-      chrome.alarms.clear(REPLY_CHECK_ALARM).catch(() => {});
+    try {
+      // Bridge wraps params in message.data; direct callers may pass message.enabled.
+      const rawEnabled = (message.data && "enabled" in message.data) ? message.data.enabled : message.enabled;
+      const enable = rawEnabled !== false && rawEnabled !== 0;
+      replySweepDisabled = !enable;
+      // Respond FIRST so the message port is never left hanging.
+      sendResponse({ success: true, disabled: replySweepDisabled });
+      // Then do async alarm work — wrap in try/catch so a missing Promise API never throws.
+      if (enable) {
+        try { ensureReplyCheckAlarm().catch(() => {}); } catch (_) {}
+      } else {
+        try {
+          const clearResult = chrome.alarms.clear(REPLY_CHECK_ALARM);
+          if (clearResult && typeof clearResult.catch === "function") clearResult.catch(() => {});
+        } catch (_) {}
+      }
+    } catch (e) {
+      sendResponse({ success: false, error: String(e && e.message ? e.message : e) });
     }
-    sendResponse({ success: true, disabled: replySweepDisabled });
     return false;
   }
   if (message.action === "getReplySweepState") {
