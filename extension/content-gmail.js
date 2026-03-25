@@ -1507,7 +1507,7 @@
     // Full ISO-like format: YYYY-MM-DDTHH:MM
     const isoMatch = str.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
     if (isoMatch) {
-      const year  = isoMatch[1];
+      const yearNum  = parseInt(isoMatch[1], 10);
       const month = parseInt(isoMatch[2], 10);
       const day   = parseInt(isoMatch[3], 10);
       const hour24 = parseInt(isoMatch[4], 10);
@@ -1515,14 +1515,15 @@
       // Validate ranges; log and fall through to unknown on bad values
       if (month < 1 || month > 12 || day < 1 || day > 31 || hour24 > 23 || min > 59) {
         logError("parseScheduleDateTime: value out of range:", str);
-        return { gmailDate: null, gmailTime: str };
+        return { gmailDate: null, gmailTime: str, year: null, month: null, day: null, hour24: null, min: null };
       }
       const period = hour24 >= 12 ? "PM" : "AM";
       const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
       const minStr = String(min).padStart(2, "0");
       return {
-        gmailDate: MONTH_NAMES[month - 1] + " " + day + ", " + year,
+        gmailDate: MONTH_NAMES[month - 1] + " " + day + ", " + yearNum,
         gmailTime: hour12 + ":" + minStr + " " + period,
+        year: yearNum, month, day, hour24, min,
       };
     }
 
@@ -1533,7 +1534,7 @@
       const min   = parseInt(timeMatch[2], 10);
       if (hour24 > 23 || min > 59) {
         logError("parseScheduleDateTime: time out of range:", str);
-        return { gmailDate: null, gmailTime: str };
+        return { gmailDate: null, gmailTime: str, year: null, month: null, day: null, hour24: null, min: null };
       }
       const period = hour24 >= 12 ? "PM" : "AM";
       const hour12 = hour24 === 0 ? 12 : hour24 > 12 ? hour24 - 12 : hour24;
@@ -1541,12 +1542,13 @@
       return {
         gmailDate: null,
         gmailTime: hour12 + ":" + minStr + " " + period,
+        year: null, month: null, day: null, hour24, min,
       };
     }
 
     // Unknown format — log a warning and pass through as-is for the time field
     logError("parseScheduleDateTime: unrecognized format:", str, "(expected YYYY-MM-DDTHH:MM)");
-    return { gmailDate: null, gmailTime: str };
+    return { gmailDate: null, gmailTime: str, year: null, month: null, day: null, hour24: null, min: null };
   }
 
   async function clickScheduleSendButton(composeRoot, bodyEl, scheduleTime) {
@@ -1823,6 +1825,50 @@
       return { success: false, error: "Date picker dialog not found" };
     }
 
+    // Helpers: adapt date/time to whatever format Gmail's input currently shows.
+    // Gmail pre-populates the inputs with today's value in the locale-appropriate
+    // format. Reading that value before overwriting lets us match it exactly.
+    function adaptDateToInputFormat(existingValue, yearNum, monthNum, dayNum, inputType) {
+      const MONTH_NAMES_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const mn = MONTH_NAMES_SHORT[monthNum - 1];
+      const ys = String(yearNum);
+      const mp = String(monthNum).padStart(2, "0");
+      const dp = String(dayNum).padStart(2, "0");
+      // Native <input type="date"> always requires YYYY-MM-DD internally
+      if (inputType === "date") return ys + "-" + mp + "-" + dp;
+      const cur = String(existingValue || "").trim();
+      if (cur) {
+        // ISO: "2026-03-25"
+        if (/^\d{4}([-\/])\d{2}\1\d{2}$/.test(cur)) {
+          const sep = cur[4]; return ys + sep + mp + sep + dp;
+        }
+        // Day-first + letter month: "25 Mar 2026"
+        if (/^\d{1,2}\s+[A-Za-z]/.test(cur)) return dayNum + " " + mn + " " + ys;
+        // Day-first numeric: "25/03/2026" or "25.03.2026"
+        const nm = cur.match(/^(\d{1,2})([.\/\-])(\d{1,2})[.\/\-]\d{4}$/);
+        if (nm) { const s = nm[2]; return dp + s + mp + s + ys; }
+        // Month-name first with comma: "Mar 25, 2026"
+        if (/^[A-Za-z]/.test(cur) && cur.includes(",")) return mn + " " + dayNum + ", " + ys;
+        // Month-name first no comma: "Mar 25 2026"
+        if (/^[A-Za-z]/.test(cur)) return mn + " " + dayNum + " " + ys;
+      }
+      // Default US: "Mar 25, 2026"
+      return mn + " " + dayNum + ", " + ys;
+    }
+    function adaptTimeToInputFormat(existingValue, hour24Num, minNum, inputType) {
+      const ms = String(minNum).padStart(2, "0");
+      const hs24 = String(hour24Num).padStart(2, "0");
+      // Native <input type="time"> always requires HH:MM (24-hour)
+      if (inputType === "time") return hs24 + ":" + ms;
+      const cur = String(existingValue || "").trim();
+      // If existing value has no AM/PM → 24-hour locale
+      if (cur && !/\b(am|pm)\b/i.test(cur) && /^\d{1,2}:\d{2}$/.test(cur)) return hs24 + ":" + ms;
+      // Default 12-hour
+      const period = hour24Num >= 12 ? "PM" : "AM";
+      const h12 = hour24Num === 0 ? 12 : hour24Num > 12 ? hour24Num - 12 : hour24Num;
+      return h12 + ":" + ms + " " + period;
+    }
+
     // Fill the DATE field first (if we have a date to set)
     if (parsed.gmailDate) {
       const dialogInputs = visibleInputsIn(datePickerRoot);
@@ -1836,8 +1882,11 @@
       });
 
       if (dateInput) {
-        fillInput(dateInput, parsed.gmailDate);
-        log("(v26) Filled date:", parsed.gmailDate, "| aria-label:", dateInput.getAttribute('aria-label'));
+        const dateStr = (parsed.year != null)
+          ? adaptDateToInputFormat(dateInput.value, parsed.year, parsed.month, parsed.day, dateInput.type)
+          : parsed.gmailDate;
+        fillInput(dateInput, dateStr);
+        log("(v27) Filled date:", dateStr, "| existing was:", dateInput.value, "| type:", dateInput.type, "| aria-label:", dateInput.getAttribute('aria-label'));
         await delay(600);
       } else {
         logError("(v26) Date input not found — inputs seen:", dialogInputs.length);
@@ -1859,9 +1908,12 @@
       });
 
       if (timeInput) {
-        fillInput(timeInput, parsed.gmailTime);
+        const timeStr = (parsed.hour24 != null)
+          ? adaptTimeToInputFormat(timeInput.value, parsed.hour24, parsed.min, timeInput.type)
+          : parsed.gmailTime;
+        fillInput(timeInput, timeStr);
         timeInputFilled = true;
-        log("(v26) Filled time:", parsed.gmailTime, "| aria-label:", timeInput.getAttribute('aria-label'));
+        log("(v27) Filled time:", timeStr, "| existing was:", timeInput.value, "| type:", timeInput.type, "| aria-label:", timeInput.getAttribute('aria-label'));
         break;
       }
       log(`(v26) Time input not found attempt ${attempt + 1}, inputs:`, inputs.map(i => `[${i.type}] "${i.getAttribute('aria-label')}"`).join(", "));
