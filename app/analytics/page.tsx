@@ -59,7 +59,7 @@ export default async function AnalyticsPage({
       <header className="bg-gradient-to-r from-[#1a1f5e] to-[#2d3491] border-b border-indigo-900/30 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <img src="/logo.png" alt="Benwill Outreach" className="w-9 h-9 rounded-xl object-contain bg-white/10 p-0.5" />
+            <img src="/logo.png" alt="Benwill Outreach" className="w-9 h-9 rounded-full object-contain bg-white/10 p-0.5" />
             <div>
               <h1 className="text-base font-bold text-white">Campaign Analytics</h1>
               <p className="text-xs text-indigo-300">Last {days} days</p>
