@@ -87,6 +87,12 @@ export default function NewCampaignPage() {
               <Input id="webhookUrl" name="webhookUrl" placeholder="Google Apps Script or Make.com webhook" />
             </div>
 
+            <div className="space-y-1.5">
+              <Label htmlFor="googleSheetId" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Google Sheet URL (for Sync)</Label>
+              <Input id="googleSheetId" name="googleSheetId" placeholder="Paste your Google Sheet URL here" />
+              <p className="text-xs text-gray-400">Paste the full URL of your Google Sheet. Used by the &quot;Sync to Sheet&quot; button to match rows by email.</p>
+            </div>
+
             <div className="grid grid-cols-2 gap-5">
               <div className="space-y-1.5">
                 <Label htmlFor="delay1Days" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Follow-up 1 Delay (days)</Label>

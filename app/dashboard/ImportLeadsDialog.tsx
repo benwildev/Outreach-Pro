@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   Dialog,
@@ -14,15 +14,55 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { importLeads, type ImportResult } from "./importActions";
+import { History } from "lucide-react";
 
 type Campaign = { id: string; name: string };
+
+type ImportLog = {
+  id: string;
+  fileName: string;
+  startRow: number;
+  endRow: number;
+  importedCount: number;
+  skippedCount: number;
+  createdAt: string;
+};
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+}
 
 export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const startRowRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [selectedCampaignId, setSelectedCampaignId] = useState("");
+  const [importLogs, setImportLogs] = useState<ImportLog[]>([]);
+  const [nextStartRow, setNextStartRow] = useState<number | null>(null);
+  const [loadingLogs, setLoadingLogs] = useState(false);
+
+  useEffect(() => {
+    if (!selectedCampaignId) {
+      setImportLogs([]);
+      setNextStartRow(null);
+      return;
+    }
+    setLoadingLogs(true);
+    fetch(`/api/import-logs?campaignId=${selectedCampaignId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setImportLogs(data.logs ?? []);
+        setNextStartRow(data.nextStartRow ?? null);
+        if (data.nextStartRow && startRowRef.current) {
+          startRowRef.current.value = String(data.nextStartRow);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingLogs(false));
+  }, [selectedCampaignId]);
 
   async function handleSubmit(formData: FormData) {
     setMessage(null);
@@ -38,10 +78,22 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
     }
     const result: ImportResult = await importLeads(formData);
     if (result.success) {
-      setMessage({ type: "success", text: `${result.count} lead(s) imported.` });
+      const parts: string[] = [];
+      if (result.count > 0) {
+        parts.push(`${result.count} lead${result.count !== 1 ? "s" : ""} imported`);
+      } else {
+        parts.push("0 leads imported");
+      }
+      if (result.skipped > 0) {
+        parts.push(`${result.skipped} skipped (duplicates)`);
+      }
+      parts.push(`Next start row: ${result.nextStartRow}`);
+      setMessage({ type: "success", text: parts.join(" · ") });
       formRef.current?.reset();
       if (fileInputRef.current) fileInputRef.current.value = "";
-      setOpen(false);
+      setSelectedCampaignId("");
+      setImportLogs([]);
+      setNextStartRow(null);
       router.refresh();
     } else {
       setMessage({ type: "error", text: result.error });
@@ -49,13 +101,13 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setMessage(null); }}>
+    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setMessage(null); setSelectedCampaignId(""); setImportLogs([]); setNextStartRow(null); } }}>
       <DialogTrigger asChild>
         <button className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-200 hover:text-white border border-indigo-700/60 hover:border-indigo-500 bg-indigo-900/40 hover:bg-indigo-800/60 rounded-lg px-3 py-2 transition-all duration-150">
           ↑ Import Excel
         </button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Import Leads</DialogTitle>
         </DialogHeader>
@@ -66,6 +118,12 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
               id="import-campaignId"
               name="campaignId"
               required
+              value={selectedCampaignId}
+              onChange={(e) => {
+                setSelectedCampaignId(e.target.value);
+                setMessage(null);
+                if (startRowRef.current) startRowRef.current.value = "";
+              }}
               className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
             >
               <option value="">Select campaign</option>
@@ -76,6 +134,38 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
               ))}
             </select>
           </div>
+
+          {selectedCampaignId && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <div className="flex items-center gap-1.5 mb-2">
+                <History className="w-3.5 h-3.5 text-slate-400" />
+                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Import History</span>
+              </div>
+              {loadingLogs ? (
+                <p className="text-xs text-slate-400">Loading…</p>
+              ) : importLogs.length === 0 ? (
+                <p className="text-xs text-slate-400">No previous imports for this campaign.</p>
+              ) : (
+                <ul className="space-y-1">
+                  {importLogs.map((log) => (
+                    <li key={log.id} className="text-xs text-slate-600 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <span className="font-medium text-slate-700">Rows {log.startRow}–{log.endRow}</span>
+                      <span className="text-green-600">{log.importedCount} imported</span>
+                      {log.skippedCount > 0 && <span className="text-amber-600">{log.skippedCount} skipped</span>}
+                      <span className="text-slate-400">{formatDate(log.createdAt)}</span>
+                      <span className="text-slate-300 truncate max-w-[140px]">{log.fileName}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {nextStartRow && (
+                <p className="mt-2 text-xs font-semibold text-indigo-600">
+                  Suggested next start row: {nextStartRow}
+                </p>
+              )}
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="import-file">File (.xlsx or .csv)</Label>
             <Input
@@ -92,10 +182,11 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
               <Label htmlFor="import-start-row">Start Row (optional)</Label>
               <Input
                 id="import-start-row"
+                ref={startRowRef}
                 name="startRow"
                 type="number"
                 min="2"
-                placeholder="e.g. 200"
+                placeholder={nextStartRow ? String(nextStartRow) : "e.g. 200"}
               />
             </div>
             <div className="space-y-2">

@@ -36,7 +36,7 @@ function rowToLead(
 
   return {
     campaignId,
-    recipientName: recipientName || "", // Don't fallback to email
+    recipientName: recipientName || "",
     recipientEmail: recipientEmail as string,
     websiteUrl: websiteUrl || undefined,
     niche: niche || undefined,
@@ -44,7 +44,7 @@ function rowToLead(
 }
 
 export type ImportResult =
-  | { success: true; count: number }
+  | { success: true; count: number; skipped: number; nextStartRow: number }
   | { success: false; error: string };
 
 export async function importLeads(formData: FormData): Promise<ImportResult> {
@@ -78,7 +78,7 @@ export async function importLeads(formData: FormData): Promise<ImportResult> {
   const startRowStr = formData.get("startRow");
   const endRowStr = formData.get("endRow");
 
-  let startRow = 2; // Default excel start row (row 2, index 0 in sheetRows)
+  let startRow = 2;
   if (startRowStr && typeof startRowStr === "string" && startRowStr.trim()) {
     const parsed = parseInt(startRowStr.trim(), 10);
     if (!isNaN(parsed) && parsed >= 2) startRow = parsed;
@@ -101,9 +101,11 @@ export async function importLeads(formData: FormData): Promise<ImportResult> {
   }
 
   let rows: Record<string, unknown>[] = [];
+  let totalSheetRows = 0;
   for (const sheetName of workbook.SheetNames) {
     const sheet = workbook.Sheets[sheetName];
     const sheetRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+    totalSheetRows += sheetRows.length;
 
     const startIndex = startRow - 2;
     const endIndex = endRow === Infinity ? undefined : endRow - 1;
@@ -140,6 +142,7 @@ export async function importLeads(formData: FormData): Promise<ImportResult> {
     'icloud.com', 'aol.com', 'ymail.com', 'live.com', 'msn.com'
   ]);
 
+  let skippedCount = 0;
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
     const lead = rowToLead(row, campaignId.trim());
@@ -157,20 +160,48 @@ export async function importLeads(formData: FormData): Promise<ImportResult> {
         if (domainLower && !isPublic) {
           seenDomainsInSheet.add(domainLower);
         }
+      } else {
+        skippedCount++;
       }
     }
   }
 
+  const actualEndRow = endRow === Infinity ? (startRow - 2 + rows.length + 1) : endRow;
+  const nextStartRow = actualEndRow + 1;
+
   if (toInsert.length === 0) {
-    return { success: true, count: 0 };
+    await prisma.importLog.create({
+      data: {
+        campaignId: campaignId.trim(),
+        fileName: file.name,
+        startRow,
+        endRow: actualEndRow,
+        importedCount: 0,
+        skippedCount,
+      },
+    });
+    revalidatePath("/dashboard");
+    return { success: true, count: 0, skipped: skippedCount, nextStartRow };
   }
 
   try {
     const result = await prisma.lead.createMany({
       data: toInsert,
     });
+
+    await prisma.importLog.create({
+      data: {
+        campaignId: campaignId.trim(),
+        fileName: file.name,
+        startRow,
+        endRow: actualEndRow,
+        importedCount: result.count,
+        skippedCount,
+      },
+    });
+
     revalidatePath("/dashboard");
-    return { success: true, count: result.count };
+    return { success: true, count: result.count, skipped: skippedCount, nextStartRow };
   } catch (err) {
     console.error("Import error:", err);
     return {

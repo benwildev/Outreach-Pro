@@ -37,6 +37,20 @@ npm run start # production server on 0.0.0.0:5000
 | `GMAIL_CLIENT_SECRET` | Gmail OAuth2 client secret (optional) |
 | `GMAIL_REFRESH_TOKEN` | Gmail OAuth2 refresh token (optional) |
 
+## Database Configuration
+- App uses Replit's internal PostgreSQL (`heliumdb` via PGHOST/PGUSER/PGPASSWORD/PGDATABASE env vars), NOT the Neon DATABASE_URL
+- `lib/prisma.ts` overrides DATABASE_URL with PGHOST vars at runtime
+- To apply schema changes, use `psql` directly: `PGPASSWORD=$PGPASSWORD psql -h $PGHOST -U $PGUSER -d $PGDATABASE`
+- Schema tables: `campaign`, `lead`, `import_log` (lowercase with @@map in Prisma)
+
+## Key Features
+- Bulk send automation with delay controls and daily limits
+- Gmail OAuth via Chrome extension orchestrating ChatGPT → Gmail workflows
+- Follow-up scheduling (2-level) with reply tracking
+- Import tracking: CSV/Excel imports logged per-campaign with start row resumption
+- Google Sheets sync via Apps Script snippet (no direct API; `/api/sheets-data` provides JSON)
+- Advanced analytics and lead management
+
 ## Replit Configuration
 - Dev server binds to `0.0.0.0:5000` for Replit preview compatibility
 - Workflow: "Start application" runs `npm run dev`
