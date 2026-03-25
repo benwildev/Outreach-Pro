@@ -628,6 +628,14 @@
         setStoredBulkLimit(limit);
       });
     }
+    if (nodes.domainThrottleInput && !nodes.domainThrottleInput.dataset.bound) {
+      nodes.domainThrottleInput.dataset.bound = "1";
+      nodes.domainThrottleInput.addEventListener("change", () => {
+        const throttle = clampNumber(nodes.domainThrottleInput.value, 0, 100, 0);
+        nodes.domainThrottleInput.value = String(throttle);
+        setStoredDomainThrottle(throttle);
+      });
+    }
     if (nodes.autoFollowupInput && !nodes.autoFollowupInput.dataset.bound) {
       nodes.autoFollowupInput.dataset.bound = "1";
       nodes.autoFollowupInput.addEventListener("change", () => {
