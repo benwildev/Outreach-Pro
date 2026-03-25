@@ -40,12 +40,14 @@ export async function GET(
 var BENWILL_API_URL = "${dataUrl}";
 
 // Column mapping — update these to match your sheet layout
-//   J = Email  |  M = Date sent  |  N = Follow up  |  O = Got Reply
+//   J = Email  |  L = Outreach account  |  M = Date sent
+//   N = Follow up  |  O = Got Reply
 var COLUMNS = {
-  EMAIL:        "J",  // Column that holds email addresses (read-only)
-  SENT_AT:      "M",  // Date column — writes the sent date
-  NEXT_FOLLOWUP:"N",  // Follow up column — writes next follow-up date
-  REPLIED:      "O"   // Got Reply column — writes Yes / No
+  EMAIL:           "J",  // Column that holds email addresses (read-only)
+  OUTREACH_ACCOUNT:"L",  // Outreach account — Gmail account used to send
+  SENT_AT:         "M",  // Date column — writes the sent date
+  NEXT_FOLLOWUP:   "N",  // Follow up column — writes next follow-up date
+  REPLIED:         "O"   // Got Reply column — writes Yes / No
 };
 
 function syncBenwillData() {
@@ -75,24 +77,17 @@ function syncBenwillData() {
 
     var lead = leadMap[cellEmail];
 
-    if (COLUMNS.STATUS)
-      sheet.getRange(row, columnToIndex(COLUMNS.STATUS)).setValue(capitalize(lead.status));
+    if (COLUMNS.OUTREACH_ACCOUNT)
+      sheet.getRange(row, columnToIndex(COLUMNS.OUTREACH_ACCOUNT)).setValue(lead.sentFrom || "");
 
     if (COLUMNS.SENT_AT)
       sheet.getRange(row, columnToIndex(COLUMNS.SENT_AT)).setValue(lead.sentAt ? new Date(lead.sentAt) : "");
 
-    if (COLUMNS.REPLIED)
-      sheet.getRange(row, columnToIndex(COLUMNS.REPLIED)).setValue(lead.replied);
-
-    if (COLUMNS.GMAIL_LINK && lead.gmailLink) {
-      sheet.getRange(row, columnToIndex(COLUMNS.GMAIL_LINK))
-        .setFormula('=HYPERLINK("' + lead.gmailLink + '","Open Thread")');
-    } else if (COLUMNS.GMAIL_LINK) {
-      sheet.getRange(row, columnToIndex(COLUMNS.GMAIL_LINK)).setValue("");
-    }
-
     if (COLUMNS.NEXT_FOLLOWUP)
       sheet.getRange(row, columnToIndex(COLUMNS.NEXT_FOLLOWUP)).setValue(lead.nextFollowup ? new Date(lead.nextFollowup) : "");
+
+    if (COLUMNS.REPLIED)
+      sheet.getRange(row, columnToIndex(COLUMNS.REPLIED)).setValue(lead.replied);
 
     updated++;
   }
