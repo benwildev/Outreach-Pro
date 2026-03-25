@@ -39,11 +39,10 @@ export async function GET(
 
 var BENWILL_API_URL = "${dataUrl}";
 
-// Column mapping — update these to match your sheet layout
-//   J = Email  |  L = Outreach account  |  M = Date sent
-//   N = Follow up  |  O = Got Reply
+// Column mapping — update these letters if your layout differs
+//   L = Outreach account  |  M = Date sent  |  N = Follow up  |  O = Got Reply
+var EMAIL_COLUMN = "J";  // Column with email addresses (used for row matching)
 var COLUMNS = {
-  EMAIL:           "J",  // Column that holds email addresses (read-only)
   OUTREACH_ACCOUNT:"L",  // Outreach account — Gmail account used to send
   SENT_AT:         "M",  // Date column — writes the sent date
   NEXT_FOLLOWUP:   "N",  // Follow up column — writes next follow-up date
@@ -68,7 +67,7 @@ function syncBenwillData() {
   });
 
   var lastRow = sheet.getLastRow();
-  var emailColIndex = columnToIndex(COLUMNS.EMAIL);
+  var emailColIndex = columnToIndex(EMAIL_COLUMN);
   var updated = 0;
 
   for (var row = 2; row <= lastRow; row++) {
