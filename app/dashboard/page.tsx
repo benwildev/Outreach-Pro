@@ -136,9 +136,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             {/* Brand */}
             <div className="flex items-center gap-3">
-              <div className="bg-indigo-500/20 border border-indigo-400/30 rounded-xl p-2.5">
-                <Zap className="w-6 h-6 text-indigo-300" />
-              </div>
+              <img src="/logo.png" alt="Benwill Outreach" className="w-10 h-10 rounded-xl object-contain bg-white/10 p-0.5" />
               <div>
                 <h1 className="text-2xl font-bold text-white tracking-tight">Benwill Outreach</h1>
                 <p className="text-indigo-300 text-xs mt-0.5 font-medium">Outreach automation dashboard</p>
