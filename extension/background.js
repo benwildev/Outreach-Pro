@@ -267,7 +267,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return false;
   }
   if (message.action === "setReplySweepEnabled") {
-    const enable = message.enabled !== false;
+    // Bridge wraps params in message.data; direct callers may use message.enabled.
+    const rawEnabled = (message.data && "enabled" in message.data) ? message.data.enabled : message.enabled;
+    const enable = rawEnabled !== false && rawEnabled !== 0;
     replySweepDisabled = !enable;
     if (enable) {
       ensureReplyCheckAlarm().catch(() => {});

@@ -101,7 +101,7 @@ export function BulkActionsRow({ currentCampaignId }: { currentCampaignId: strin
   async function handleToggleAutoCheck() {
     const enable = sweepDisabled;
     try {
-      const res = await sendRuntimeMessage({ action: "setReplySweepEnabled", enabled: enable });
+      const res = await sendRuntimeMessage({ action: "setReplySweepEnabled", data: { enabled: enable } });
       if (res?.success) {
         setSweepDisabled(!enable);
       }
