@@ -3,6 +3,7 @@
 export type BulkState = {
   status?: string;
   phase?: string;
+  startPhase?: string;
   paused?: boolean;
   stopRequested?: boolean;
   delayMinMs?: number;

@@ -745,6 +745,7 @@ function createBulkAutomationState() {
     stopRequested: false,
     runnerActive: false,
     phase: "send",
+    startPhase: "send",
     followupEnabled: false,
     queue: [],
     total: 0,
@@ -908,6 +909,7 @@ function getBulkAutomationPublicState() {
   return {
     status: bulkAutomationState.status,
     phase: bulkAutomationState.phase || "send",
+    startPhase: bulkAutomationState.startPhase || "send",
     paused: !!bulkAutomationState.paused,
     stopRequested: !!bulkAutomationState.stopRequested,
     campaignId: bulkAutomationState.campaignId || "",
@@ -1251,11 +1253,16 @@ async function runBulkAutomationQueue() {
   bulkAutomationState.startedAt = Date.now();
   bulkAutomationState.finishedAt = null;
   bulkAutomationState.lastError = "";
-  bulkAutomationState.phase = "send";
   bulkAutomationState.lastDelayMs = 0;
 
+  const runStartPhase = bulkAutomationState.startPhase || "send";
+
   try {
-    await processBulkQueueItems();
+    // For "send" or "both": process the new-email queue first.
+    if (runStartPhase !== "followup") {
+      bulkAutomationState.phase = "send";
+      await processBulkQueueItems();
+    }
 
     if (!bulkAutomationState.stopRequested && bulkAutomationState.followupEnabled) {
       bulkAutomationState.phase = "followup";
@@ -1296,7 +1303,13 @@ async function handleStartBulkAutomation(data) {
     data && (data.delayMaxMs != null ? data.delayMaxMs : data.delayMs)
   );
   const limit = normalizeBulkLimit(data && data.limit);
-  const followupEnabled = !!(data && data.followupEnabled);
+  // startPhase controls which phases run:
+  //   "send"     → new emails only (default)
+  //   "followup" → follow-ups only (skip new sends)
+  //   "both"     → new emails first, then follow-ups
+  const rawStartPhase = data && data.startPhase ? String(data.startPhase).trim() : "";
+  const startPhase = rawStartPhase === "followup" ? "followup" : rawStartPhase === "both" ? "both" : "send";
+  const followupEnabled = startPhase === "both" || startPhase === "followup";
   const sendWindowStart = normalizeWindowTime(data && data.sendWindowStart, "09:00");
   const sendWindowEnd = normalizeWindowTime(data && data.sendWindowEnd, "18:00");
   const windowEnabled = !!(data && data.windowEnabled && sendWindowStart && sendWindowEnd);
@@ -1306,7 +1319,8 @@ async function handleStartBulkAutomation(data) {
   bulkAutomationState.scheduleSendTime = data && data.scheduleSendTime ? String(data.scheduleSendTime).trim() : "";
   bulkAutomationState.scheduleStaggerMs = data && data.scheduleStaggerMs > 0 ? Number(data.scheduleStaggerMs) : 0;
 
-  const queue = await fetchSendQueue(limit, campaignId);
+  // For "followup only" mode skip fetching the new-email queue entirely.
+  const queue = startPhase === "followup" ? [] : await fetchSendQueue(limit, campaignId);
 
   bulkAutomationState.queue = Array.isArray(queue) ? queue : [];
   bulkAutomationState.total = bulkAutomationState.queue.length;
@@ -1320,13 +1334,14 @@ async function handleStartBulkAutomation(data) {
   bulkAutomationState.delayMaxMs = delayRange.delayMaxMs;
   bulkAutomationState.lastDelayMs = 0;
   bulkAutomationState.followupEnabled = followupEnabled;
+  bulkAutomationState.startPhase = startPhase;
   bulkAutomationState.windowEnabled = windowEnabled;
   bulkAutomationState.sendWindowStart = sendWindowStart;
   bulkAutomationState.sendWindowEnd = sendWindowEnd;
   // (scheduleSendTime already set above before fetchSendQueue)
   bulkAutomationState.limit = limit;
   bulkAutomationState.campaignId = campaignId;
-  bulkAutomationState.phase = "send";
+  bulkAutomationState.phase = startPhase === "followup" ? "followup" : "send";
   bulkAutomationState.currentLeadId = "";
   bulkAutomationState.currentRecipientEmail = "";
   bulkAutomationState.startedAt = null;

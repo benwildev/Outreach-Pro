@@ -7,6 +7,7 @@ export const K_AUTO_FOLLOWUP = "leadsExtensionBulkAutoFollowup";
 export const K_WINDOW_ENABLED = "leadsExtensionBulkWindowEnabled";
 export const K_WINDOW_START = "leadsExtensionBulkWindowStart";
 export const K_WINDOW_END = "leadsExtensionBulkWindowEnd";
+export const K_START_PHASE = "leadsExtensionBulkStartPhase";
 export const K_SCHEDULE_TIME = "leadsExtensionScheduleTime";
 export const K_SCHED_LIMIT = "leadsExtensionSchedLimit";
 export const K_SCHED_STAGGER = "leadsExtensionSchedStaggerMin";

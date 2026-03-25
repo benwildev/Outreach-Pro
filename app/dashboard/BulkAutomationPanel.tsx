@@ -16,7 +16,7 @@ import {
   K_DELAY_MIN,
   K_DELAY_MAX,
   K_LIMIT,
-  K_AUTO_FOLLOWUP,
+  K_START_PHASE,
   K_WINDOW_ENABLED,
   K_WINDOW_START,
   K_WINDOW_END,
@@ -27,7 +27,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
   const [delayMinSeconds, setDelayMinSeconds] = useState(45);
   const [delayMaxSeconds, setDelayMaxSeconds] = useState(45);
   const [limit, setLimit] = useState(50);
-  const [autoFollowup, setAutoFollowup] = useState(false);
+  const [startPhase, setStartPhase] = useState<"send" | "followup" | "both">("send");
   const [windowEnabled, setWindowEnabled] = useState(false);
   const [windowStart, setWindowStart] = useState("09:00");
   const [windowEnd, setWindowEnd] = useState("18:00");
@@ -41,7 +41,8 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
     setDelayMaxSeconds(clamp(Math.round(readStorageInt(K_DELAY_MAX, 45000) / 1000), 5, 600));
     setLimit(clamp(readStorageInt(K_LIMIT, 50), 1, 500));
     if (typeof window !== "undefined") {
-      setAutoFollowup((window.localStorage.getItem(K_AUTO_FOLLOWUP) ?? "0") === "1");
+      const savedPhase = window.localStorage.getItem(K_START_PHASE) ?? "send";
+      setStartPhase(savedPhase === "followup" ? "followup" : savedPhase === "both" ? "both" : "send");
       setWindowEnabled((window.localStorage.getItem(K_WINDOW_ENABLED) ?? "0") === "1");
       setWindowStart(normalizeTime(window.localStorage.getItem(K_WINDOW_START) ?? "", "09:00"));
       setWindowEnd(normalizeTime(window.localStorage.getItem(K_WINDOW_END) ?? "", "18:00"));
@@ -115,7 +116,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
         window.localStorage.setItem(K_DELAY_MIN, String(minSec * 1000));
         window.localStorage.setItem(K_DELAY_MAX, String(maxSec * 1000));
         window.localStorage.setItem(K_LIMIT, String(maxLeads));
-        window.localStorage.setItem(K_AUTO_FOLLOWUP, autoFollowup ? "1" : "0");
+        window.localStorage.setItem(K_START_PHASE, startPhase);
         window.localStorage.setItem(K_WINDOW_ENABLED, windowEnabled ? "1" : "0");
         window.localStorage.setItem(K_WINDOW_START, start);
         window.localStorage.setItem(K_WINDOW_END, end);
@@ -127,7 +128,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
             delayMinMs: minSec * 1000,
             delayMaxMs: maxSec * 1000,
             limit: maxLeads,
-            followupEnabled: autoFollowup,
+            startPhase,
             windowEnabled,
             sendWindowStart: start,
             sendWindowEnd: end,
@@ -232,10 +233,24 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
                 className={inputClass}
               />
             </label>
-            <label className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm cursor-pointer hover:border-indigo-300 transition-colors">
-              <input type="checkbox" checked={autoFollowup} onChange={(e) => setAutoFollowup(e.target.checked)} className="rounded text-indigo-600 w-3 h-3" />
-              <span className="text-[11px] text-gray-600 font-medium whitespace-nowrap">Auto follow-ups</span>
-            </label>
+            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-1 py-1 shadow-sm">
+              <span className="text-[11px] text-gray-500 font-medium pl-1.5 pr-2 whitespace-nowrap">Phase:</span>
+              {(["send", "both", "followup"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setStartPhase(p)}
+                  disabled={isActive}
+                  className={`h-6 px-2.5 text-[11px] rounded-md font-medium transition-colors whitespace-nowrap ${
+                    startPhase === p
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  {p === "send" ? "New only" : p === "both" ? "New + Follow-ups" : "Follow-ups only"}
+                </button>
+              ))}
+            </div>
             <label className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm cursor-pointer hover:border-indigo-300 transition-colors">
               <input type="checkbox" checked={windowEnabled} onChange={(e) => setWindowEnabled(e.target.checked)} className="rounded text-indigo-600 w-3 h-3" />
               <span className="text-[11px] text-gray-600 font-medium whitespace-nowrap">Send window</span>
@@ -291,6 +306,9 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
           {/* Status / progress */}
           <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="text-[11px] text-gray-500">Phase: <span className="font-medium text-gray-700">{state.phase || "send"}</span></span>
+            {state.startPhase && state.startPhase !== "send" && (
+              <span className="text-[11px] text-indigo-500 font-medium">({state.startPhase === "both" ? "new + follow-ups" : "follow-ups only"})</span>
+            )}
             {progressText && <span className="text-[11px] text-gray-500">{progressText}</span>}
             {error && <span className="text-[11px] text-red-600 font-medium">{error}</span>}
           </div>
