@@ -187,6 +187,11 @@
     if (!expected) {
       return true;
     }
+    // If expected is a pure numeric index (e.g. "0", "1"), accept any authenticated session.
+    // Gmail maps /u/0/ to the actual account email in the URL, so we cannot compare index to email.
+    if (/^\d+$/.test(expected)) {
+      return true;
+    }
     const current = normalizeAuthUser(currentAuthUser);
     // If both are emails, compare case-insensitively (normalizeAuthUser does toLowerCase)
     if (expected.includes("@") && current.includes("@")) {
