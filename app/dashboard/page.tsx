@@ -13,7 +13,7 @@ import { BulkSchedulePanel } from "./BulkSchedulePanel";
 import { BulkActionsRow } from "./BulkActionsRow";
 import { LeadsTableClient } from "./LeadsTableClient";
 import { AdvancedFilters } from "./AdvancedFilters";
-import { Settings, Download, FileDown, Zap, LayoutDashboard } from "lucide-react";
+import { Settings, Download, FileDown, BarChart2, Zap, LayoutDashboard } from "lucide-react";
 import { promoteScheduledLeads } from "@/lib/promoteScheduledLeads";
 
 const VALID_STATUSES = ["pending", "sent", "scheduled", "failed", "replied"] as const;
@@ -155,6 +155,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               >
                 <Settings className="w-3.5 h-3.5" />
                 Campaigns
+              </Link>
+              <Link
+                href="/analytics"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-200 hover:text-white border border-indigo-700/60 hover:border-indigo-500 bg-indigo-900/40 hover:bg-indigo-800/60 rounded-lg px-3 py-2 transition-all duration-150"
+              >
+                <BarChart2 className="w-3.5 h-3.5" />
+                Analytics
               </Link>
               <a
                 href="/api/download-extension"

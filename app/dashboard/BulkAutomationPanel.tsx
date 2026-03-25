@@ -20,6 +20,7 @@ import {
   K_WINDOW_ENABLED,
   K_WINDOW_START,
   K_WINDOW_END,
+  K_DOMAIN_THROTTLE,
 } from "./extensionBridge";
 import { Play, Pause, RotateCcw, Square, Zap, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 
@@ -31,6 +32,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
   const [windowEnabled, setWindowEnabled] = useState(false);
   const [windowStart, setWindowStart] = useState("09:00");
   const [windowEnd, setWindowEnd] = useState("18:00");
+  const [domainThrottle, setDomainThrottle] = useState(0);
   const [state, setState] = useState<BulkState>({});
   const [error, setError] = useState("");
   const [hasRuntime, setHasRuntime] = useState(false);
@@ -46,6 +48,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
       setWindowEnabled((window.localStorage.getItem(K_WINDOW_ENABLED) ?? "0") === "1");
       setWindowStart(normalizeTime(window.localStorage.getItem(K_WINDOW_START) ?? "", "09:00"));
       setWindowEnd(normalizeTime(window.localStorage.getItem(K_WINDOW_END) ?? "", "18:00"));
+      setDomainThrottle(Math.max(0, readStorageInt(K_DOMAIN_THROTTLE, 0)));
     }
   }, []);
 
@@ -120,6 +123,8 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
         window.localStorage.setItem(K_WINDOW_ENABLED, windowEnabled ? "1" : "0");
         window.localStorage.setItem(K_WINDOW_START, start);
         window.localStorage.setItem(K_WINDOW_END, end);
+        const throttle = Math.max(0, domainThrottle);
+        window.localStorage.setItem(K_DOMAIN_THROTTLE, String(throttle));
 
         const response = await sendRuntimeMessage({
           action: "startBulkAutomation",
@@ -132,6 +137,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
             windowEnabled,
             sendWindowStart: start,
             sendWindowEnd: end,
+            domainThrottle: throttle,
           },
         });
         if (!response?.success) {
@@ -267,6 +273,21 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
                 </label>
               </>
             )}
+
+            {/* Domain throttle */}
+            <label className="flex items-center gap-1.5">
+              <span className="text-[11px] text-gray-500 whitespace-nowrap">Domain limit</span>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={domainThrottle}
+                onChange={(e) => setDomainThrottle(Math.max(0, Math.floor(Number(e.target.value) || 0)))}
+                disabled={isActive}
+                placeholder="0=off"
+                className="w-14 h-8 rounded-lg border border-gray-200 bg-white px-2 text-xs text-center shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:opacity-50"
+              />
+            </label>
 
             {/* Divider */}
             <div className="w-px h-6 bg-indigo-200 mx-1" />

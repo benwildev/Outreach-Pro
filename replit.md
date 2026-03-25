@@ -44,12 +44,18 @@ npm run start # production server on 0.0.0.0:5000
 - Schema tables: `campaign`, `lead`, `import_log` (lowercase with @@map in Prisma)
 
 ## Key Features
-- Bulk send automation with delay controls and daily limits
+- Bulk send automation with delay controls, daily limits, and domain throttle (max sends per domain per run)
 - Gmail OAuth via Chrome extension orchestrating ChatGPT → Gmail workflows
-- Follow-up scheduling (2-level) with reply tracking
-- Import tracking: CSV/Excel imports logged per-campaign with start row resumption
-- Google Sheets sync via Apps Script snippet (no direct Google API — user preference; `/api/sheets-data` provides JSON, `/api/sheets-script/[campaignId]` serves downloadable .gs file)
-- Advanced analytics and lead management
+- Follow-up scheduling (2-level) with reply tracking; unsubscribed leads blocked from follow-up queue
+- Reply categorization: auto-classifies replies as "positive", "ooo", "negative", or "unsubscribe" (stored in `replyCategory`); unsubscribe/negative set `unsubscribed=true`
+- Webhook notifications: fires `campaign.webhookUrl` POST on reply with category + lead info
+- Import tracking: CSV/Excel imports logged per-campaign with start row resumption; skipped duplicates surfaced in UI
+- Google Sheets sync via Apps Script snippet (no direct Google API — user preference)
+- Analytics page (`/analytics`): sends/day chart, reply rates, account performance, campaign breakdown with pure CSS bar charts
+
+## Lead Schema New Columns (added)
+- `reply_category VARCHAR` — reply classification: positive | ooo | negative | unsubscribe
+- `unsubscribed BOOLEAN DEFAULT false` — set true when negative/unsubscribe reply detected
 
 ## Replit Configuration
 - Dev server binds to `0.0.0.0:5000` for Replit preview compatibility

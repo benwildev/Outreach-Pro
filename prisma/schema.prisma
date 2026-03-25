@@ -65,6 +65,8 @@ model Lead {
   clickedAt         DateTime?
   createdAt         DateTime  @default(now())
   replyBody             String?
+  replyCategory         String?
+  unsubscribed          Boolean   @default(false)
   sentFollowup1Body     String?
   sentFollowup2Body     String?
   lastReplyCheckedAt    DateTime?

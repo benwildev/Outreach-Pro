@@ -29,6 +29,7 @@ export async function GET(request: Request) {
     const where: Prisma.LeadWhereInput = {
       status: "sent",
       replied: false,
+      unsubscribed: false,
       step: { lt: 3 },
       nextFollowup: { lte: new Date() },
     };

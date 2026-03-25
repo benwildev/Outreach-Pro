@@ -769,6 +769,9 @@ function createBulkAutomationState() {
     startedAt: null,
     finishedAt: null,
     lastError: "",
+    // Domain throttle: max sends to the same email domain per run. 0 = disabled.
+    domainThrottle: 0,
+    sentDomainsThisRun: {},
   };
 }
 
@@ -934,6 +937,7 @@ function getBulkAutomationPublicState() {
     startedAt: bulkAutomationState.startedAt,
     finishedAt: bulkAutomationState.finishedAt,
     lastError: bulkAutomationState.lastError || "",
+    domainThrottle: Number(bulkAutomationState.domainThrottle || 0),
   };
 }
 
@@ -1130,6 +1134,16 @@ async function sleepWithBulkControls(ms) {
   return !bulkAutomationState.stopRequested;
 }
 
+function getEmailRootDomain(email) {
+  try {
+    const atIdx = email.indexOf("@");
+    if (atIdx < 0) return "";
+    return email.slice(atIdx + 1).toLowerCase().trim();
+  } catch (_) {
+    return "";
+  }
+}
+
 async function runSingleBulkWorkflow(item) {
   const current = item || null;
   const leadId = current && current.leadId ? String(current.leadId).trim() : "";
@@ -1144,6 +1158,19 @@ async function runSingleBulkWorkflow(item) {
   }
 
   const workflowType = current && current.workflowType === "followup" ? "followup" : "send";
+
+  // Domain throttle: skip if max sends to this domain already reached this run.
+  if (workflowType === "send" && bulkAutomationState.domainThrottle > 0) {
+    const domain = getEmailRootDomain(recipientEmail);
+    if (domain) {
+      const alreadySent = bulkAutomationState.sentDomainsThisRun[domain] || 0;
+      if (alreadySent >= bulkAutomationState.domainThrottle) {
+        console.log("[Leads Extension] Domain throttle: skipping", recipientEmail, "— domain", domain, "already sent", alreadySent, "times this run.");
+        bulkAutomationState.skipped += 1;
+        return;
+      }
+    }
+  }
   if (workflowType === "followup") {
     const followupBody = getFollowupBodyFromItem(current);
     if (!followupBody) {
@@ -1199,6 +1226,13 @@ async function runSingleBulkWorkflow(item) {
   await handleStartWorkflow(workflowData);
   await completionPromise;
   bulkAutomationState.sent += 1;
+  // Track domain send count for throttle.
+  if (bulkAutomationState.domainThrottle > 0) {
+    const domain = getEmailRootDomain(recipientEmail);
+    if (domain) {
+      bulkAutomationState.sentDomainsThisRun[domain] = (bulkAutomationState.sentDomainsThisRun[domain] || 0) + 1;
+    }
+  }
 }
 
 async function processBulkQueueItems() {
@@ -1350,6 +1384,8 @@ async function handleStartBulkAutomation(data) {
   bulkAutomationState.paused = false;
   bulkAutomationState.stopRequested = false;
   bulkAutomationState.status = (bulkAutomationState.total > 0 || followupEnabled) ? "running" : "idle";
+  bulkAutomationState.domainThrottle = Math.max(0, Math.floor(Number(data && data.domainThrottle != null ? data.domainThrottle : 0) || 0));
+  bulkAutomationState.sentDomainsThisRun = {};
   resetBulkWorkflowWaiters();
 
   if (bulkAutomationState.total === 0 && !followupEnabled) {
