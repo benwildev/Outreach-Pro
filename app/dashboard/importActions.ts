@@ -166,7 +166,7 @@ export async function importLeads(formData: FormData): Promise<ImportResult> {
     }
   }
 
-  const actualEndRow = endRow === Infinity ? (startRow - 2 + rows.length + 1) : endRow;
+  const actualEndRow = startRow - 1 + rows.length;
   const nextStartRow = actualEndRow + 1;
 
   if (toInsert.length === 0) {
