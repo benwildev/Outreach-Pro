@@ -1,4 +1,4 @@
-import { Mail, CheckCircle2, MessageSquare, Clock, AlertCircle, XCircle, CalendarClock } from "lucide-react";
+import { Mail, CheckCircle2, MessageSquare, Clock, AlertCircle, XCircle, CalendarClock, AlertTriangle } from "lucide-react";
 import Link from "next/link";
 
 interface StatsCardsProps {
@@ -8,6 +8,7 @@ interface StatsCardsProps {
   pendingLeads: number;
   bouncedLeads: number;
   scheduledLeads: number;
+  failedLeads: number;
   followupDueCount: number;
 }
 
@@ -18,6 +19,7 @@ export function StatsCards({
   pendingLeads,
   bouncedLeads,
   scheduledLeads,
+  failedLeads,
   followupDueCount,
 }: StatsCardsProps) {
   const deliveredLeads = sentLeads + repliedLeads + bouncedLeads;
@@ -80,6 +82,17 @@ export function StatsCards({
       href: "/dashboard?status=bounced",
     },
     {
+      label: "Failed",
+      value: failedLeads,
+      sub: failedLeads > 0 ? "retry from bulk panel" : "none stuck",
+      subColor: failedLeads > 0 ? "text-rose-600" : "text-slate-400",
+      icon: AlertTriangle,
+      accent: failedLeads > 0 ? "border-l-rose-500" : "border-l-gray-300",
+      iconBg: failedLeads > 0 ? "bg-rose-500" : "bg-gray-400",
+      valueColor: failedLeads > 0 ? "text-rose-700" : "text-gray-500",
+      href: "/dashboard?status=failed",
+    },
+    {
       label: "Pending",
       value: pendingLeads,
       sub: "queued to send",
@@ -104,7 +117,7 @@ export function StatsCards({
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-5">
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-5">
       {stats.map((stat, index) => {
         const Icon = stat.icon;
         return (

@@ -537,6 +537,25 @@
       }
     }
 
+    // Strip card-header preamble that ChatGPT's "Email" card format inserts before
+    // the real greeting (e.g. "Email\nSubject  News angles...\n\nHi Recipient,").
+    // If the extracted body doesn't start with a greeting, look for the first
+    // greeting line inside it and use everything from there.
+    if (body && !/^(hi|hello|dear|hey)\s+\S/i.test(body.trim())) {
+      var bodyLines = body.split("\n");
+      var greetingInBody = -1;
+      for (var gi = 0; gi < bodyLines.length; gi++) {
+        if (/^(hi|hello|dear|hey)\s+\S/i.test(bodyLines[gi].trim())) {
+          greetingInBody = gi;
+          break;
+        }
+      }
+      if (greetingInBody > 0) {
+        log("ChatGPT", "Stripped card-header preamble (" + greetingInBody + " lines) from extracted body");
+        body = bodyLines.slice(greetingInBody).join("\n").trim();
+      }
+    }
+
     // If no labeled body found, look for where the actual email greeting starts
     // (e.g. "Hi Amanda," / "Hello Joyce," / "Dear Amanda,") — that is the real email body.
     if (!body) {

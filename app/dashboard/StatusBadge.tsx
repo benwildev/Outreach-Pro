@@ -5,6 +5,7 @@ const statusVariants = {
   pending: "pending" as const,
   sent: "sent" as const,
   scheduled: "scheduled" as const,
+  failed: "failed" as const,
   replied: "replied" as const,
 };
 

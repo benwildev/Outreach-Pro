@@ -947,6 +947,26 @@ function waitForBulkWorkflowCompletion(leadId, timeoutMs) {
   return new Promise((resolve, reject) => {
     const timeoutId = setTimeout(() => {
       bulkWorkflowWaiters.delete(key);
+
+      // Mark the lead as "failed" in the dashboard so it doesn't stay "pending" forever
+      if (leadId) {
+        getApiBaseUrl().then(function(base) {
+          return fetch(base + "/api/update-send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ leadId: String(leadId), status: "failed" })
+          });
+        }).catch(function() {});
+
+        // Close the stuck ChatGPT tab if we have its ID in pendingWorkflows
+        var workflowKeyForTimeout = "lead:" + String(leadId).trim();
+        var pendingEntry = pendingWorkflows.get(workflowKeyForTimeout);
+        if (pendingEntry && pendingEntry.chatTabId) {
+          chrome.tabs.remove(pendingEntry.chatTabId).catch(function() {});
+          pendingWorkflows.delete(workflowKeyForTimeout);
+        }
+      }
+
       reject(new Error("Workflow timeout while waiting for lead update"));
     }, timeout);
     bulkWorkflowWaiters.set(key, { resolve, reject, timeoutId });

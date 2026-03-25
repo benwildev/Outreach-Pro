@@ -21,7 +21,7 @@ import {
   K_WINDOW_START,
   K_WINDOW_END,
 } from "./extensionBridge";
-import { Play, Pause, RotateCcw, Square, Zap, ChevronDown, ChevronUp } from "lucide-react";
+import { Play, Pause, RotateCcw, Square, Zap, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
 
 export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: string | null }) {
   const [delayMinSeconds, setDelayMinSeconds] = useState(45);
@@ -80,6 +80,27 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
     window.addEventListener("message", onBridgeReady);
     return () => window.removeEventListener("message", onBridgeReady);
   }, []);
+
+  async function retryFailed() {
+    setError("");
+    try {
+      const response = await fetch("/api/retry-failed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignId: currentCampaignId }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        setError(data.count > 0
+          ? `${data.count} failed lead(s) reset to pending — click Start to retry`
+          : "No failed leads to retry");
+      } else {
+        setError(data.error || "Failed to reset leads");
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to reset leads");
+    }
+  }
 
   async function doAction(action: "start" | "pause" | "resume" | "stop") {
     setError("");
@@ -257,6 +278,13 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
                 onClick={() => doAction("stop")} disabled={!isActive || statusValue === "stopping"}>
                 <Square className="w-3 h-3" /> Stop
               </Button>
+              {(state.failed || 0) > 0 && (
+                <Button type="button" size="sm" variant="outline"
+                  className="h-8 px-3 text-xs border-rose-200 text-rose-700 hover:bg-rose-50 gap-1.5"
+                  onClick={retryFailed} disabled={isActive}>
+                  <RefreshCw className="w-3 h-3" /> Retry Failed ({state.failed})
+                </Button>
+              )}
             </div>
           </div>
 
