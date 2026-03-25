@@ -18,9 +18,11 @@ export async function GET(
     return NextResponse.json({ error: "Campaign not found" }, { status: 404 });
   }
 
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  const forwardedProto = req.headers.get("x-forwarded-proto") || "https";
   const appUrl =
     process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-    req.nextUrl.origin;
+    (forwardedHost ? `${forwardedProto}://${forwardedHost}` : req.nextUrl.origin);
 
   const dataUrl = `${appUrl}/api/sheets-data?campaignId=${campaignId}`;
 
