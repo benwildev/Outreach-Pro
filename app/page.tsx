@@ -6,12 +6,12 @@ export default function HomePage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-8 p-8 bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <div className="flex flex-col items-center gap-4">
-        <div className="bg-black rounded-full overflow-hidden p-2 shadow-xl mb-2">
+        <div className="rounded-full overflow-hidden shadow-xl mb-2 border border-slate-200">
           <Image
-            src="/icon.png"
-            alt="BW Logo"
-            width={80}
-            height={80}
+            src="/logo.png"
+            alt="Benwill Outreach"
+            width={96}
+            height={96}
             className="object-contain"
           />
         </div>
