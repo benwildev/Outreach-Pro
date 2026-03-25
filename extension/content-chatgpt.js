@@ -151,19 +151,35 @@
     dispatchInputEvents(textarea);
     await delay(300);
 
-    const sendBtn = document.querySelector('button[data-testid="send-button"]')
-      || document.querySelector('button[aria-label="Send message"]')
-      || Array.from(document.querySelectorAll('button')).find((b) => (b.getAttribute("aria-label") || "").toLowerCase().includes("send"));
+    // Wait up to 3s for the send button to become enabled after text is injected.
+    let sendBtn = null;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      sendBtn = document.querySelector('button[data-testid="send-button"]:not([disabled])')
+        || document.querySelector('button[aria-label="Send message"]:not([disabled])')
+        || Array.from(document.querySelectorAll('button')).find((b) => {
+          if (b.disabled) return false;
+          const label = (b.getAttribute("aria-label") || "").toLowerCase();
+          return label.includes("send") && !label.includes("stop");
+        });
+      if (sendBtn) break;
+      await delay(500);
+    }
+
     if (sendBtn) {
       sendBtn.click();
-      log("ChatGPT", "Send clicked");
+      log("ChatGPT", "Send button clicked");
     } else {
-      const submitBtn = document.querySelector('form button[type="submit"]') || document.querySelector('button[type="submit"]');
+      // Reliable fallback: Enter key, which always works in ChatGPT regardless of button state.
+      log("ChatGPT", "Send button not found or disabled, using Enter key fallback");
+      const submitBtn = document.querySelector('form button[type="submit"]:not([disabled])')
+        || document.querySelector('button[type="submit"]:not([disabled])');
       if (submitBtn) {
         submitBtn.click();
       } else {
         textarea.focus();
-        textarea.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true }));
+        textarea.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true, cancelable: true }));
+        await delay(100);
+        textarea.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true }));
       }
     }
     await delay(500);
@@ -289,8 +305,19 @@
 
   function setText(el, text) {
     el.focus();
-    if (el.tagName === "TEXTAREA") {
-      el.value = text;
+    if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+      // Use the native value setter so React's synthetic event system recognises the change.
+      try {
+        const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, "value")
+          || Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value");
+        if (nativeSetter && nativeSetter.set) {
+          nativeSetter.set.call(el, text);
+        } else {
+          el.value = text;
+        }
+      } catch (_) {
+        el.value = text;
+      }
       el.dispatchEvent(new Event("input", { bubbles: true }));
       el.dispatchEvent(new Event("change", { bubbles: true }));
       return;
@@ -362,11 +389,21 @@
   }
 
   function isStillGenerating() {
-    const stopBtn = document.querySelector('button[aria-label="Stop generating"]');
-    if (stopBtn && stopBtn.offsetParent !== null) return true;
+    // Cover both old ("Stop generating") and new ("Stop streaming") ChatGPT UI labels.
+    const stopSelectors = [
+      'button[aria-label="Stop generating"]',
+      'button[aria-label="Stop streaming"]',
+      'button[data-testid="stop-button"]',
+      'button[aria-label="Stop"]',
+    ];
+    for (const sel of stopSelectors) {
+      const btn = document.querySelector(sel);
+      if (btn && btn.offsetParent !== null) return true;
+    }
     const buttons = document.querySelectorAll("button");
     for (const b of buttons) {
-      if ((b.textContent || "").trim() === "Stop generating") return true;
+      const text = (b.textContent || "").trim();
+      if (text === "Stop generating" || text === "Stop streaming" || text === "Stop") return true;
     }
     return false;
   }
@@ -447,7 +484,7 @@
       const start = Date.now();
       let lastText = "";
       let stableCount = 0;
-      const softResolveAfterMs = 45000;
+      const softResolveAfterMs = 25000;
 
       function looksLikeEmailOutput(text) {
         if (!text || text.length < 40) return false;
