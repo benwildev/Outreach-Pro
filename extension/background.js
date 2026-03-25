@@ -1458,6 +1458,9 @@ async function handleStopBulkAutomation() {
   bulkAutomationState.stopRequested = true;
   bulkAutomationState.paused = false;
   bulkAutomationState.status = "stopping";
+  // Immediately reject any pending workflow waiters so the runner exits
+  // its current await instead of blocking for up to BULK_WORKFLOW_TIMEOUT_MS (4 min).
+  resetBulkWorkflowWaiters();
   return { success: true, state: getBulkAutomationPublicState() };
 }
 

@@ -1761,22 +1761,21 @@
 
     // 4. Fill date and time inputs in Gmail's "Pick date & time" dialog
     function fillInput(input, value) {
-      input.focus();
+      // Use native setter so the value goes to THIS element regardless of document focus.
+      // document.execCommand("insertText") operates on the currently focused element and
+      // can accidentally write to the compose body if Gmail shifts focus during the call.
       try {
-        // setSelectionRange only works on text-like inputs
-        if (typeof input.setSelectionRange === "function" && input.type !== "date") {
-          input.setSelectionRange(0, (input.value || "").length);
+        const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
+        if (nativeSetter && typeof nativeSetter.set === "function") {
+          nativeSetter.set.call(input, value);
+        } else {
+          input.value = value;
         }
-        document.execCommand("selectAll", false);
-        document.execCommand("delete", false);
-        document.execCommand("insertText", false, value);
       } catch (e) {
-        // Fallback for non-standard inputs (e.g. native date pickers)
         input.value = value;
       }
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
-      input.blur();
     }
 
     // Scope input searches to the date-picker dialog only — never touch compose fields.
