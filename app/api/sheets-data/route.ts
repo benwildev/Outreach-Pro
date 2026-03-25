@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { promoteScheduledLeads } from "@/lib/promoteScheduledLeads";
 
 export async function GET(req: NextRequest) {
+  await promoteScheduledLeads();
+
   const { searchParams } = new URL(req.url);
   const campaignId = searchParams.get("campaignId");
 

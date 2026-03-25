@@ -14,6 +14,7 @@ import { BulkActionsRow } from "./BulkActionsRow";
 import { LeadsTableClient } from "./LeadsTableClient";
 import { AdvancedFilters } from "./AdvancedFilters";
 import { Settings, Download, FileDown, Zap, LayoutDashboard } from "lucide-react";
+import { promoteScheduledLeads } from "@/lib/promoteScheduledLeads";
 
 const VALID_STATUSES = ["pending", "sent", "scheduled", "replied"] as const;
 const PAGE_SIZE = 50;
@@ -36,6 +37,8 @@ interface DashboardPageProps {
 }
 
 export default async function DashboardPage({ searchParams }: DashboardPageProps) {
+  await promoteScheduledLeads();
+
   const statusFilter = searchParams.status?.toLowerCase();
   const status =
     statusFilter && VALID_STATUSES.includes(statusFilter as (typeof VALID_STATUSES)[number])
