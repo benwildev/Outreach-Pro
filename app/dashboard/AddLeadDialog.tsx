@@ -32,7 +32,9 @@ export function AddLeadDialog({ campaigns }: { campaigns: Campaign[] }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm">Add Lead</Button>
+        <button className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 border border-indigo-500/80 rounded-lg px-3 py-2 transition-all duration-150 shadow-sm">
+          + Add Lead
+        </button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>

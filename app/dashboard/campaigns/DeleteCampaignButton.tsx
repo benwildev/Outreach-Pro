@@ -29,13 +29,12 @@ export function DeleteCampaignButton({
   }
 
   return (
-    <Button
-      size="sm"
-      variant="destructive"
+    <button
       onClick={handleDelete}
       disabled={loading}
+      className="inline-flex items-center text-xs font-medium text-red-600 hover:text-red-800 border border-red-200 hover:border-red-400 bg-red-50 hover:bg-red-100 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-50"
     >
-      {loading ? "..." : "Delete"}
-    </Button>
+      {loading ? "…" : "Delete"}
+    </button>
   );
 }

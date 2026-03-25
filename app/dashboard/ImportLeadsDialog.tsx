@@ -51,7 +51,9 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
   return (
     <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) setMessage(null); }}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline">Import Excel</Button>
+        <button className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-200 hover:text-white border border-indigo-700/60 hover:border-indigo-500 bg-indigo-900/40 hover:bg-indigo-800/60 rounded-lg px-3 py-2 transition-all duration-150">
+          ↑ Import Excel
+        </button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
