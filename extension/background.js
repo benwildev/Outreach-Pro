@@ -32,7 +32,7 @@ const ANTI_AI_PHRASES_INSTRUCTION =
 // from throttling timers and load events in background tabs, which causes stalls.
 const RUN_TABS_IN_BACKGROUND = false;
 const REPLY_CHECK_ALARM = "dailyReplyCheck";
-const REPLY_CHECK_PERIOD_MINUTES = 4 * 60;
+const REPLY_CHECK_PERIOD_MINUTES = 2 * 60;
 const CHATGPT_HANDOFF_TIMEOUT_MS = 90000;
 const CHATGPT_DEFAULT_URL = "https://chatgpt.com/";
 const CAMPAIGN_CHAT_URLS_KEY = "campaignChatUrls";
@@ -58,6 +58,8 @@ const BULK_DELAY_MAX_MS = 600000;
 const BULK_LIMIT_DEFAULT = 50;
 const BULK_LIMIT_MAX = 500;
 let replySweepRunning = false;
+let replySweepStopped = false;
+let replySweepDisabled = false;
 const pendingWorkflows = new Map();
 const bulkWorkflowWaiters = new Map();
 const bulkAutomationState = createBulkAutomationState();
@@ -76,6 +78,10 @@ chrome.runtime.onStartup.addListener(() => {
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (!alarm || alarm.name !== REPLY_CHECK_ALARM) {
+    return;
+  }
+  if (replySweepDisabled) {
+    console.log("[Leads Extension Background] Auto reply check is disabled — skipping alarm.");
     return;
   }
   runDailyReplySweep("alarm").catch((err) => {
@@ -254,6 +260,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ success: false, error: String(err.message) });
       });
     return true;
+  }
+  if (message.action === "stopReplySweep") {
+    replySweepStopped = true;
+    sendResponse({ success: true, wasRunning: replySweepRunning });
+    return false;
+  }
+  if (message.action === "setReplySweepEnabled") {
+    const enable = message.enabled !== false;
+    replySweepDisabled = !enable;
+    if (enable) {
+      ensureReplyCheckAlarm().catch(() => {});
+    } else {
+      chrome.alarms.clear(REPLY_CHECK_ALARM).catch(() => {});
+    }
+    sendResponse({ success: true, disabled: replySweepDisabled });
+    return false;
+  }
+  if (message.action === "getReplySweepState") {
+    sendResponse({
+      success: true,
+      running: replySweepRunning,
+      disabled: replySweepDisabled,
+    });
+    return false;
   }
   if (message.action === "chatgptLoadError") {
     handleChatGptLoadError(message.data, sender.tab?.id)
@@ -1591,10 +1621,14 @@ async function runDailyReplySweep(trigger) {
   if (replySweepRunning) {
     return { success: true, skipped: true, reason: "already-running" };
   }
+  if (replySweepDisabled) {
+    return { success: true, skipped: true, reason: "disabled" };
+  }
   replySweepRunning = true;
+  replySweepStopped = false;
 
   try {
-    const queue = await fetchReplyCheckQueue(30);
+    const queue = await fetchReplyCheckQueue(50);
     let checked = 0;
     let marked = 0;
 
@@ -1614,11 +1648,15 @@ async function runDailyReplySweep(trigger) {
 
     var accountKeys = Object.keys(accountGroups);
     for (var ai = 0; ai < accountKeys.length; ai++) {
+      if (replySweepStopped) break;
+
       var acctKey = accountKeys[ai];
       var acctLeads = accountGroups[acctKey];
       var sharedTabId = null;
 
       for (var li = 0; li < acctLeads.length; li++) {
+        if (replySweepStopped) break;
+
         var sweepLead = acctLeads[li];
         var sweepLeadId = sweepLead.id ? String(sweepLead.id) : "";
         var sweepThreadId = sweepLead.gmailThreadId ? String(sweepLead.gmailThreadId).trim().replace(/^#+/, "") : "";
@@ -1665,6 +1703,17 @@ async function runDailyReplySweep(trigger) {
               await handleMarkLeadBounced({ leadId: sweepLeadId });
             }
           }
+
+          // Always stamp lastReplyCheckedAt so the queue rotates fairly.
+          if (sweepLeadId) {
+            getApiBaseUrl().then(function(base) {
+              fetch(base + "/api/mark-reply-checked", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ leadId: sweepLeadId }),
+              }).catch(function() {});
+            }).catch(function() {});
+          }
         } catch (sweepErr) {
           console.warn("[Leads Extension Background] Reply check error for lead", sweepLeadId, sweepErr);
         }
@@ -1679,16 +1728,18 @@ async function runDailyReplySweep(trigger) {
       }
     }
 
+    const stopReason = replySweepStopped ? " (stopped early)" : "";
     console.log(
-      "[Leads Extension Background] Daily reply sweep completed:",
+      "[Leads Extension Background] Daily reply sweep completed" + stopReason + ":",
       "trigger=" + String(trigger || "unknown"),
       "checked=" + checked,
       "marked=" + marked
     );
 
-    return { success: true, checked, marked };
+    return { success: true, checked, marked, stopped: replySweepStopped };
   } finally {
     replySweepRunning = false;
+    replySweepStopped = false;
   }
 }
 

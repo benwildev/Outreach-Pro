@@ -6,16 +6,14 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
-    const rawLimit = Number(url.searchParams.get("limit") || "30");
-    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 30;
+    const rawLimit = Number(url.searchParams.get("limit") || "50");
+    const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 200) : 50;
 
     const leads = await prisma.lead.findMany({
       where: {
         status: "sent",
         replied: false,
         // Only check leads whose email has already been delivered (sentAt <= now).
-        // Scheduled emails have sentAt set to their future delivery time, so they
-        // are excluded here until that time arrives.
         sentAt: { lte: new Date() },
         AND: [
           { gmailThreadId: { not: null } },
@@ -25,8 +23,10 @@ export async function GET(request: Request) {
       include: {
         campaign: true,
       },
-      orderBy: [{ sentAt: "asc" }, { createdAt: "asc" }],
-      take: 100,
+      // Leads never checked come first (null → least recent), then the
+      // least-recently-checked so we rotate fairly across all 500-1000 leads.
+      orderBy: [{ lastReplyCheckedAt: "asc" }, { sentAt: "asc" }],
+      take: limit,
     });
 
     const normalizedLeads = leads.map((lead) => ({

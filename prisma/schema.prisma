@@ -64,10 +64,11 @@ model Lead {
   clicked           Boolean   @default(false)
   clickedAt         DateTime?
   createdAt         DateTime  @default(now())
-  replyBody         String?
-  sentFollowup1Body String?
-  sentFollowup2Body String?
-  campaign          Campaign  @relation(fields: [campaignId], references: [id])
+  replyBody             String?
+  sentFollowup1Body     String?
+  sentFollowup2Body     String?
+  lastReplyCheckedAt    DateTime?
+  campaign              Campaign  @relation(fields: [campaignId], references: [id])
 
   @@map("lead")
 }

@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Trash2, Sheet, Copy, Check, X } from "lucide-react";
+import { Trash2, Sheet, Copy, Check, X, Square, Power } from "lucide-react";
 import { deletePendingLeads } from "./actions";
 import { sendRuntimeMessage, BRIDGE_READY_TYPE } from "./extensionBridge";
 
 export function BulkActionsRow({ currentCampaignId }: { currentCampaignId: string | null }) {
   const [isCheckingReplies, setIsCheckingReplies] = useState(false);
+  const [sweepRunning, setSweepRunning] = useState(false);
+  const [sweepDisabled, setSweepDisabled] = useState(false);
   const [isActive, setIsActive] = useState(false);
   const [hasRuntime, setHasRuntime] = useState(false);
   const [error, setError] = useState("");
@@ -33,9 +35,25 @@ export function BulkActionsRow({ currentCampaignId }: { currentCampaignId: strin
     }
   }
 
+  async function refreshSweepState() {
+    try {
+      const res = await sendRuntimeMessage({ action: "getReplySweepState" });
+      if (res?.success) {
+        setSweepRunning(!!res.running);
+        setSweepDisabled(!!res.disabled);
+      }
+    } catch {
+      // extension not available
+    }
+  }
+
   useEffect(() => {
     refreshState();
-    const timer = window.setInterval(refreshState, 1800);
+    refreshSweepState();
+    const timer = window.setInterval(() => {
+      refreshState();
+      refreshSweepState();
+    }, 2000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -43,7 +61,10 @@ export function BulkActionsRow({ currentCampaignId }: { currentCampaignId: strin
     function onBridgeReady(event: MessageEvent) {
       if (event.source !== window) return;
       const message = event.data as { type?: string };
-      if (message?.type === BRIDGE_READY_TYPE) refreshState();
+      if (message?.type === BRIDGE_READY_TYPE) {
+        refreshState();
+        refreshSweepState();
+      }
     }
     window.addEventListener("message", onBridgeReady);
     return () => window.removeEventListener("message", onBridgeReady);
@@ -51,11 +72,13 @@ export function BulkActionsRow({ currentCampaignId }: { currentCampaignId: strin
 
   async function handleManualReplyCheck() {
     setIsCheckingReplies(true);
+    setSweepRunning(true);
     setError("");
     try {
       const response = await sendRuntimeMessage({ action: "triggerReplySweep" });
       if (response?.success) {
-        alert(`Reply check completed: checked ${response.checked || 0}, marked ${response.marked || 0} as replied.`);
+        const stoppedNote = response.stopped ? " (stopped early)" : "";
+        alert(`Reply check completed${stoppedNote}: checked ${response.checked || 0}, marked ${response.marked || 0} as replied.`);
       } else {
         setError(response?.error || "Failed to trigger reply check");
       }
@@ -63,6 +86,27 @@ export function BulkActionsRow({ currentCampaignId }: { currentCampaignId: strin
       setError(e instanceof Error ? e.message : "Failed to trigger reply check");
     } finally {
       setIsCheckingReplies(false);
+      setSweepRunning(false);
+    }
+  }
+
+  async function handleStopSweep() {
+    try {
+      await sendRuntimeMessage({ action: "stopReplySweep" });
+    } catch {
+      // ignore
+    }
+  }
+
+  async function handleToggleAutoCheck() {
+    const enable = sweepDisabled;
+    try {
+      const res = await sendRuntimeMessage({ action: "setReplySweepEnabled", enabled: enable });
+      if (res?.success) {
+        setSweepDisabled(!enable);
+      }
+    } catch {
+      setError("Failed to toggle auto reply check");
     }
   }
 
@@ -172,14 +216,37 @@ function capitalize(str) {
   return (
     <>
       <div className="mb-1 flex flex-wrap items-center gap-2 px-3 py-1 text-xs border-b border-slate-100 bg-slate-50">
+        {sweepRunning ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-7 px-3 text-xs bg-red-50 hover:bg-red-100 border border-red-200 text-red-700 gap-1"
+            onClick={handleStopSweep}
+          >
+            <Square className="w-3 h-3 fill-red-600" />
+            Stop Checking
+          </Button>
+        ) : (
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-7 px-3 text-xs bg-white hover:bg-slate-100 border border-slate-200 text-slate-700"
+            onClick={handleManualReplyCheck}
+            disabled={isActive || isCheckingReplies || !hasRuntime || sweepDisabled}
+          >
+            {isCheckingReplies ? "Checking..." : "Check Replies"}
+          </Button>
+        )}
         <Button
           type="button"
           variant="secondary"
-          className="h-7 px-3 text-xs bg-white hover:bg-slate-100 border border-slate-200 text-slate-700"
-          onClick={handleManualReplyCheck}
-          disabled={isActive || isCheckingReplies || !hasRuntime}
+          className={`h-7 px-3 text-xs gap-1 border ${sweepDisabled ? "bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100" : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"}`}
+          onClick={handleToggleAutoCheck}
+          disabled={!hasRuntime}
+          title={sweepDisabled ? "Auto reply check is OFF — click to enable" : "Auto reply check is ON every 2 hrs — click to disable"}
         >
-          {isCheckingReplies ? "Checking..." : "Check Replies"}
+          <Power className="w-3 h-3" />
+          {sweepDisabled ? "Auto Check: OFF" : "Auto Check: ON"}
         </Button>
         <Button
           type="button"
