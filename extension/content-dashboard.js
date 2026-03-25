@@ -136,18 +136,21 @@
   }
 
   function getStoredDomainThrottle() {
-    try {
-      const raw = localStorage.getItem(AUTOMATION_DOMAIN_THROTTLE_KEY);
-      const n = Number.parseInt(String(raw ?? "0"), 10);
-      return Number.isNaN(n) ? 0 : Math.max(0, Math.min(n, 100));
-    } catch (_) {
-      return 0;
-    }
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get(AUTOMATION_DOMAIN_THROTTLE_KEY, (result) => {
+          const n = Number.parseInt(String(result[AUTOMATION_DOMAIN_THROTTLE_KEY] ?? "0"), 10);
+          resolve(Number.isNaN(n) ? 0 : Math.max(0, Math.min(n, 100)));
+        });
+      } catch (_) {
+        resolve(0);
+      }
+    });
   }
 
   function setStoredDomainThrottle(value) {
     try {
-      localStorage.setItem(AUTOMATION_DOMAIN_THROTTLE_KEY, String(value));
+      chrome.storage.local.set({ [AUTOMATION_DOMAIN_THROTTLE_KEY]: String(value) });
     } catch (_) {
       // Ignore storage errors.
     }
@@ -397,8 +400,16 @@
     }
 
     if (nodes.domainThrottleInput && !nodes.domainThrottleInput.matches(":focus")) {
-      const throttle = clampNumber(s.domainThrottle, 0, 100, getStoredDomainThrottle());
-      nodes.domainThrottleInput.value = String(throttle);
+      const domainThrottleFromState = Number(s.domainThrottle);
+      if (!Number.isNaN(domainThrottleFromState) && domainThrottleFromState >= 0) {
+        nodes.domainThrottleInput.value = String(domainThrottleFromState);
+      } else {
+        getStoredDomainThrottle().then((stored) => {
+          if (nodes.domainThrottleInput && !nodes.domainThrottleInput.matches(":focus")) {
+            nodes.domainThrottleInput.value = String(stored);
+          }
+        });
+      }
     }
 
     if (nodes.autoFollowupInput) {
@@ -472,7 +483,7 @@
       nodes && nodes.domainThrottleInput ? nodes.domainThrottleInput.value : "",
       0,
       100,
-      getStoredDomainThrottle()
+      0
     );
     const autoFollowupEnabled = !!(nodes && nodes.autoFollowupInput && nodes.autoFollowupInput.checked);
     const windowEnabled = !!(nodes && nodes.windowEnabledInput && nodes.windowEnabledInput.checked);
@@ -725,7 +736,11 @@
       nodes.limitInput.value = String(getStoredBulkLimit());
     }
     if (nodes && nodes.domainThrottleInput) {
-      nodes.domainThrottleInput.value = String(getStoredDomainThrottle());
+      getStoredDomainThrottle().then((stored) => {
+        if (nodes && nodes.domainThrottleInput) {
+          nodes.domainThrottleInput.value = String(stored);
+        }
+      });
     }
     if (nodes && nodes.autoFollowupInput) {
       nodes.autoFollowupInput.checked = getStoredAutoFollowupEnabled();
