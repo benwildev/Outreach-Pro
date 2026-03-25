@@ -1920,19 +1920,19 @@ async function handleMarkLeadBounced(data) {
 
 async function handleSendScheduleError(data) {
   const email = String(data.email || "").trim();
+  const leadId = data.leadId ? String(data.leadId).trim() : null;
   const errorMsg = String(data.error || "Unknown scheduling error").trim();
-  if (!email) return { success: false, error: "Missing email" };
+  if (!email && !leadId) return { success: false, error: "Missing email and leadId" };
 
   try {
     const baseUrl = await getApiBaseUrl();
+    const payload = { status: "failed" };
+    if (leadId) payload.leadId = leadId;
+    if (email) payload.email = email;
     const response = await fetch(baseUrl + "/api/update-send", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        status: "Failed: Schedule Send (" + errorMsg + ")",
-        timestamp: new Date().toISOString()
-      }),
+      body: JSON.stringify(payload),
     });
     if (!response.ok) {
       console.error("[Leads Extension Background] Failed to record schedule error to DB", response.status);

@@ -1691,9 +1691,14 @@
         const allEls = Array.from(scheduleDialog.querySelectorAll('*'));
 
         // Pass 1: exact or near-exact text match (most reliable)
+        // Gmail shows "Select date and time" (newer) or "Pick date & time" (older)
+        const PICK_DATE_EXACT = [
+          "select date and time", "select date & time",
+          "pick date & time", "pick date", "pick date & time "
+        ];
         for (const el of allEls) {
           const txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-          if (txt === "pick date & time" || txt === "pick date" || txt === "pick date & time ") {
+          if (PICK_DATE_EXACT.includes(txt)) {
             const clickable = el.closest('[role="menuitem"]') || el.closest('[role="option"]') || el.closest('[tabindex]') || el;
             syntheticClick(clickable);
             pickDateClicked = true;
@@ -1702,11 +1707,11 @@
           }
         }
 
-        // Pass 2: short text containing "pick date" (< 30 chars)
+        // Pass 2: short text containing "pick date" OR "select date" (< 35 chars)
         if (!pickDateClicked) {
           for (const el of allEls) {
             const txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-            if (txt.includes("pick date") && txt.length < 30) {
+            if ((txt.includes("pick date") || txt.includes("select date")) && txt.length < 35) {
               const clickable = el.closest('[role="menuitem"]') || el.closest('[role="option"]') || el.closest('[tabindex]') || el;
               syntheticClick(clickable);
               pickDateClicked = true;
@@ -1735,13 +1740,13 @@
         log("(v28) Schedule submenu dialog not found after 14 attempts");
       }
 
-      // Fallback: TreeWalker over full document — find short "pick date" text node
+      // Fallback: TreeWalker over full document — find short "pick date" or "select date" text node
       if (!pickDateClicked) {
         const walker = document.createTreeWalker(document.documentElement, NodeFilter.SHOW_TEXT);
         let node;
         while ((node = walker.nextNode())) {
           const txt = (node.nodeValue || "").replace(/\s+/g, " ").trim().toLowerCase();
-          if (txt.includes("pick date") && txt.length < 30) {
+          if ((txt.includes("pick date") || txt.includes("select date")) && txt.length < 35) {
             const el = node.parentElement;
             const clickable = el.closest('[role="menuitem"]') || el.closest('[role="option"]') || el.closest('[tabindex]') || el;
             syntheticClick(clickable);
@@ -1804,15 +1809,20 @@
     for (let attempt = 0; attempt < 8; attempt++) {
       datePickerRoot = getDatePickerRoot();
       if (datePickerRoot) { log("(v28) Date picker ready on attempt", attempt + 1); break; }
-      // Also check: any visible inputs that aren't compose fields (broader fallback)
+      // Also check: any visible text/date/time inputs that aren't compose fields (broader fallback).
+      // Exclude type="submit"/"button"/"search" — those belong to the compose toolbar.
+      // Only accept a proper dialog ancestor; never fall back to document (too broad).
       if (!datePickerRoot) {
+        const EXCLUDED_INPUT_TYPES = ["submit", "button", "search", "reset", "checkbox", "radio", "hidden", "file"];
         const allInputs = Array.from(document.querySelectorAll('input')).filter(isVisible);
-        const nonComposeInputs = allInputs.filter(inp =>
-          !COMPOSE_FIELDS.some(w => (inp.getAttribute('aria-label') || '').toLowerCase().includes(w))
-        );
-        if (nonComposeInputs.length > 0) {
-          // Found non-compose inputs — use their closest dialog or document as root
-          datePickerRoot = nonComposeInputs[0].closest('[role="dialog"]') || document;
+        const nonComposeInputs = allInputs.filter(inp => {
+          if (EXCLUDED_INPUT_TYPES.includes((inp.type || "").toLowerCase())) return false;
+          const lbl = (inp.getAttribute('aria-label') || '').toLowerCase();
+          return !COMPOSE_FIELDS.some(w => lbl.includes(w));
+        });
+        const validWithDialog = nonComposeInputs.find(inp => inp.closest('[role="dialog"]'));
+        if (validWithDialog) {
+          datePickerRoot = validWithDialog.closest('[role="dialog"]');
           log("(v28) Date picker found via input scan attempt", attempt + 1);
           break;
         }
@@ -3343,7 +3353,7 @@
           logError(`Schedule Send Failed: ${errMsg}`);
           // Notify background script about failure
           try {
-            await chrome.runtime.sendMessage({ action: "sendScheduleError", data: { email: data.to, error: errMsg } });
+            await chrome.runtime.sendMessage({ action: "sendScheduleError", data: { leadId: leadId, email: data.to, error: errMsg } });
           } catch (e) { }
           return; // Leave as draft
         }
