@@ -48,7 +48,7 @@ npm run start # production server on 0.0.0.0:5000
 - Gmail OAuth via Chrome extension orchestrating ChatGPT → Gmail workflows
 - Follow-up scheduling (2-level) with reply tracking
 - Import tracking: CSV/Excel imports logged per-campaign with start row resumption
-- Google Sheets sync via Apps Script snippet (no direct API; `/api/sheets-data` provides JSON)
+- Google Sheets sync via Apps Script snippet (no direct Google API — user preference; `/api/sheets-data` provides JSON, `/api/sheets-script/[campaignId]` serves downloadable .gs file)
 - Advanced analytics and lead management
 
 ## Replit Configuration

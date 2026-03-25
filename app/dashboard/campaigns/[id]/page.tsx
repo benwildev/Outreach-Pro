@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { updateCampaign } from "../actions";
-import { Zap, ArrowLeft } from "lucide-react";
+import { Zap, ArrowLeft, Download, Sheet } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +43,34 @@ export default async function CampaignEditorPage({
         </div>
       </header>
 
-      <main className="mx-auto px-6 py-6 max-w-2xl">
+      <main className="mx-auto px-6 py-6 max-w-2xl space-y-5">
+        {/* Google Sheets sync card */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-green-50 to-emerald-50/50 flex items-center gap-2">
+            <Sheet className="w-4 h-4 text-green-600" />
+            <h2 className="text-sm font-semibold text-gray-800">Google Sheets Sync</h2>
+          </div>
+          <div className="px-6 py-5 space-y-4">
+            <p className="text-sm text-gray-600">
+              Download the Apps Script file and paste it into your Google Sheet to sync lead status, sent dates, reply info, and Gmail thread links back into your sheet.
+            </p>
+            <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
+              <li>Save the Google Sheet URL in the field below, then click <strong>Save Changes</strong></li>
+              <li>Download the Apps Script below</li>
+              <li>Open your Google Sheet → <strong>Extensions → Apps Script</strong></li>
+              <li>Paste the code, click Save, then run <code className="bg-gray-100 px-1 rounded font-mono text-xs">syncBenwillData()</code></li>
+            </ol>
+            <a
+              href={`/api/sheets-script/${campaign.id}`}
+              download
+              className="inline-flex items-center gap-2 text-sm font-semibold text-white bg-green-600 hover:bg-green-500 border border-green-500/80 rounded-lg px-4 py-2 transition-all duration-150 shadow-sm"
+            >
+              <Download className="w-4 h-4" />
+              Download Apps Script (.gs)
+            </a>
+          </div>
+        </div>
+
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-indigo-50/50">
             <h2 className="text-sm font-semibold text-gray-800">Campaign Details</h2>
