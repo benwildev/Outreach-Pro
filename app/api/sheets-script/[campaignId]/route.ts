@@ -41,15 +41,16 @@ var BENWILL_API_URL = "${dataUrl}";
 
 // Column mapping — update these to match your sheet layout
 // Current mapping is based on your actual sheet structure:
-//   J = Email  |  N = Date sent  |  O = Follow up  |  P = Got Reply
-// STATUS and GMAIL_LINK write to Q and R — adjust if those are in use.
+//   J = Email  |  L = Google/Outreach Account  |  M = Date sent
+//   N = Follow up  |  O = Got Reply
+// STATUS and GMAIL_LINK write to P and Q — adjust if those are in use.
 var COLUMNS = {
   EMAIL:        "J",  // Column that holds email addresses (read-only)
-  SENT_AT:      "N",  // Date column — writes the sent date
-  NEXT_FOLLOWUP:"O",  // Follow up column — writes next follow-up date
-  REPLIED:      "P",  // Got Reply column — writes Yes / No
-  STATUS:       "Q",  // New column: Pending / Sent / Replied / Bounced
-  GMAIL_LINK:   "R"   // New column: clickable link to Gmail thread
+  SENT_AT:      "M",  // Date column — writes the sent date
+  NEXT_FOLLOWUP:"N",  // Follow up column — writes next follow-up date
+  REPLIED:      "O",  // Got Reply column — writes Yes / No
+  STATUS:       "P",  // New column: Pending / Sent / Replied / Bounced
+  GMAIL_LINK:   "Q"   // New column: clickable link to Gmail thread
 };
 
 function syncBenwillData() {
