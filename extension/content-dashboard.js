@@ -18,6 +18,7 @@
   const AUTOMATION_WINDOW_ENABLED_KEY = "leadsExtensionBulkWindowEnabled";
   const AUTOMATION_WINDOW_START_KEY = "leadsExtensionBulkWindowStart";
   const AUTOMATION_WINDOW_END_KEY = "leadsExtensionBulkWindowEnd";
+  const AUTOMATION_DOMAIN_THROTTLE_KEY = "leadsExtensionBulkDomainThrottle";
   const DEFAULT_BULK_DELAY_MS = 45000;
   const DEFAULT_BULK_LIMIT = 50;
   const DEFAULT_WINDOW_START = "09:00";
@@ -129,6 +130,24 @@
   function setStoredBulkLimit(value) {
     try {
       localStorage.setItem(AUTOMATION_LIMIT_KEY, String(value));
+    } catch (_) {
+      // Ignore storage errors.
+    }
+  }
+
+  function getStoredDomainThrottle() {
+    try {
+      const raw = localStorage.getItem(AUTOMATION_DOMAIN_THROTTLE_KEY);
+      const n = Number.parseInt(String(raw ?? "0"), 10);
+      return Number.isNaN(n) ? 0 : Math.max(0, Math.min(n, 100));
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  function setStoredDomainThrottle(value) {
+    try {
+      localStorage.setItem(AUTOMATION_DOMAIN_THROTTLE_KEY, String(value));
     } catch (_) {
       // Ignore storage errors.
     }
@@ -293,6 +312,7 @@
       windowEnabledInput: panel.querySelector('input[name="bulkWindowEnabled"]'),
       windowStartInput: panel.querySelector('input[name="bulkWindowStart"]'),
       windowEndInput: panel.querySelector('input[name="bulkWindowEnd"]'),
+      domainThrottleInput: panel.querySelector('input[name="bulkDomainThrottle"]'),
       startBtn: panel.querySelector('button[data-action="bulk-start"]'),
       pauseBtn: panel.querySelector('button[data-action="bulk-pause"]'),
       resumeBtn: panel.querySelector('button[data-action="bulk-resume"]'),
@@ -348,6 +368,10 @@
       if (s.windowEnabled) {
         text += " • Window " + String(s.sendWindowStart || DEFAULT_WINDOW_START) + "-" + String(s.sendWindowEnd || DEFAULT_WINDOW_END);
       }
+      const activeThrottle = Number(s.domainThrottle || 0);
+      if (activeThrottle > 0) {
+        text += " • max " + activeThrottle + "/domain";
+      }
       nodes.progress.textContent = text;
     }
 
@@ -370,6 +394,11 @@
     if (nodes.limitInput && !nodes.limitInput.matches(":focus")) {
       const limit = clampNumber(s.limit, 1, 500, getStoredBulkLimit());
       nodes.limitInput.value = String(limit);
+    }
+
+    if (nodes.domainThrottleInput && !nodes.domainThrottleInput.matches(":focus")) {
+      const throttle = clampNumber(s.domainThrottle, 0, 100, getStoredDomainThrottle());
+      nodes.domainThrottleInput.value = String(throttle);
     }
 
     if (nodes.autoFollowupInput) {
@@ -439,6 +468,12 @@
       500,
       getStoredBulkLimit()
     );
+    const domainThrottle = clampNumber(
+      nodes && nodes.domainThrottleInput ? nodes.domainThrottleInput.value : "",
+      0,
+      100,
+      getStoredDomainThrottle()
+    );
     const autoFollowupEnabled = !!(nodes && nodes.autoFollowupInput && nodes.autoFollowupInput.checked);
     const windowEnabled = !!(nodes && nodes.windowEnabledInput && nodes.windowEnabledInput.checked);
     const sendWindowStart = normalizeTimeValue(
@@ -457,6 +492,7 @@
       minDelaySeconds,
       maxDelaySeconds,
       limit,
+      domainThrottle,
       autoFollowupEnabled,
       windowEnabled,
       sendWindowStart,
@@ -476,6 +512,7 @@
         setStoredBulkDelayMinMs(values.delayMinMs);
         setStoredBulkDelayMaxMs(values.delayMaxMs);
         setStoredBulkLimit(values.limit);
+        setStoredDomainThrottle(values.domainThrottle);
         setStoredAutoFollowupEnabled(values.autoFollowupEnabled);
         setStoredWindowEnabled(values.windowEnabled);
         setStoredWindowStart(values.sendWindowStart);
@@ -487,6 +524,7 @@
             delayMinMs: values.delayMinMs,
             delayMaxMs: values.delayMaxMs,
             limit: values.limit,
+            domainThrottle: values.domainThrottle,
             followupEnabled: values.autoFollowupEnabled,
             windowEnabled: values.windowEnabled,
             sendWindowStart: values.sendWindowStart,
@@ -644,6 +682,10 @@
       '<span class="text-slate-700">Limit</span>' +
       '<input name="bulkLimit" type="number" min="1" max="500" class="h-8 w-20 rounded border bg-white px-2 text-xs" />' +
       "</label>" +
+      '<label class="inline-flex items-center gap-1">' +
+      '<span class="text-slate-700">Max/domain</span>' +
+      '<input name="bulkDomainThrottle" type="number" min="0" max="100" placeholder="0=off" class="h-8 w-20 rounded border bg-white px-2 text-xs" />' +
+      "</label>" +
       '<label class="inline-flex items-center gap-1 rounded border bg-white px-2 py-1">' +
       '<input name="bulkAutoFollowup" type="checkbox" />' +
       '<span class="text-slate-700">Auto follow-ups</span>' +
@@ -681,6 +723,9 @@
     }
     if (nodes && nodes.limitInput) {
       nodes.limitInput.value = String(getStoredBulkLimit());
+    }
+    if (nodes && nodes.domainThrottleInput) {
+      nodes.domainThrottleInput.value = String(getStoredDomainThrottle());
     }
     if (nodes && nodes.autoFollowupInput) {
       nodes.autoFollowupInput.checked = getStoredAutoFollowupEnabled();
