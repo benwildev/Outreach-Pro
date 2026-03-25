@@ -28,8 +28,9 @@ const ANTI_AI_PHRASES_INSTRUCTION =
   "- genuinely helps your audience\n" +
   "- well researched guest article";
 
-// Run ChatGPT and Gmail tabs in the background so the user stays on the dashboard.
-const RUN_TABS_IN_BACKGROUND = true;
+// Run ChatGPT and Gmail tabs as active (foreground) tabs to prevent Chrome
+// from throttling timers and load events in background tabs, which causes stalls.
+const RUN_TABS_IN_BACKGROUND = false;
 const REPLY_CHECK_ALARM = "dailyReplyCheck";
 const REPLY_CHECK_PERIOD_MINUTES = 4 * 60;
 const CHATGPT_HANDOFF_TIMEOUT_MS = 90000;
@@ -1597,32 +1598,85 @@ async function runDailyReplySweep(trigger) {
     let checked = 0;
     let marked = 0;
 
-    for (let i = 0; i < queue.length; i++) {
-      const lead = queue[i] || {};
-      const leadId = lead.id ? String(lead.id) : "";
-      const threadId = lead.gmailThreadId ? String(lead.gmailThreadId).trim() : "";
-      const recipientEmail = lead.recipientEmail ? String(lead.recipientEmail).trim().toLowerCase() : "";
-      const campaignGmailAuthUser = lead.campaignGmailAuthUser ? String(lead.campaignGmailAuthUser).trim() : "";
+    if (queue.length === 0) {
+      return { success: true, checked: 0, marked: 0 };
+    }
 
-      if (!leadId || !threadId || !recipientEmail) {
-        continue;
-      }
+    // Group leads by Gmail auth user so we open ONE tab per account and
+    // navigate it between threads — instead of opening a new tab per lead.
+    var accountGroups = {};
+    for (var qi = 0; qi < queue.length; qi++) {
+      var qLead = queue[qi] || {};
+      var acct = qLead.campaignGmailAuthUser ? String(qLead.campaignGmailAuthUser).trim() : "";
+      if (!accountGroups[acct]) accountGroups[acct] = [];
+      accountGroups[acct].push(qLead);
+    }
 
-      checked += 1;
-      try {
-        const result = await handleCheckReplyByThread({
-          leadId: leadId,
-          threadId: threadId,
-          recipientEmail: recipientEmail,
-          campaignGmailAuthUser: campaignGmailAuthUser,
-        });
-        if (result && result.success && result.replied) {
-          marked += 1;
+    var accountKeys = Object.keys(accountGroups);
+    for (var ai = 0; ai < accountKeys.length; ai++) {
+      var acctKey = accountKeys[ai];
+      var acctLeads = accountGroups[acctKey];
+      var sharedTabId = null;
+
+      for (var li = 0; li < acctLeads.length; li++) {
+        var sweepLead = acctLeads[li];
+        var sweepLeadId = sweepLead.id ? String(sweepLead.id) : "";
+        var sweepThreadId = sweepLead.gmailThreadId ? String(sweepLead.gmailThreadId).trim().replace(/^#+/, "") : "";
+        var sweepEmail = sweepLead.recipientEmail ? String(sweepLead.recipientEmail).trim().toLowerCase() : "";
+        var sweepAuthUser = sweepLead.campaignGmailAuthUser ? String(sweepLead.campaignGmailAuthUser).trim() : "";
+
+        if (!sweepLeadId || !sweepThreadId || !sweepEmail) continue;
+
+        var sweepGmailUrl = getGmailBaseUrl(sweepAuthUser) + "#all/" + encodeURIComponent(sweepThreadId);
+
+        try {
+          if (sharedTabId === null) {
+            // First lead for this account: open a fresh tab
+            var newTab = await chrome.tabs.create({ url: sweepGmailUrl, active: !RUN_TABS_IN_BACKGROUND });
+            sharedTabId = newTab.id;
+            await waitForTabReady(sharedTabId);
+            await delay(2200);
+          } else {
+            // Subsequent leads: navigate the existing tab (much faster — no full page load)
+            await chrome.tabs.update(sharedTabId, { url: sweepGmailUrl });
+            await waitForTabReady(sharedTabId);
+            await delay(1500);
+          }
+
+          checked += 1;
+          var sweepResponse = await sendMessageToTabWithResponseRetry(sharedTabId, {
+            action: "checkThreadReply",
+            data: {
+              threadId: sweepThreadId,
+              recipientEmail: sweepEmail,
+              leadId: sweepLeadId,
+            },
+          }, 8, 900);
+
+          if (!sweepResponse || sweepResponse.success !== true) {
+            console.warn("[Leads Extension Background] Reply check failed for lead", sweepLeadId,
+              sweepResponse && sweepResponse.error ? sweepResponse.error : "no response");
+          } else {
+            if (sweepResponse.replied && sweepLeadId) {
+              await handleMarkLeadReplied({ leadId: sweepLeadId, replyBody: sweepResponse.replyBody || null });
+              marked += 1;
+            }
+            if (sweepResponse.bounced && sweepLeadId) {
+              await handleMarkLeadBounced({ leadId: sweepLeadId });
+            }
+          }
+        } catch (sweepErr) {
+          console.warn("[Leads Extension Background] Reply check error for lead", sweepLeadId, sweepErr);
         }
-      } catch (err) {
-        console.warn("[Leads Extension Background] Reply check failed for lead", leadId, err);
+
+        await delay(600);
       }
-      await delay(900);
+
+      // Done with this account — close the shared tab
+      if (sharedTabId !== null) {
+        try { await chrome.tabs.remove(sharedTabId); } catch (_) {}
+        sharedTabId = null;
+      }
     }
 
     console.log(
