@@ -1,4 +1,4 @@
-import { Mail, CheckCircle2, MessageSquare, Clock, AlertCircle, XCircle } from "lucide-react";
+import { Mail, CheckCircle2, MessageSquare, Clock, AlertCircle, XCircle, CalendarClock } from "lucide-react";
 import Link from "next/link";
 
 interface StatsCardsProps {
@@ -7,6 +7,7 @@ interface StatsCardsProps {
   repliedLeads: number;
   pendingLeads: number;
   bouncedLeads: number;
+  scheduledLeads: number;
   followupDueCount: number;
 }
 
@@ -16,6 +17,7 @@ export function StatsCards({
   repliedLeads,
   pendingLeads,
   bouncedLeads,
+  scheduledLeads,
   followupDueCount,
 }: StatsCardsProps) {
   const deliveredLeads = sentLeads + repliedLeads + bouncedLeads;
@@ -43,6 +45,17 @@ export function StatsCards({
       iconBg: "bg-emerald-500",
       valueColor: "text-emerald-700",
       href: "/dashboard?status=sent",
+    },
+    {
+      label: "Scheduled",
+      value: scheduledLeads,
+      sub: "awaiting delivery",
+      subColor: "text-amber-600",
+      icon: CalendarClock,
+      accent: "border-l-amber-400",
+      iconBg: "bg-amber-400",
+      valueColor: "text-amber-700",
+      href: "/dashboard?status=scheduled",
     },
     {
       label: "Replied",
@@ -91,7 +104,7 @@ export function StatsCards({
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 mb-5">
       {stats.map((stat, index) => {
         const Icon = stat.icon;
         return (

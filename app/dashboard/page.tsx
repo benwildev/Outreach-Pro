@@ -15,7 +15,7 @@ import { LeadsTableClient } from "./LeadsTableClient";
 import { AdvancedFilters } from "./AdvancedFilters";
 import { Settings, Download, FileDown, Zap, LayoutDashboard } from "lucide-react";
 
-const VALID_STATUSES = ["pending", "sent", "replied"] as const;
+const VALID_STATUSES = ["pending", "sent", "scheduled", "replied"] as const;
 const PAGE_SIZE = 50;
 
 type LeadRow = Prisma.LeadGetPayload<{
@@ -82,12 +82,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     include: { campaign: true },
   })) as LeadRow[];
 
-  const [totalLeads, sentLeads, repliedLeads, pendingLeads, bouncedLeads] = await Promise.all([
+  const [totalLeads, sentLeads, repliedLeads, pendingLeads, bouncedLeads, scheduledLeads] = await Promise.all([
     prisma.lead.count(),
     prisma.lead.count({ where: { status: "sent" } }),
     prisma.lead.count({ where: { status: "replied" } }),
     prisma.lead.count({ where: { status: "pending" } }),
     prisma.lead.count({ where: { status: "bounced" } }),
+    prisma.lead.count({ where: { status: "scheduled" } }),
   ]);
 
   const followupDueLeads = await prisma.lead.findMany({
@@ -182,6 +183,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           repliedLeads={repliedLeads}
           pendingLeads={pendingLeads}
           bouncedLeads={bouncedLeads}
+          scheduledLeads={scheduledLeads}
           followupDueCount={followupDueCount}
         />
 

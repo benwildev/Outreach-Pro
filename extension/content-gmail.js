@@ -2901,7 +2901,8 @@
         recipientEmail: to,
         subject: subject || "",
         body: body || "",
-        sentGmailAuthUser: sentGmailAuthUser || ""
+        sentGmailAuthUser: sentGmailAuthUser || "",
+        status: scheduledSendAt ? "scheduled" : "sent"
       };
       if (threadId) {
         payload.threadId = threadId;

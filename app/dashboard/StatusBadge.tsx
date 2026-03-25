@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 const statusVariants = {
   pending: "pending" as const,
   sent: "sent" as const,
+  scheduled: "scheduled" as const,
   replied: "replied" as const,
 };
 

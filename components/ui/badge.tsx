@@ -19,6 +19,7 @@ const badgeVariants = cva(
         pending:
           "border-transparent bg-muted text-muted-foreground",
         sent: "border-transparent bg-blue-500/15 text-blue-700 dark:text-blue-400",
+        scheduled: "border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-400",
         replied: "border-transparent bg-purple-500/15 text-purple-700 dark:text-purple-400",
         opened: "border-transparent bg-green-500/15 text-green-700 dark:text-green-400",
         clicked: "border-transparent bg-blue-500/15 text-blue-700 dark:text-blue-400",

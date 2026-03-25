@@ -65,14 +65,15 @@ export async function POST(request: Request) {
     nextFollowupDate.setHours(0, 0, 0, 0);
 
     const targetStatus = status || "sent";
+    const isDelivered = targetStatus === "sent" || targetStatus === "scheduled";
 
-    // Update the lead with thread ID, subject, body, AND mark as sent or failed
+    // Update the lead with thread ID, subject, body, AND mark as sent/scheduled/failed
     const updatedLead = await prisma.lead.update({
       where: { id: targetLeadId },
       data: {
         status: targetStatus,
-        step: targetStatus === "sent" ? 1 : lead.step,
-        ...(targetStatus === "sent" ? {
+        step: isDelivered ? 1 : lead.step,
+        ...(isDelivered ? {
           sentAt: effectiveSentAt,
           nextFollowup: nextFollowupDate
         } : {}),
