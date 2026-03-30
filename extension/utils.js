@@ -176,12 +176,15 @@ function cleanEmailBody(text, data) {
   }
 
   // Post-signature truncation: remove any ChatGPT additions that appear after the signature block.
-  // Locate the last sign-off line (Best regards / Thanks / etc.) and allow at most 5 more lines
-  // for the name/title/company lines. Anything beyond that is extra ChatGPT output.
+  // Only applies when the sign-off (Best regards / Thanks / etc.) is found within the last
+  // 10 lines — this guards against false-positive truncation on "Thanks" mid-email.
+  // Allow at most 5 lines after the sign-off for name/title/company/URL.
   cleaned = (function truncateAfterSignature(txt) {
     var lines = txt.split("\n");
     var signoffIdx = -1;
-    for (var i = lines.length - 1; i >= 0; i--) {
+    var LOOK_BACK = 10; // only scan the final 10 lines for a sign-off
+    var scanFrom = Math.max(0, lines.length - LOOK_BACK);
+    for (var i = lines.length - 1; i >= scanFrom; i--) {
       var l = lines[i].trim();
       if (/^(best(?: regards)?|kind regards|warm regards|regards|thanks|thank you|sincerely)[,!]?$/i.test(l)) {
         signoffIdx = i;
@@ -191,6 +194,8 @@ function cleanEmailBody(text, data) {
     if (signoffIdx === -1) return txt;
     var MAX_SIG_LINES = 5;
     var cutoff = Math.min(signoffIdx + 1 + MAX_SIG_LINES, lines.length);
+    // Only truncate if there is actually something to remove
+    if (cutoff >= lines.length) return txt;
     return lines.slice(0, cutoff).join("\n");
   })(cleaned);
 
