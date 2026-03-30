@@ -1418,7 +1418,7 @@ async function handleStartBulkAutomation(data) {
   // (scheduleSendTime already set above before fetchSendQueue)
   bulkAutomationState.limit = limit;
   bulkAutomationState.campaignId = campaignId;
-  bulkAutomationState.phase = startPhase === "followup" ? "followup" : "send";
+  bulkAutomationState.phase = startPhase === "send" ? "send" : startPhase;
   bulkAutomationState.currentLeadId = "";
   bulkAutomationState.currentRecipientEmail = "";
   bulkAutomationState.startedAt = null;

@@ -19,6 +19,7 @@
   const AUTOMATION_WINDOW_START_KEY = "leadsExtensionBulkWindowStart";
   const AUTOMATION_WINDOW_END_KEY = "leadsExtensionBulkWindowEnd";
   const AUTOMATION_DOMAIN_THROTTLE_KEY = "leadsExtensionBulkDomainThrottle";
+  const AUTOMATION_START_PHASE_KEY = "leadsExtensionBulkStartPhase";
   const DEFAULT_BULK_DELAY_MS = 45000;
   const DEFAULT_BULK_LIMIT = 50;
   const DEFAULT_WINDOW_START = "09:00";
@@ -151,6 +152,27 @@
   function setStoredDomainThrottle(value) {
     try {
       chrome.storage.local.set({ [AUTOMATION_DOMAIN_THROTTLE_KEY]: String(value) });
+    } catch (_) {
+      // Ignore storage errors.
+    }
+  }
+
+  const VALID_START_PHASES = ["send", "both", "followup", "followup1", "followup2"];
+
+  function getStoredStartPhase() {
+    try {
+      const raw = localStorage.getItem(AUTOMATION_START_PHASE_KEY) || "";
+      return VALID_START_PHASES.includes(raw) ? raw : "send";
+    } catch (_) {
+      return "send";
+    }
+  }
+
+  function setStoredStartPhase(value) {
+    try {
+      if (VALID_START_PHASES.includes(value)) {
+        localStorage.setItem(AUTOMATION_START_PHASE_KEY, value);
+      }
     } catch (_) {
       // Ignore storage errors.
     }
@@ -321,6 +343,7 @@
       resumeBtn: panel.querySelector('button[data-action="bulk-resume"]'),
       stopBtn: panel.querySelector('button[data-action="bulk-stop"]'),
       refreshBtn: panel.querySelector('button[data-action="bulk-refresh"]'),
+      phaseButtons: panel.querySelectorAll('button[data-phase]'),
     };
   }
 
@@ -721,11 +744,19 @@
       '<span class="text-slate-700">To</span>' +
       '<input name="bulkWindowEnd" type="time" class="h-8 rounded border bg-white px-2 text-xs" />' +
       "</label>" +
-      '<button type="button" data-action="bulk-start" class="h-8 rounded border px-3 font-medium text-slate-800 hover:bg-white">Start</button>' +
+      '<button type="button" data-action="bulk-start" class="h-8 rounded border px-3 font-medium text-slate-800 hover:bg-white">▶ Start</button>' +
       '<button type="button" data-action="bulk-pause" class="h-8 rounded border px-3 text-slate-700 hover:bg-white">Pause</button>' +
       '<button type="button" data-action="bulk-resume" class="h-8 rounded border px-3 text-slate-700 hover:bg-white">Resume</button>' +
       '<button type="button" data-action="bulk-stop" class="h-8 rounded border px-3 text-slate-700 hover:bg-white">Stop</button>' +
       '<button type="button" data-action="bulk-refresh" class="h-8 rounded border px-2 text-slate-700 hover:bg-white">↻</button>' +
+      "</div>" +
+      '<div class="mt-1 flex flex-wrap items-center gap-1">' +
+      '<span class="text-slate-600 font-medium">Phase:</span>' +
+      '<button type="button" data-phase="send" class="h-7 rounded border px-2 text-xs text-slate-700 hover:bg-white">New only</button>' +
+      '<button type="button" data-phase="both" class="h-7 rounded border px-2 text-xs text-slate-700 hover:bg-white">New + Follow-ups</button>' +
+      '<button type="button" data-phase="followup" class="h-7 rounded border px-2 text-xs text-slate-700 hover:bg-white">All Follow-ups</button>' +
+      '<button type="button" data-phase="followup1" class="h-7 rounded border px-2 text-xs text-slate-700 hover:bg-white">Follow-up 1</button>' +
+      '<button type="button" data-phase="followup2" class="h-7 rounded border px-2 text-xs text-slate-700 hover:bg-white">Follow-up 2</button>' +
       "</div>" +
       '<div class="mt-2 text-slate-700" data-role="status">Status: Idle</div>' +
       '<div class="text-slate-600" data-role="progress">Processed 0/0 • Sent 0 • Failed 0</div>' +

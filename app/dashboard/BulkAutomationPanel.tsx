@@ -328,7 +328,9 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
           <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="text-[11px] text-gray-500">Phase: <span className="font-medium text-gray-700">{state.phase || "send"}</span></span>
             {state.startPhase && state.startPhase !== "send" && (
-              <span className="text-[11px] text-indigo-500 font-medium">({state.startPhase === "both" ? "new + follow-ups" : "follow-ups only"})</span>
+              <span className="text-[11px] text-indigo-500 font-medium">
+                ({state.startPhase === "both" ? "new + follow-ups" : state.startPhase === "followup1" ? "follow-up 1 only" : state.startPhase === "followup2" ? "follow-up 2 only" : "all follow-ups"})
+              </span>
             )}
             {progressText && <span className="text-[11px] text-gray-500">{progressText}</span>}
             {error && <span className="text-[11px] text-red-600 font-medium">{error}</span>}
