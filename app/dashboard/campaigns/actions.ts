@@ -63,12 +63,14 @@ function normalizeGmailAuthUser(value: string): string {
   return raw;
 }
 
+const MAX_FOLLOWUP1_TEMPLATES = 5;
+
 function parseFollowup1Templates(raw: string | null): string | null {
   if (!raw) return null;
   try {
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr)) return null;
-    const cleaned = arr.map((t) => String(t ?? "").trim()).filter(Boolean);
+    const cleaned = arr.map((t) => String(t ?? "").trim()).filter(Boolean).slice(0, MAX_FOLLOWUP1_TEMPLATES);
     return cleaned.length > 0 ? JSON.stringify(cleaned) : null;
   } catch {
     return null;
