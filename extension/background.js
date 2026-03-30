@@ -887,6 +887,17 @@ function toBulkQueueItem(item, workflowType) {
     campaignSubject: source.campaignSubject ? String(source.campaignSubject) : "",
     followup1: source.followup1 ? String(source.followup1) : "",
     followup2: source.followup2 ? String(source.followup2) : "",
+    followup1Templates: (function () {
+      const raw = source.followup1Templates;
+      if (Array.isArray(raw)) return raw.map(String).filter(Boolean);
+      if (typeof raw === "string" && raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+        } catch (_) {}
+      }
+      return [];
+    })(),
     followupBody: followupBody,
     scheduleSendTime: source.scheduleSendTime || bulkAutomationState.scheduleSendTime || "",
   };
@@ -899,11 +910,25 @@ function buildFollowupSubject(subject) {
   return "Re: " + value;
 }
 
+function pickRandomFromArray(arr) {
+  if (!Array.isArray(arr) || arr.length === 0) return null;
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 function getFollowupBodyFromItem(item) {
+  const step = Number(item && item.step ? item.step : 1);
+
+  // For step 1: prefer a random template from followup1Templates array.
+  if (step === 1) {
+    const templates = item && Array.isArray(item.followup1Templates) ? item.followup1Templates.filter(Boolean) : [];
+    if (templates.length > 0) {
+      return String(pickRandomFromArray(templates) || "").trim();
+    }
+  }
+
   const existing = String(item && item.followupBody ? item.followupBody : "").trim();
   let baseBody = existing;
   if (!baseBody) {
-    const step = Number(item && item.step ? item.step : 1);
     if (step === 1) {
       baseBody = String(item && item.followup1 ? item.followup1 : "").trim();
     } else if (step === 2) {

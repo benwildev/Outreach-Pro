@@ -63,6 +63,18 @@ function normalizeGmailAuthUser(value: string): string {
   return raw;
 }
 
+function parseFollowup1Templates(raw: string | null): string | null {
+  if (!raw) return null;
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return null;
+    const cleaned = arr.map((t) => String(t ?? "").trim()).filter(Boolean);
+    return cleaned.length > 0 ? JSON.stringify(cleaned) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function createCampaign(formData: FormData) {
   const name = trim(formData.get("name") as string | null);
   const subject = trim(formData.get("subject") as string | null);
@@ -71,6 +83,7 @@ export async function createCampaign(formData: FormData) {
   const gmailAuthUser = normalizeGmailAuthUser(String(formData.get("gmailAuthUser") ?? ""));
   const followup1 = trim(formData.get("followup1") as string | null) || null;
   const followup2 = trim(formData.get("followup2") as string | null) || null;
+  const followup1Templates = parseFollowup1Templates(formData.get("followup1Templates") as string | null);
   const signature = trim(formData.get("signature") as string | null) || null;
   const webhookUrl = trim(formData.get("webhookUrl") as string | null) || null;
   const googleSheetId = trim(formData.get("googleSheetId") as string | null) || null;
@@ -90,6 +103,7 @@ export async function createCampaign(formData: FormData) {
       gmailAuthUser: gmailAuthUser || undefined,
       followup1: followup1 || undefined,
       followup2: followup2 || undefined,
+      followup1Templates: followup1Templates || undefined,
       signature: signature || undefined,
       webhookUrl: webhookUrl || undefined,
       googleSheetId: googleSheetId || undefined,
@@ -110,6 +124,7 @@ export async function updateCampaign(id: string, formData: FormData) {
   const gmailAuthUser = normalizeGmailAuthUser(String(formData.get("gmailAuthUser") ?? ""));
   const followup1 = trim(formData.get("followup1") as string | null) || null;
   const followup2 = trim(formData.get("followup2") as string | null) || null;
+  const followup1Templates = parseFollowup1Templates(formData.get("followup1Templates") as string | null);
   const signature = trim(formData.get("signature") as string | null) || null;
   const webhookUrl = trim(formData.get("webhookUrl") as string | null) || null;
   const googleSheetId = trim(formData.get("googleSheetId") as string | null) || null;
@@ -130,6 +145,7 @@ export async function updateCampaign(id: string, formData: FormData) {
       gmailAuthUser: gmailAuthUser || null,
       followup1: followup1 || undefined,
       followup2: followup2 || undefined,
+      followup1Templates: followup1Templates,
       signature: signature || null,
       webhookUrl: webhookUrl || null,
       googleSheetId: googleSheetId || null,

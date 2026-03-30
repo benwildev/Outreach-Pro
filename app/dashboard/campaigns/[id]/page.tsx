@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { updateCampaign } from "../actions";
 import { Zap, ArrowLeft, Download, Sheet } from "lucide-react";
+import Followup1TemplatesEditor from "../Followup1TemplatesEditor";
 
 export const dynamic = "force-dynamic";
 
@@ -101,15 +102,21 @@ export default async function CampaignEditorPage({
               <Textarea id="body" name="body" defaultValue={campaign.body} required rows={6} placeholder="Your outreach email template..." className="resize-none" />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-              <div className="space-y-1.5">
-                <Label htmlFor="followup1" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Follow-up 1 Body</Label>
-                <Textarea id="followup1" name="followup1" defaultValue={campaign.followup1 ?? ""} rows={4} placeholder="First follow-up message" className="resize-none" />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="followup2" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Follow-up 2 Body</Label>
-                <Textarea id="followup2" name="followup2" defaultValue={campaign.followup2 ?? ""} rows={4} placeholder="Second follow-up message" className="resize-none" />
-              </div>
+            <Followup1TemplatesEditor
+              initialTemplates={(() => {
+                try {
+                  const parsed = JSON.parse(campaign.followup1Templates ?? "[]");
+                  return Array.isArray(parsed) ? parsed.map(String) : [];
+                } catch {
+                  return [];
+                }
+              })()}
+              initialFollowup1={campaign.followup1 ?? ""}
+            />
+
+            <div className="space-y-1.5">
+              <Label htmlFor="followup2" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Follow-up 2 Body</Label>
+              <Textarea id="followup2" name="followup2" defaultValue={campaign.followup2 ?? ""} rows={4} placeholder="Second follow-up message" className="resize-none" />
             </div>
 
             <div className="space-y-1.5">

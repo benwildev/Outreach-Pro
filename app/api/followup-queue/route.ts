@@ -52,6 +52,7 @@ export async function GET(request: Request) {
             body: true,
             followup1: true,
             followup2: true,
+            followup1Templates: true,
             signature: true,
             chatGptChatId: true,
             gmailAuthUser: true,
@@ -63,6 +64,15 @@ export async function GET(request: Request) {
     const queue = leads
       .map((lead) => {
         const followupBody = resolveFollowupBody(lead.step, lead.campaign.followup1, lead.campaign.followup2);
+        let followup1Templates: string[] = [];
+        try {
+          const parsed = JSON.parse(lead.campaign.followup1Templates ?? "[]");
+          if (Array.isArray(parsed)) {
+            followup1Templates = parsed.map(String).filter(Boolean);
+          }
+        } catch {
+          followup1Templates = [];
+        }
         return {
           leadId: lead.id,
           campaignId: lead.campaignId,
@@ -80,6 +90,7 @@ export async function GET(request: Request) {
           campaignSubject: lead.campaign.subject ?? "",
           followup1: lead.campaign.followup1 ?? "",
           followup2: lead.campaign.followup2 ?? "",
+          followup1Templates,
           campaignSignature: lead.campaign.signature ?? "",
           followupBody,
         };
