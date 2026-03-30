@@ -518,6 +518,17 @@
       nodes && nodes.windowEndInput ? nodes.windowEndInput.value : "",
       getStoredWindowEnd()
     );
+    // Read the currently selected phase button (data-phase attribute on the active btn).
+    // Falls back to the stored phase, then "send" as the default.
+    let startPhase = getStoredStartPhase();
+    if (nodes && nodes.phaseButtons) {
+      nodes.phaseButtons.forEach(function (btn) {
+        if (btn.getAttribute("data-active") === "1") {
+          const val = btn.getAttribute("data-phase") || "send";
+          if (VALID_START_PHASES.includes(val)) startPhase = val;
+        }
+      });
+    }
     const delayMinMs = minDelaySeconds * 1000;
     const delayMaxMs = maxDelaySeconds * 1000;
     return {
@@ -531,6 +542,7 @@
       windowEnabled,
       sendWindowStart,
       sendWindowEnd,
+      startPhase,
     };
   }
 
@@ -551,6 +563,7 @@
         setStoredWindowEnabled(values.windowEnabled);
         setStoredWindowStart(values.sendWindowStart);
         setStoredWindowEnd(values.sendWindowEnd);
+        setStoredStartPhase(values.startPhase);
         const response = await sendRuntimeMessage({
           action: "startBulkAutomation",
           data: {
@@ -558,6 +571,7 @@
             delayMinMs: values.delayMinMs,
             delayMaxMs: values.delayMaxMs,
             limit: values.limit,
+            startPhase: values.startPhase,
             domainThrottle: values.domainThrottle,
             followupEnabled: values.autoFollowupEnabled,
             windowEnabled: values.windowEnabled,
@@ -604,12 +618,35 @@
     }
   }
 
+  function applyActivePhaseBtnStyle(phaseButtons, activePhase) {
+    phaseButtons.forEach(function (btn) {
+      const phase = btn.getAttribute("data-phase") || "";
+      const isActive = phase === activePhase;
+      btn.setAttribute("data-active", isActive ? "1" : "0");
+      btn.style.background = isActive ? "#4f46e5" : "";
+      btn.style.color = isActive ? "#fff" : "";
+      btn.style.fontWeight = isActive ? "600" : "";
+    });
+  }
+
   function bindAutomationPanelEvents() {
     const nodes = getAutomationPanelNodes();
     if (!nodes) return;
     if (nodes.startBtn && !nodes.startBtn.dataset.bound) {
       nodes.startBtn.dataset.bound = "1";
       nodes.startBtn.addEventListener("click", () => handleBulkAction("start"));
+    }
+    // Phase selector — bind each phase button to update active state + persist selection.
+    if (nodes.phaseButtons && nodes.phaseButtons.length > 0) {
+      nodes.phaseButtons.forEach(function (btn) {
+        if (btn.dataset.phaseBound) return;
+        btn.dataset.phaseBound = "1";
+        btn.addEventListener("click", function () {
+          const phase = btn.getAttribute("data-phase") || "send";
+          setStoredStartPhase(phase);
+          applyActivePhaseBtnStyle(nodes.phaseButtons, phase);
+        });
+      });
     }
     if (nodes.pauseBtn && !nodes.pauseBtn.dataset.bound) {
       nodes.pauseBtn.dataset.bound = "1";
@@ -792,6 +829,10 @@
     }
     if (nodes && nodes.windowEndInput) {
       nodes.windowEndInput.value = getStoredWindowEnd();
+    }
+    // Restore selected phase button from storage.
+    if (nodes && nodes.phaseButtons && nodes.phaseButtons.length > 0) {
+      applyActivePhaseBtnStyle(nodes.phaseButtons, getStoredStartPhase());
     }
 
     bindAutomationPanelEvents();
