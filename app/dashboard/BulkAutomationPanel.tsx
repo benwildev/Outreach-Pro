@@ -28,7 +28,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
   const [delayMinSeconds, setDelayMinSeconds] = useState(45);
   const [delayMaxSeconds, setDelayMaxSeconds] = useState(45);
   const [limit, setLimit] = useState(50);
-  const [startPhase, setStartPhase] = useState<"send" | "followup" | "both">("send");
+  const [startPhase, setStartPhase] = useState<"send" | "followup" | "both" | "followup1" | "followup2">("send");
   const [windowEnabled, setWindowEnabled] = useState(false);
   const [windowStart, setWindowStart] = useState("09:00");
   const [windowEnd, setWindowEnd] = useState("18:00");
@@ -44,7 +44,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
     setLimit(clamp(readStorageInt(K_LIMIT, 50), 1, 500));
     if (typeof window !== "undefined") {
       const savedPhase = window.localStorage.getItem(K_START_PHASE) ?? "send";
-      setStartPhase(savedPhase === "followup" ? "followup" : savedPhase === "both" ? "both" : "send");
+      setStartPhase(["send", "both", "followup", "followup1", "followup2"].includes(savedPhase) ? (savedPhase as any) : "send");
       setWindowEnabled((window.localStorage.getItem(K_WINDOW_ENABLED) ?? "0") === "1");
       setWindowStart(normalizeTime(window.localStorage.getItem(K_WINDOW_START) ?? "", "09:00"));
       setWindowEnd(normalizeTime(window.localStorage.getItem(K_WINDOW_END) ?? "", "18:00"));
@@ -241,7 +241,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
             </label>
             <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-1 py-1 shadow-sm">
               <span className="text-[11px] text-gray-500 font-medium pl-1.5 pr-2 whitespace-nowrap">Phase:</span>
-              {(["send", "both", "followup"] as const).map((p) => (
+              {(["send", "both", "followup", "followup1", "followup2"] as const).map((p) => (
                 <button
                   key={p}
                   type="button"
@@ -253,7 +253,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
                       : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
                   }`}
                 >
-                  {p === "send" ? "New only" : p === "both" ? "New + Follow-ups" : "Follow-ups only"}
+                  {p === "send" ? "New only" : p === "both" ? "New + Follow-ups" : p === "followup" ? "All Follow-ups" : p === "followup1" ? "Follow-up 1" : "Follow-up 2"}
                 </button>
               ))}
             </div>

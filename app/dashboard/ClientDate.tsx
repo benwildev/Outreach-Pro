@@ -13,8 +13,11 @@ export function ClientDate({ date }: { date: Date | string | null }) {
         const d = new Date(date);
         setFormatted(
             new Intl.DateTimeFormat(undefined, {
-                dateStyle: "short",
-                timeStyle: "short",
+                month: "short",
+                day: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
             }).format(d)
         );
     }, [date]);

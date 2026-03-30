@@ -9,7 +9,8 @@ interface StatsCardsProps {
   bouncedLeads: number;
   scheduledLeads: number;
   failedLeads: number;
-  followupDueCount: number;
+  followupDueCount1: number;
+  followupDueCount2: number;
 }
 
 export function StatsCards({
@@ -20,7 +21,8 @@ export function StatsCards({
   bouncedLeads,
   scheduledLeads,
   failedLeads,
-  followupDueCount,
+  followupDueCount1,
+  followupDueCount2,
 }: StatsCardsProps) {
   const deliveredLeads = sentLeads + repliedLeads + bouncedLeads;
   const replyRate = deliveredLeads > 0 ? Math.round((repliedLeads / deliveredLeads) * 100) : null;
@@ -104,20 +106,31 @@ export function StatsCards({
       href: "/dashboard?status=pending",
     },
     {
-      label: "Follow-ups Due",
-      value: followupDueCount,
-      sub: followupDueCount > 0 ? "action needed" : "all up to date",
-      subColor: followupDueCount > 0 ? "text-orange-600" : "text-slate-400",
+      label: "Follow-up 1 Due",
+      value: followupDueCount1,
+      sub: followupDueCount1 > 0 ? "action needed" : "all up to date",
+      subColor: followupDueCount1 > 0 ? "text-orange-600" : "text-slate-400",
       icon: AlertCircle,
-      accent: followupDueCount > 0 ? "border-l-orange-500" : "border-l-gray-300",
-      iconBg: followupDueCount > 0 ? "bg-orange-500" : "bg-gray-400",
-      valueColor: followupDueCount > 0 ? "text-orange-700" : "text-gray-500",
+      accent: followupDueCount1 > 0 ? "border-l-orange-500" : "border-l-gray-300",
+      iconBg: followupDueCount1 > 0 ? "bg-orange-500" : "bg-gray-400",
+      valueColor: followupDueCount1 > 0 ? "text-orange-700" : "text-gray-500",
+      href: "/dashboard?filter=followup-due",
+    },
+    {
+      label: "Follow-up 2 Due",
+      value: followupDueCount2,
+      sub: followupDueCount2 > 0 ? "action needed" : "all up to date",
+      subColor: followupDueCount2 > 0 ? "text-orange-600" : "text-slate-400",
+      icon: AlertCircle,
+      accent: followupDueCount2 > 0 ? "border-l-orange-400" : "border-l-gray-300",
+      iconBg: followupDueCount2 > 0 ? "bg-orange-400" : "bg-gray-400",
+      valueColor: followupDueCount2 > 0 ? "text-orange-700" : "text-gray-500",
       href: "/dashboard?filter=followup-due",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3 mb-5">
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-3 mb-5">
       {stats.map((stat, index) => {
         const Icon = stat.icon;
         return (

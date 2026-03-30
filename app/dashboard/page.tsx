@@ -58,9 +58,18 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   });
 
   const isFollowUpDueFilter = filter === "followup-due";
-  const where: Prisma.LeadWhereInput = {};
+  const baseWhere: Prisma.LeadWhereInput = {};
 
-  if (campaignId) where.campaignId = campaignId;
+  if (campaignId) baseWhere.campaignId = campaignId;
+
+  if (dateFrom || dateTo) {
+    const sentAtFilter: Prisma.DateTimeNullableFilter = {};
+    if (dateFrom) sentAtFilter.gte = new Date(dateFrom + "T00:00:00");
+    if (dateTo) sentAtFilter.lte = new Date(dateTo + "T23:59:59");
+    baseWhere.sentAt = sentAtFilter;
+  }
+
+  const where: Prisma.LeadWhereInput = { ...baseWhere };
 
   if (isFollowUpDueFilter) {
     where.status = "sent";
@@ -71,13 +80,6 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   if (emailSearch) {
     where.recipientEmail = { contains: emailSearch, mode: "insensitive" };
-  }
-
-  if (dateFrom || dateTo) {
-    const sentAtFilter: Prisma.DateTimeNullableFilter = {};
-    if (dateFrom) sentAtFilter.gte = new Date(dateFrom + "T00:00:00");
-    if (dateTo) sentAtFilter.lte = new Date(dateTo + "T23:59:59");
-    where.sentAt = sentAtFilter;
   }
 
   const skip = (currentPage - 1) * PAGE_SIZE;
@@ -96,19 +98,21 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const totalPages = Math.max(1, Math.ceil(filteredTotal / PAGE_SIZE));
 
   const [totalLeads, sentLeads, repliedLeads, pendingLeads, bouncedLeads, scheduledLeads, failedLeads] = await Promise.all([
-    prisma.lead.count(),
-    prisma.lead.count({ where: { status: "sent" } }),
-    prisma.lead.count({ where: { status: "replied" } }),
-    prisma.lead.count({ where: { status: "pending" } }),
-    prisma.lead.count({ where: { status: "bounced" } }),
-    prisma.lead.count({ where: { status: "scheduled" } }),
-    prisma.lead.count({ where: { status: "failed" } }),
+    prisma.lead.count({ where: baseWhere }),
+    prisma.lead.count({ where: { ...baseWhere, status: "sent" } }),
+    prisma.lead.count({ where: { ...baseWhere, status: "replied" } }),
+    prisma.lead.count({ where: { ...baseWhere, status: "pending" } }),
+    prisma.lead.count({ where: { ...baseWhere, status: "bounced" } }),
+    prisma.lead.count({ where: { ...baseWhere, status: "scheduled" } }),
+    prisma.lead.count({ where: { ...baseWhere, status: "failed" } }),
   ]);
 
   const followupDueLeads = await prisma.lead.findMany({
-    where: { status: "sent", nextFollowup: { lte: new Date() } },
+    where: { ...baseWhere, status: "sent", nextFollowup: { lte: new Date() } },
+    select: { step: true }
   });
-  const followupDueCount = followupDueLeads.length;
+  const followupDueCount1 = followupDueLeads.filter(l => l.step === 1).length;
+  const followupDueCount2 = followupDueLeads.filter(l => l.step === 2).length;
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
@@ -218,7 +222,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           bouncedLeads={bouncedLeads}
           scheduledLeads={scheduledLeads}
           failedLeads={failedLeads}
-          followupDueCount={followupDueCount}
+          followupDueCount1={followupDueCount1}
+          followupDueCount2={followupDueCount2}
         />
 
         {/* Daily send tracker */}

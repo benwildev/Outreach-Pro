@@ -11,8 +11,9 @@ const EMAIL_STRUCTURE_INSTRUCTION =
   "- Skip filler like \"I hope you are doing well\" unless there is a specific reason.\n" +
   "- One or two short intro paragraphs: who you are and the concrete reason you're reaching out.\n" +
   "- Mention one specific fit point tied to the recipient's site, niche, or audience. If you do not know one, keep it neutral instead of inventing details.\n" +
-  "- A clear transition line before the list, e.g. \"A few angles that may fit your audience:\".\n" +
-  "- A bullet list (3 items), each one line and specific. Use a single dash or bullet character (- or •) at the start of each list item.\n" +
+  "- EXPLICIT RULE: The email body must contain EXACTLY ONE bulleted list. DO NOT add multiple lists.\n" +
+  "- A clear transition line before the single list, e.g. \"A few angles that may fit your audience:\".\n" +
+  "- A bullet list (3 items), each one line and specific. Each item must be concise and under 60 words.\n" +
   "- A short closing line offering next steps, e.g. \"If any of these are a fit, I can send over an outline.\"\n" +
   "- Then a simple thank-you line.\n" +
   "- End with \"Best regards,\" only. DO NOT add any name, title, company, or signature line after it.\n" +
@@ -899,17 +900,26 @@ function buildFollowupSubject(subject) {
 
 function getFollowupBodyFromItem(item) {
   const existing = String(item && item.followupBody ? item.followupBody : "").trim();
-  if (existing) {
-    return existing;
+  let baseBody = existing;
+  if (!baseBody) {
+    const step = Number(item && item.step ? item.step : 1);
+    if (step === 1) {
+      baseBody = String(item && item.followup1 ? item.followup1 : "").trim();
+    } else if (step === 2) {
+      baseBody = String(item && item.followup2 ? item.followup2 : "").trim();
+    }
   }
-  const step = Number(item && item.step ? item.step : 1);
-  if (step === 1) {
-    return String(item && item.followup1 ? item.followup1 : "").trim();
+  if (!baseBody) return "";
+
+  // Support multiple versions separated by '---'
+  if (baseBody.includes("---")) {
+    const versions = baseBody.split("---").map(v => v.trim()).filter(Boolean);
+    if (versions.length > 0) {
+      const idx = Math.floor(Math.random() * versions.length);
+      return versions[idx];
+    }
   }
-  if (step === 2) {
-    return String(item && item.followup2 ? item.followup2 : "").trim();
-  }
-  return "";
+  return baseBody;
 }
 
 function getBulkWaiterKey(leadId) {
@@ -1071,13 +1081,16 @@ async function fetchSendQueue(limit, campaignId) {
   return leads.map((item) => toBulkQueueItem(item, "send"));
 }
 
-async function fetchFollowupQueue(limit, campaignId) {
+async function fetchFollowupQueue(limit, campaignId, step) {
   const maxLeads = normalizeBulkLimit(limit);
   const params = new URLSearchParams();
   params.set("limit", String(maxLeads));
   const normalizedCampaignId = String(campaignId || "").trim();
   if (normalizedCampaignId) {
     params.set("campaignId", normalizedCampaignId);
+  }
+  if (step != null) {
+    params.set("step", String(step));
   }
 
   const response = await fetch((await getApiBaseUrl()) + "/api/followup-queue?" + params.toString());
@@ -1304,14 +1317,23 @@ async function runBulkAutomationQueue() {
 
   try {
     // For "send" or "both": process the new-email queue first.
-    if (runStartPhase !== "followup") {
+    if (runStartPhase !== "followup" && runStartPhase !== "followup1" && runStartPhase !== "followup2") {
       bulkAutomationState.phase = "send";
       await processBulkQueueItems();
     }
 
     if (!bulkAutomationState.stopRequested && bulkAutomationState.followupEnabled) {
-      bulkAutomationState.phase = "followup";
-      const followupQueue = await fetchFollowupQueue(bulkAutomationState.limit, bulkAutomationState.campaignId);
+      let stepFilter = null;
+      if (bulkAutomationState.startPhase === "followup1") {
+        stepFilter = 1;
+        bulkAutomationState.phase = "followup1";
+      } else if (bulkAutomationState.startPhase === "followup2") {
+        stepFilter = 2;
+        bulkAutomationState.phase = "followup2";
+      } else {
+        bulkAutomationState.phase = "followup";
+      }
+      const followupQueue = await fetchFollowupQueue(bulkAutomationState.limit, bulkAutomationState.campaignId, stepFilter);
       if (followupQueue.length > 0) {
         for (let i = 0; i < followupQueue.length; i++) {
           bulkAutomationState.queue.push(followupQueue[i]);
@@ -1347,25 +1369,34 @@ async function handleStartBulkAutomation(data) {
     data && (data.delayMinMs != null ? data.delayMinMs : data.delayMs),
     data && (data.delayMaxMs != null ? data.delayMaxMs : data.delayMs)
   );
-  const limit = normalizeBulkLimit(data && data.limit);
   // startPhase controls which phases run:
-  //   "send"     → new emails only (default)
-  //   "followup" → follow-ups only (skip new sends)
-  //   "both"     → new emails first, then follow-ups
+  //   "send"      → new emails only (default)
+  //   "followup"  → follow-ups only (skip new sends)
+  //   "both"      → new emails first, then follow-ups
+  //   "followup1" → step 1 follow-ups only
+  //   "followup2" → step 2 follow-ups only
   const rawStartPhase = data && data.startPhase ? String(data.startPhase).trim() : "";
-  const startPhase = rawStartPhase === "followup" ? "followup" : rawStartPhase === "both" ? "both" : "send";
-  const followupEnabled = startPhase === "both" || startPhase === "followup";
+  let startPhase = "send";
+  if (rawStartPhase === "followup") startPhase = "followup";
+  else if (rawStartPhase === "both") startPhase = "both";
+  else if (rawStartPhase === "followup1") startPhase = "followup1";
+  else if (rawStartPhase === "followup2") startPhase = "followup2";
+
+  const followupEnabled = (startPhase === "both" || startPhase === "followup" || startPhase === "followup1" || startPhase === "followup2");
   const sendWindowStart = normalizeWindowTime(data && data.sendWindowStart, "09:00");
   const sendWindowEnd = normalizeWindowTime(data && data.sendWindowEnd, "18:00");
   const windowEnabled = !!(data && data.windowEnabled && sendWindowStart && sendWindowEnd);
+  
+  const limit = data && data.limit ? Number(data.limit) : 50;
 
   // IMPORTANT: set scheduleSendTime BEFORE fetchSendQueue so that toBulkQueueItem
   // (called inside fetchSendQueue) picks it up from bulkAutomationState correctly.
   bulkAutomationState.scheduleSendTime = data && data.scheduleSendTime ? String(data.scheduleSendTime).trim() : "";
   bulkAutomationState.scheduleStaggerMs = data && data.scheduleStaggerMs > 0 ? Number(data.scheduleStaggerMs) : 0;
 
-  // For "followup only" mode skip fetching the new-email queue entirely.
-  const queue = startPhase === "followup" ? [] : await fetchSendQueue(limit, campaignId);
+  // For "followup only" modes skip fetching the new-email queue entirely.
+  const isFollowupOnly = (startPhase === "followup" || startPhase === "followup1" || startPhase === "followup2");
+  const queue = isFollowupOnly ? [] : await fetchSendQueue(limit, campaignId);
 
   bulkAutomationState.queue = Array.isArray(queue) ? queue : [];
   bulkAutomationState.total = bulkAutomationState.queue.length;
@@ -2189,7 +2220,7 @@ function buildGuestPostPrompt(data) {
   return (
     "Deeply browse this website: " + websiteUrl + " and write a short and personalized guest post request focusing on " + niche + ".\n\n" +
     "Recipient Name: " + name + "\nRecipient Email: " + email + "\n\n" +
-    "Suggest one subject line and 3 content topics; include them in the email. Use bullet points for the topics.\n" +
+    "Propose exactly 3 content topics as the ONLY bulleted list in the email. Do not propose subject lines in the body.\n" +
     buildWebsiteContextBlock(data) +
     HUMAN_TONE_INSTRUCTION +
     EMAIL_STRUCTURE_INSTRUCTION +

@@ -42,9 +42,10 @@ export async function GET(req: NextRequest) {
 
   const rows = leads.map((l) => ({
     email: l.recipientEmail.split(",")[0].trim(),
+    emails: l.recipientEmail, // Include raw comma-separated list
     name: l.recipientName,
     status: l.status,
-    replied: l.replied ? "Yes" : "No",
+    replied: l.replied ? "YES" : "NO",
     sentAt: l.sentAt ? new Date(l.sentAt).toISOString() : "",
     sentFrom: l.sentGmailAuthUser ?? "",
     gmailThreadId: l.gmailThreadId ?? "",

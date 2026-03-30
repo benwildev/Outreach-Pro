@@ -432,30 +432,58 @@
       if (!node) return "";
       const clone = node.cloneNode(true);
       const noise = clone.querySelectorAll([
-        'sup', 'button',
+        'sup', 'button', 'svg',
         '[class*="citation" i]', '[class*="source" i]', '[class*="reference" i]',
         'span.flex.items-center.justify-center',
+        'a[href*="google.com/search"]', 'a[href*="bing.com/search"]',
         '.text-xs', '.rounded-full', '.rounded-md', '.bg-token-main-surface-secondary',
-        '[contenteditable="false"]'
+        '[contenteditable="false"]',
+        '[aria-label*="citation" i]', '[aria-label*="source" i]'
       ].join(', '));
       for (let j = 0; j < noise.length; j++) {
         const el = noise[j];
         if (el && el.parentNode) {
-          // If the element is purely a tiny icon/pill, kill it completely
-          // Sometimes ChatGPT nests actual good text inside rounded things if we are too broad, 
-          // so we ensure we only completely kill short/pill-like noise or explicit buttons/citations.
-          const isButtonOrCitation = el.tagName === 'BUTTON' || el.tagName === 'SUP' || (el.className && el.className.match(/citation|source|reference/i));
-          const isShortText = (el.innerText || el.textContent || "").length < 40;
-          if (isButtonOrCitation || isShortText || el.getAttribute("contenteditable") === "false") {
-            el.parentNode.removeChild(el);
-          }
+           el.parentNode.removeChild(el);
         }
       }
       const links = clone.querySelectorAll('a');
       for (let j = 0; j < links.length; j++) {
+        const text = (links[j].innerText || links[j].textContent || "").trim();
+        // If it looks like a citation link (short, maybe at the end of a sentence or in a pill)
+        // ChatGPT often uses very short titles or domain-like names for sources.
+        const isCitation = text.length < 30 && (
+          links[j].className.match(/citation|source|reference/i) || 
+          links[j].getAttribute('data-testid')?.match(/citation|source/i) ||
+          links[j].href.includes('muckrack.com') || // specific common sources
+          links[j].href.includes('morningadvertiser.co.uk')
+        );
+
+        if (isCitation) {
+           if (links[j].parentNode) links[j].parentNode.removeChild(links[j]);
+           continue;
+        }
+
         const textNode = document.createTextNode(links[j].innerText || links[j].textContent || "");
         if (links[j].parentNode) links[j].parentNode.replaceChild(textNode, links[j]);
       }
+      
+      // Ensure bullet points are not lost when converting HTML lists to plain text
+      const listItems = clone.querySelectorAll('li');
+      for (let j = 0; j < listItems.length; j++) {
+        // Skip outer list items that contain nested lists to avoid double-bulleting
+        if (!listItems[j].querySelector('ul') && !listItems[j].querySelector('ol')) {
+          // Drill down past container tags so the bullet is placed inline with the text (avoids newline split)
+          let target = listItems[j];
+          while (target.firstElementChild && ['P', 'DIV', 'SPAN'].includes(target.firstElementChild.tagName)) {
+            target = target.firstElementChild;
+          }
+          const text = String(target.innerText || target.textContent || "").trim();
+          if (!text.startsWith("•") && !text.startsWith("-")) {
+            target.insertBefore(document.createTextNode("\u2022 "), target.firstChild);
+          }
+        }
+      }
+
       let rawText = String(clone.innerText || clone.textContent || "").trim();
       // Also strip typical markdown patterns like [Immovario](https://...)
       rawText = rawText.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");

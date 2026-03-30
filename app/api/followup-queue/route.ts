@@ -25,12 +25,14 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const limit = parseLimit(url.searchParams.get("limit"));
     const campaignId = (url.searchParams.get("campaignId") ?? "").trim();
+    const stepParam = url.searchParams.get("step");
+    const step = stepParam ? parseInt(stepParam, 10) : null;
 
     const where: Prisma.LeadWhereInput = {
       status: "sent",
       replied: false,
       unsubscribed: false,
-      step: { lt: 3 },
+      step: step !== null ? step : { lt: 3 },
       nextFollowup: { lte: new Date() },
     };
     if (campaignId) {

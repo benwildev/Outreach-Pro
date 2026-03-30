@@ -8,23 +8,23 @@ datasource db {
 }
 
 model Campaign {
-  id             String      @id @default(cuid())
-  name           String
-  subject        String
-  body           String
-  chatGptChatId  String?
-  gmailAuthUser  String?
-  followup1      String?
-  followup2      String?
-  signature      String?
-  delay1Days     Int         @default(3)
-  delay2Days     Int         @default(5)
-  provider       String      @default("gmail")
-  createdAt      DateTime    @default(now())
-  webhookUrl     String?
-  googleSheetId  String?
-  leads          Lead[]
-  importLogs     ImportLog[]
+  id            String      @id @default(cuid())
+  name          String
+  subject       String
+  body          String
+  chatGptChatId String?
+  gmailAuthUser String?
+  followup1     String?
+  followup2     String?
+  signature     String?
+  delay1Days    Int         @default(3)
+  delay2Days    Int         @default(5)
+  provider      String      @default("gmail")
+  createdAt     DateTime    @default(now())
+  webhookUrl    String?
+  googleSheetId String?
+  importLogs    ImportLog[]
+  leads         Lead[]
 
   @@map("campaign")
 }
@@ -44,33 +44,33 @@ model ImportLog {
 }
 
 model Lead {
-  id                String    @id @default(cuid())
-  campaignId        String
-  recipientName     String
-  recipientEmail    String
-  websiteUrl        String?
-  niche             String?
-  status            String    @default("pending")
-  step              Int       @default(1)
-  replied           Boolean   @default(false)
-  sentAt            DateTime?
-  sentGmailAuthUser String?
-  sentSubject       String?
-  sentBody          String?
-  nextFollowup      DateTime?
-  gmailThreadId     String?
-  opened            Boolean   @default(false)
-  openedAt          DateTime?
-  clicked           Boolean   @default(false)
-  clickedAt         DateTime?
-  createdAt         DateTime  @default(now())
-  replyBody             String?
-  replyCategory         String?
-  unsubscribed          Boolean   @default(false)
-  sentFollowup1Body     String?
-  sentFollowup2Body     String?
-  lastReplyCheckedAt    DateTime?
-  campaign              Campaign  @relation(fields: [campaignId], references: [id])
+  id                 String    @id @default(cuid())
+  campaignId         String
+  recipientName      String
+  recipientEmail     String
+  websiteUrl         String?
+  niche              String?
+  status             String    @default("pending")
+  step               Int       @default(1)
+  replied            Boolean   @default(false)
+  sentAt             DateTime?
+  sentGmailAuthUser  String?
+  sentSubject        String?
+  sentBody           String?
+  nextFollowup       DateTime?
+  gmailThreadId      String?
+  opened             Boolean   @default(false)
+  openedAt           DateTime?
+  clicked            Boolean   @default(false)
+  clickedAt          DateTime?
+  createdAt          DateTime  @default(now())
+  replyBody          String?
+  sentFollowup1Body  String?
+  sentFollowup2Body  String?
+  lastReplyCheckedAt DateTime?
+  replyCategory      String?
+  unsubscribed       Boolean   @default(false)
+  campaign           Campaign  @relation(fields: [campaignId], references: [id])
 
   @@map("lead")
 }

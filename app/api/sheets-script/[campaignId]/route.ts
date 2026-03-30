@@ -48,7 +48,7 @@ var COLUMNS = {
   OUTREACH_ACCOUNT:"L",  // Outreach account — Gmail account used to send
   SENT_AT:         "M",  // Date column — writes the sent date
   NEXT_FOLLOWUP:   "N",  // Follow up column — writes next follow-up date
-  REPLIED:         "O"   // Got Reply column — writes Yes / No
+  REPLIED:         "O"   // Got Reply column — writes YES / NO
 };
 
 function syncBenwillData() {
@@ -65,32 +65,48 @@ function syncBenwillData() {
   // Build email → lead lookup map
   var leadMap = {};
   leads.forEach(function(lead) {
-    leadMap[lead.email.toLowerCase().trim()] = lead;
+    var emailStr = lead.emails || lead.email || "";
+    var emails = emailStr.split(",");
+    emails.forEach(function(em) {
+      var clean = em.toLowerCase().trim();
+      if (clean) leadMap[clean] = lead;
+    });
   });
 
   var lastRow = sheet.getLastRow();
-  var emailColIndex = columnToIndex(EMAIL_COLUMN);
+  if (lastRow < 2) return;
+
+  var emailColIndex = columnToIndex(EMAIL_COLUMN) - 1; // 0-indexed
+  var accountIdx = COLUMNS.OUTREACH_ACCOUNT ? columnToIndex(COLUMNS.OUTREACH_ACCOUNT) - 1 : -1;
+  var sentIdx = COLUMNS.SENT_AT ? columnToIndex(COLUMNS.SENT_AT) - 1 : -1;
+  var followupIdx = COLUMNS.NEXT_FOLLOWUP ? columnToIndex(COLUMNS.NEXT_FOLLOWUP) - 1 : -1;
+  var repliedIdx = COLUMNS.REPLIED ? columnToIndex(COLUMNS.REPLIED) - 1 : -1;
+
+  var maxColIdx = Math.max(emailColIndex, accountIdx, sentIdx, followupIdx, repliedIdx) + 1;
+  var targetLastCol = Math.max(sheet.getLastColumn(), maxColIdx);
+  
+  // Batch read
+  var range = sheet.getRange(1, 1, lastRow, targetLastCol);
+  var values = range.getValues();
   var updated = 0;
 
-  for (var row = 2; row <= lastRow; row++) {
-    var cellEmail = String(sheet.getRange(row, emailColIndex).getValue() || "").toLowerCase().trim();
+  for (var r = 1; r < lastRow; r++) { // skip header row 0
+    var cellEmail = String(values[r][emailColIndex] || "").toLowerCase().trim();
     if (!cellEmail || !leadMap[cellEmail]) continue;
 
     var lead = leadMap[cellEmail];
 
-    if (COLUMNS.OUTREACH_ACCOUNT)
-      sheet.getRange(row, columnToIndex(COLUMNS.OUTREACH_ACCOUNT)).setValue(lead.sentFrom || "");
-
-    if (COLUMNS.SENT_AT)
-      sheet.getRange(row, columnToIndex(COLUMNS.SENT_AT)).setValue(lead.sentAt ? new Date(lead.sentAt) : "");
-
-    if (COLUMNS.NEXT_FOLLOWUP)
-      sheet.getRange(row, columnToIndex(COLUMNS.NEXT_FOLLOWUP)).setValue(lead.nextFollowup ? new Date(lead.nextFollowup) : "");
-
-    if (COLUMNS.REPLIED)
-      sheet.getRange(row, columnToIndex(COLUMNS.REPLIED)).setValue(lead.replied);
+    if (accountIdx >= 0) values[r][accountIdx] = lead.sentFrom || "";
+    if (sentIdx >= 0) values[r][sentIdx] = lead.sentAt ? new Date(lead.sentAt) : "";
+    if (followupIdx >= 0) values[r][followupIdx] = lead.nextFollowup ? new Date(lead.nextFollowup) : "";
+    if (repliedIdx >= 0) values[r][repliedIdx] = lead.replied;
 
     updated++;
+  }
+
+  // Batch write
+  if (updated > 0) {
+    range.setValues(values);
   }
 
   SpreadsheetApp.getUi().alert(
