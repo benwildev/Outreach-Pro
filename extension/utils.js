@@ -121,6 +121,7 @@ function cleanEmailBody(text, data) {
 
   const recipientName = (data && data.recipientName ? String(data.recipientName) : "").trim();
   const firstName = recipientName.split(/\s+/)[0] || "there";
+  const siteTitle = (data && data.siteTitle ? String(data.siteTitle).trim() : "");
 
   let cleaned = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
   cleaned = stripExtensionNoise(cleaned);
@@ -128,8 +129,11 @@ function cleanEmailBody(text, data) {
   cleaned = cleaned.replace(/^\s*Email\s*\n+/i, "");
   cleaned = cleaned.replace(/^\s*Subject[:\s]*[^\n]*\n+/i, "");
 
+  // Strip "subject idea / suggestion / option" sections — covers existing and newer ChatGPT variants
   cleaned = cleaned.replace(/\n\s*(?:Alternative|Other|More|Some\s+other)\s+subject\s+(?:idea|ideas|option|options)[\s\S]*$/i, "");
   cleaned = cleaned.replace(/\s*\*?\*?Alternative Subject[^\n]*\n[\s\S]*$/i, "");
+  // Broader catch: any line containing "subject idea/suggestion/option" or "here are.*subject"
+  cleaned = cleaned.replace(/\n[^\n]{0,15}(?:subject\s+idea|subject\s+suggestion|subject\s+option|subject\s+line\s+idea|here are.*subject|some\s+subject|email\s+subject)[^\n]*\n[\s\S]*$/i, "");
 
   cleaned = cleaned.replace(/\[Your Name\]|\[YourCompany\]|\[Company Name\]/gi, "");
   cleaned = cleaned.replace(/\{\{[^}]+\}\}/g, "");
@@ -169,6 +173,45 @@ function cleanEmailBody(text, data) {
 
   if (signatureBlock) {
     cleaned = enforceTemplateSignatureBlock(cleaned, signatureBlock);
+  }
+
+  // Post-signature truncation: remove any ChatGPT additions that appear after the signature block.
+  // Locate the last sign-off line (Best regards / Thanks / etc.) and allow at most 5 more lines
+  // for the name/title/company lines. Anything beyond that is extra ChatGPT output.
+  cleaned = (function truncateAfterSignature(txt) {
+    var lines = txt.split("\n");
+    var signoffIdx = -1;
+    for (var i = lines.length - 1; i >= 0; i--) {
+      var l = lines[i].trim();
+      if (/^(best(?: regards)?|kind regards|warm regards|regards|thanks|thank you|sincerely)[,!]?$/i.test(l)) {
+        signoffIdx = i;
+        break;
+      }
+    }
+    if (signoffIdx === -1) return txt;
+    var MAX_SIG_LINES = 5;
+    var cutoff = Math.min(signoffIdx + 1 + MAX_SIG_LINES, lines.length);
+    return lines.slice(0, cutoff).join("\n");
+  })(cleaned);
+
+  // Strip site-title metadata that ChatGPT may append to bullet points.
+  // e.g. "• SteelCo Buildings | Your One Stop Shop" suffix on each content idea line.
+  if (siteTitle) {
+    var escapedTitle = siteTitle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    // Strip "• SiteTitle" or "| SiteTitle" at end of any line
+    cleaned = cleaned.replace(new RegExp("\\s*[•|]\\s*" + escapedTitle + "\\s*$", "gim"), "");
+    // Strip any standalone line that is exactly the site title
+    cleaned = cleaned.replace(new RegExp("^\\s*" + escapedTitle + "\\s*$", "gim"), "");
+    // If title contains " | " (e.g. "Name | Tagline"), also strip the tagline part independently
+    var pipeIdx = siteTitle.indexOf(" | ");
+    if (pipeIdx !== -1) {
+      var taglinePart = siteTitle.slice(pipeIdx + 3).trim();
+      if (taglinePart.length > 3) {
+        var escapedTagline = taglinePart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        cleaned = cleaned.replace(new RegExp("\\s*[•|]\\s*" + escapedTagline + "\\s*$", "gim"), "");
+        cleaned = cleaned.replace(new RegExp("^\\s*" + escapedTagline + "\\s*$", "gim"), "");
+      }
+    }
   }
 
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();

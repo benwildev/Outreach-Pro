@@ -94,6 +94,9 @@
     // This is a non-blocking, best-effort call — any failure falls back silently.
     async function enrichAndRun() {
       let enrichedPrompt = message.prompt;
+      // Use the title already scraped by background.js (if any) as our base site title.
+      // enrichAndRun will override it below if it does its own scrape.
+      let scrapedSiteTitle = (message.websiteContextTitle || "").trim();
       if (websiteUrl && !enrichedPrompt.includes("Company context")) {
         try {
           const resp = await new Promise((resolve) => {
@@ -101,6 +104,7 @@
           });
           if (resp && resp.success && resp.data) {
             const ctx = resp.data;
+            scrapedSiteTitle = ctx.title || "";
             const parts = [];
             if (ctx.title)      parts.push("- Business name / page title: " + ctx.title);
             if (ctx.description) parts.push("- What they do: " + ctx.description);
@@ -119,7 +123,8 @@
         message.leadId,
         templateHasSignature,
         signatureBlock,
-        campaignSignature
+        campaignSignature,
+        scrapedSiteTitle
       );
     }
 
@@ -137,7 +142,7 @@
       });
   });
 
-  async function runPasteAndSend(prompt, recipientName, recipientEmail, leadId, templateHasSignature, signatureBlock, campaignSignature) {
+  async function runPasteAndSend(prompt, recipientName, recipientEmail, leadId, templateHasSignature, signatureBlock, campaignSignature, siteTitle) {
     log("ChatGPT", "pasteAndSend started, prompt length:", prompt?.length, "leadId:", leadId ? "***" : "");
     const textarea = await waitForSelector('textarea[data-id="root"], textarea, [contenteditable="true"]', 20000);
     if (!textarea) {
@@ -201,6 +206,7 @@
       templateHasSignature,
       signatureBlock,
       campaignSignature,
+      siteTitle: siteTitle || "",
     });
 
     if (isPlaceholderOnlyValue(subject, "subject") || isPlaceholderOnlyValue(body, "body")) {

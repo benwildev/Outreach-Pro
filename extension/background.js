@@ -414,6 +414,7 @@ async function handleStartWorkflow(data) {
     campaignBody: data.campaignBody || "",
     campaignSignature: data.campaignSignature || "",
     websiteUrl: (data.websiteUrl || data.website || "").trim(),
+    websiteContextTitle: (data.websiteContext && data.websiteContext.title) ? String(data.websiteContext.title).trim() : "",
   }, 5, 700);
   if (!sent) {
     console.error("[Leads Extension] Send message to ChatGPT tab failed after retries (tab:", tab.id, ")");
