@@ -10,9 +10,18 @@ function parseLimit(value: string | null): number {
   return Math.max(1, Math.min(parsed, 500));
 }
 
-function resolveFollowupBody(step: number, followup1: string | null, followup2: string | null): string {
+function resolveFollowupBody(
+  step: number,
+  followup1: string | null,
+  followup2: string | null,
+  followup1Templates: string[]
+): string {
   if (step === 1) {
-    return String(followup1 ?? "").trim();
+    const legacy = String(followup1 ?? "").trim();
+    if (legacy) return legacy;
+    // If templates array has entries, return the first one so the lead passes the
+    // non-empty filter. The extension will override with a random pick at send time.
+    return followup1Templates.length > 0 ? followup1Templates[0] : "";
   }
   if (step === 2) {
     return String(followup2 ?? "").trim();
@@ -63,7 +72,6 @@ export async function GET(request: Request) {
 
     const queue = leads
       .map((lead) => {
-        const followupBody = resolveFollowupBody(lead.step, lead.campaign.followup1, lead.campaign.followup2);
         let followup1Templates: string[] = [];
         try {
           const parsed = JSON.parse(lead.campaign.followup1Templates ?? "[]");
@@ -73,6 +81,7 @@ export async function GET(request: Request) {
         } catch {
           followup1Templates = [];
         }
+        const followupBody = resolveFollowupBody(lead.step, lead.campaign.followup1, lead.campaign.followup2, followup1Templates);
         return {
           leadId: lead.id,
           campaignId: lead.campaignId,
