@@ -33,7 +33,7 @@ export async function createLead(formData: FormData) {
     },
   });
 
-  revalidatePath("/dashboard");
+  revalidatePath("/dashboard", "layout");
 }
 
 export async function updateLead(leadId: string, formData: FormData) {
@@ -98,7 +98,7 @@ export async function updateLead(leadId: string, formData: FormData) {
     },
   });
 
-  revalidatePath("/dashboard");
+  revalidatePath("/dashboard", "layout");
 }
 
 export async function deleteLead(leadId: string) {
@@ -108,7 +108,7 @@ export async function deleteLead(leadId: string) {
   if (!existing) throw new Error("Lead not found.");
 
   await prisma.lead.delete({ where: { id: leadId } });
-  revalidatePath("/dashboard");
+  revalidatePath("/dashboard", "layout");
 }
 
 export async function deletePendingLeads(campaignId?: string | null) {
@@ -121,7 +121,7 @@ export async function deletePendingLeads(campaignId?: string | null) {
     where
   });
 
-  revalidatePath("/dashboard");
+  revalidatePath("/dashboard", "layout");
 }
 
 export async function bulkTriggerFollowup(leadIds: string[]) {
@@ -143,6 +143,15 @@ export async function bulkTriggerFollowup(leadIds: string[]) {
     }
   });
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/campaigns/[id]", "page");
+  revalidatePath("/dashboard", "layout");
+}
+
+export async function bulkDeleteLeads(leadIds: string[]) {
+  if (!leadIds || leadIds.length === 0) return;
+
+  await prisma.lead.deleteMany({
+    where: { id: { in: leadIds } },
+  });
+
+  revalidatePath("/dashboard", "layout");
 }

@@ -33,7 +33,7 @@ export async function GET(request: Request) {
 
       const eligible = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "lead"
-        WHERE status = 'pending'
+        WHERE status IN ('pending', 'failed')
           AND replied = false
           AND ("claimedAt" IS NULL OR "claimedAt" < ${claimCutoff})
         ${campaignFilter}

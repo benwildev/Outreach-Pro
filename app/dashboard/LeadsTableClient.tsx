@@ -21,8 +21,8 @@ import { LeadCheckReplyButton } from "./LeadCheckReplyButton";
 import { LeadEditButton } from "./LeadEditButton";
 import { LeadDeleteButton } from "./LeadDeleteButton";
 import { LeadMessagePreviewButton } from "./LeadMessagePreviewButton";
-import { bulkTriggerFollowup } from "./actions";
-import { CheckSquare, Square } from "lucide-react";
+import { bulkTriggerFollowup, bulkDeleteLeads } from "./actions";
+import { CheckSquare, Square, Trash2 } from "lucide-react";
 
 type LeadRow = Prisma.LeadGetPayload<{
     include: { campaign: true };
@@ -172,6 +172,21 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
         }
     };
 
+    const handleBulkDelete = async () => {
+        if (selectedIds.size === 0) return;
+        if (!window.confirm(`Are you sure you want to delete ${selectedIds.size} selected lead(s)? This cannot be undone.`)) return;
+        setIsDeploying(true);
+        try {
+            await bulkDeleteLeads(Array.from(selectedIds));
+            setSelectedIds(new Set());
+        } catch (e) {
+            console.error(e);
+            alert("Failed to delete leads.");
+        } finally {
+            setIsDeploying(false);
+        }
+    };
+
     // Compute what actions we can do. Count how many are eligible for follow up.
     const selectedList = leads.filter(l => selectedIds.has(l.id));
     const followUpEligibleCount = selectedList.filter(l => canFollowUp({ status: l.status, step: l.step, replied: l.replied })).length;
@@ -193,6 +208,16 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                         className="rounded-full shadow-sm text-xs h-8 px-4"
                     >
                         {isDeploying ? "Updating..." : `Follow-up Now (${followUpEligibleCount})`}
+                    </Button>
+                    <Button
+                        disabled={isDeploying}
+                        onClick={handleBulkDelete}
+                        variant="destructive"
+                        size="sm"
+                        className="rounded-full shadow-sm text-xs h-8 px-4 flex items-center gap-1.5"
+                    >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete ({selectedIds.size})
                     </Button>
                     <Button
                         variant="ghost"
