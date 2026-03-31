@@ -71,11 +71,11 @@ export function EditLeadDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-md flex flex-col max-h-[85vh]">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Edit Lead</DialogTitle>
         </DialogHeader>
-        <form action={handleSubmit} ref={formRef} className="space-y-4">
+        <form action={handleSubmit} ref={formRef} className="space-y-4 overflow-y-auto pr-1">
           <div className="space-y-2">
             <Label htmlFor="edit-campaignId">Campaign (required)</Label>
             <select
