@@ -22,7 +22,7 @@ import {
   K_WINDOW_END,
   K_DOMAIN_THROTTLE,
 } from "./extensionBridge";
-import { Play, Pause, RotateCcw, Square, Zap, ChevronDown, ChevronUp, RefreshCw } from "lucide-react";
+import { Play, Pause, RotateCcw, Square, Zap, ChevronDown, ChevronUp, RefreshCw, Unlock } from "lucide-react";
 
 export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: string | null }) {
   const [delayMinSeconds, setDelayMinSeconds] = useState(45);
@@ -84,6 +84,21 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
     window.addEventListener("message", onBridgeReady);
     return () => window.removeEventListener("message", onBridgeReady);
   }, []);
+
+  async function releaseLocks() {
+    setError("");
+    try {
+      const response = await fetch("/api/release-claims", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ campaignId: currentCampaignId }),
+      });
+      const data = await response.json();
+      setError(data.message || (data.success ? "Locks released" : data.error || "Failed to release locks"));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to release locks");
+    }
+  }
 
   async function retryFailed() {
     setError("");
@@ -321,6 +336,12 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
                   <RefreshCw className="w-3 h-3" /> Retry Failed ({state.failed})
                 </Button>
               )}
+              <Button type="button" size="sm" variant="outline"
+                title="Use after an internet drop to release locked leads so automation can restart"
+                className="h-8 px-3 text-xs border-amber-200 text-amber-700 hover:bg-amber-50 gap-1.5"
+                onClick={releaseLocks} disabled={isActive}>
+                <Unlock className="w-3 h-3" /> Unlock
+              </Button>
             </div>
           </div>
 

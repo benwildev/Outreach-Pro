@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-const CLAIM_WINDOW_MS = 90 * 60 * 1000; // 90 minutes
+const CLAIM_WINDOW_MS = 5 * 60 * 1000; // 5 minutes — short enough that brief internet drops self-heal quickly
 
 function parseLimit(value: string | null): number {
   const parsed = Number.parseInt(String(value ?? "50"), 10);
