@@ -491,6 +491,23 @@
       }
 
       let rawText = String(clone.innerText || clone.textContent || "").trim();
+
+      // ChatGPT's "Email card" UI uses CSS display:block on <span> elements.
+      // When the node is cloned out-of-document, CSS is lost and innerText treats
+      // them as inline — everything runs together with no newlines.
+      // Fix: if the live node's innerText has line breaks but the clone's doesn't,
+      // prefer the live version (which has CSS context) and clean noise with regex.
+      const liveText = String(node.innerText || "").trim();
+      if (liveText.length > 30 && (
+        (liveText.includes("\n") && !rawText.includes("\n")) ||
+        liveText.length > rawText.length + 20
+      )) {
+        rawText = liveText
+          // Strip action-button text that follows the message in the DOM
+          .replace(/\n(Copy|Edit|Read aloud|Thumb up|Thumb down|Share|Regenerate|Browse|More)\n/gi, "\n")
+          .replace(/\n(Copy|Edit|Read aloud|Thumb up|Thumb down|Share|Regenerate|Browse|More)$/im, "");
+      }
+
       // Also strip typical markdown patterns like [Immovario](https://...)
       rawText = rawText.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
       // Strip isolated domains/pills at the end of paragraphs that might have leaked through
@@ -584,7 +601,10 @@
    * Works even if ChatGPT returns extra instructions before the email
    */
   function isMetaLine(line) {
-    return /^\*{0,2}(subject(\s+(option|line)\s*\d+)?|body|email\s*body|suggested\s+subject\s+lines?|email)\*{0,2}\s*[:\-]/i.test(line);
+    const v = String(line || "").trim();
+    // "Email" standalone (ChatGPT card-format header — no colon, just the word)
+    if (/^email$/i.test(v)) return true;
+    return /^\*{0,2}(subject(\s+(option|line)\s*\d+)?|body|email\s*body|suggested\s+subject\s+lines?|email)\*{0,2}\s*[:\-]/i.test(v);
   }
 
   function parseEmailResponse(text) {
@@ -592,7 +612,20 @@
       return { subject: "", body: "" };
     }
 
-    const trimmed = text.trim().replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    // Normalize ChatGPT Email card format before any parsing.
+    // The card UI prepends "Email" (no colon) and uses "Subject  text" (spaces, no colon).
+    // Also deduplicate subject lines that appear twice due to card UI rendering.
+    let normalized = text.trim().replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    // Strip standalone "Email" card-header line at the very top
+    normalized = normalized.replace(/^Email\s*\n/i, "");
+    // Normalize "Subject  text" (2+ spaces or tab, no colon) → "Subject: text"
+    normalized = normalized.replace(/(?:^|\n)([ \t]*)Subject([ \t]{2,}|\t)([^\n]+)/gi, "\n$1Subject: $3");
+    // If the subject line appears twice back-to-back (card shows it in two places), deduplicate
+    normalized = normalized.replace(/(Subject:[^\n]+)\n\1/gi, "$1");
+    // Ensure greeting line has a blank line before it if needed
+    normalized = normalized.replace(/([^\n])\n((?:Hi|Hello|Dear|Hey)\s+[A-Za-z])/g, "$1\n\n$2");
+
+    const trimmed = normalized.trim();
 
     // --- Body extraction (try labeled sections first) ---
     const bodyPatterns = [
