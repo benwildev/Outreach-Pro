@@ -19,16 +19,30 @@ export default async function CampaignEditorPage({
   const campaign = await prisma.campaign.findUnique({ where: { id } });
   if (!campaign) notFound();
 
-  const bouncedLeads = await prisma.lead.findMany({
-    where: { campaignId: id, status: "bounced" },
-    select: { sentGmailAuthUser: true },
-  });
+  const [sentLeads, bouncedLeads] = await Promise.all([
+    prisma.lead.findMany({
+      where: { campaignId: id, sentGmailAuthUser: { not: null } },
+      select: { sentGmailAuthUser: true },
+    }),
+    prisma.lead.findMany({
+      where: { campaignId: id, status: "bounced" },
+      select: { sentGmailAuthUser: true },
+    }),
+  ]);
+
+  const allAccounts = new Set<string>();
+  for (const l of sentLeads) {
+    if (l.sentGmailAuthUser) allAccounts.add(l.sentGmailAuthUser);
+  }
   const bounceCounts: Record<string, number> = {};
+  Array.from(allAccounts).forEach((acct) => { bounceCounts[acct] = 0; });
   for (const l of bouncedLeads) {
     const acct = l.sentGmailAuthUser ?? "unknown";
+    allAccounts.add(acct);
     bounceCounts[acct] = (bounceCounts[acct] ?? 0) + 1;
   }
   const bounceEntries = Object.entries(bounceCounts).sort((a, b) => b[1] - a[1]);
+  const showBounceCard = bounceEntries.length > 0;
 
   return (
     <div className="min-h-screen bg-[#f4f6fb]">
@@ -81,19 +95,19 @@ export default async function CampaignEditorPage({
           </div>
         </div>
 
-        {bounceEntries.length > 0 && (
+        {showBounceCard && (
           <div className="bg-white rounded-2xl shadow-sm border border-orange-200/80 overflow-hidden">
             <div className="px-6 py-4 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50/50 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-orange-500" />
-              <h2 className="text-sm font-semibold text-gray-800">Bounce Summary</h2>
+              <h2 className="text-sm font-semibold text-gray-800">Bounce Summary by Account</h2>
               <span className="ml-auto text-xs text-orange-600 font-medium">{bouncedLeads.length} total bounced</span>
             </div>
             <div className="px-6 py-4 space-y-2">
-              <p className="text-xs text-gray-500 mb-3">Bounced emails per sending account for this campaign.</p>
+              <p className="text-xs text-gray-500 mb-3">Bounce counts per Gmail sending account for this campaign. Accounts with 0 bounces are shown for reference.</p>
               {bounceEntries.map(([acct, count]) => (
                 <div key={acct} className="flex items-center justify-between text-sm">
                   <span className="font-mono text-gray-700 text-xs">{acct}</span>
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-semibold">
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${count > 0 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-500"}`}>
                     {count} bounce{count !== 1 ? "s" : ""}
                   </span>
                 </div>
