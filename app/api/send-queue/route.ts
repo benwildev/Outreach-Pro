@@ -23,51 +23,64 @@ export async function GET(request: Request) {
     // After 90 minutes the claim expires and the lead becomes eligible again.
     const claimCutoff = new Date(Date.now() - CLAIM_WINDOW_MS);
 
-    const where: Prisma.LeadWhereInput = {
-      status: "pending",
-      replied: false,
-      OR: [
-        { claimedAt: null },
-        { claimedAt: { lt: claimCutoff } },
-      ],
-    };
-    if (campaignId) {
-      where.campaignId = campaignId;
-    }
+    // Atomically select + claim using an interactive transaction.
+    // SELECT ... FOR UPDATE SKIP LOCKED means two concurrent runners can never
+    // receive the same lead — the second caller skips any rows locked by the first.
+    const claimedIds = await prisma.$transaction(async (tx) => {
+      const campaignFilter = campaignId
+        ? Prisma.sql`AND "campaignId" = ${campaignId}`
+        : Prisma.empty;
 
-    // Fetch leads first, then atomically stamp claimedAt.
-    // Using a transaction ensures no other runner can claim the same leads.
-    const [leads] = await prisma.$transaction([
-      prisma.lead.findMany({
-        where,
-        orderBy: { createdAt: "asc" },
-        take: limit,
-        include: {
-          campaign: {
-            select: {
-              id: true,
-              name: true,
-              subject: true,
-              body: true,
-              followup1: true,
-              followup2: true,
-              signature: true,
-              chatGptChatId: true,
-              gmailAuthUser: true,
-            },
-          },
-        },
-      }),
-    ]);
+      const eligible = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT id FROM "lead"
+        WHERE status = 'pending'
+          AND replied = false
+          AND ("claimedAt" IS NULL OR "claimedAt" < ${claimCutoff})
+        ${campaignFilter}
+        ORDER BY "createdAt" ASC
+        LIMIT ${limit}
+        FOR UPDATE SKIP LOCKED
+      `;
 
-    // Stamp claimedAt on all returned leads so they won't be re-fetched on restart.
-    if (leads.length > 0) {
-      await prisma.lead.updateMany({
-        where: { id: { in: leads.map((l) => l.id) } },
+      if (eligible.length === 0) return [];
+
+      const ids = eligible.map((r) => r.id);
+
+      // Stamp claimedAt inside the same transaction — atomically with the SELECT.
+      await tx.lead.updateMany({
+        where: { id: { in: ids } },
         data: { claimedAt: new Date() },
       });
-      console.log(`[send-queue] Claimed ${leads.length} lead(s). They are locked for ${CLAIM_WINDOW_MS / 60000} min.`);
+
+      return ids;
+    });
+
+    if (claimedIds.length === 0) {
+      return NextResponse.json({ success: true, count: 0, leads: [] });
     }
+
+    console.log(`[send-queue] Claimed ${claimedIds.length} lead(s) atomically. Lock expires in ${CLAIM_WINDOW_MS / 60000} min.`);
+
+    // Fetch full lead data for the claimed IDs (outside the transaction — no lock needed).
+    const leads = await prisma.lead.findMany({
+      where: { id: { in: claimedIds } },
+      orderBy: { createdAt: "asc" },
+      include: {
+        campaign: {
+          select: {
+            id: true,
+            name: true,
+            subject: true,
+            body: true,
+            followup1: true,
+            followup2: true,
+            signature: true,
+            chatGptChatId: true,
+            gmailAuthUser: true,
+          },
+        },
+      },
+    });
 
     const queue = leads.map((lead, index) => {
       const authUserRaw = lead.campaign.gmailAuthUser ?? "";
