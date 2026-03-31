@@ -15,6 +15,7 @@ import { LeadsTableClient } from "./LeadsTableClient";
 import { AdvancedFilters } from "./AdvancedFilters";
 import { Settings, Download, FileDown, BarChart2, Zap, LayoutDashboard } from "lucide-react";
 import { promoteScheduledLeads } from "@/lib/promoteScheduledLeads";
+import Image from "next/image";
 
 const VALID_STATUSES = ["pending", "sent", "scheduled", "failed", "replied", "bounced"] as const;
 const PAGE_SIZE = 50;
@@ -164,7 +165,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             {/* Brand */}
             <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="Benwill Outreach" className="w-10 h-10 rounded-full object-contain bg-white/10 p-0.5" />
+              <Image src="/logo.png" alt="Benwill Outreach" className="w-10 h-10 rounded-full object-contain bg-white/10 p-0.5" />
               <div>
                 <h1 className="text-2xl font-bold text-white tracking-tight">Benwill Outreach</h1>
                 <p className="text-indigo-300 text-xs mt-0.5 font-medium">Outreach automation dashboard</p>

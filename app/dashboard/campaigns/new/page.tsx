@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createCampaign } from "../actions";
 import { Zap, ArrowLeft } from "lucide-react";
+import Image from "next/image";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export default function NewCampaignPage() {
         <div className="mx-auto px-6 py-5">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="Benwill Outreach" className="w-10 h-10 rounded-full object-contain bg-white/10 p-0.5" />
+              <Image src="/logo.png" alt="Benwill Outreach" className="w-10 h-10 rounded-full object-contain bg-white/10 p-0.5" />
               <div>
                 <h1 className="text-2xl font-bold text-white tracking-tight">New Campaign</h1>
                 <p className="text-indigo-300 text-xs mt-0.5 font-medium">Set up a new outreach campaign</p>
