@@ -232,7 +232,7 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                             <TableHead className="w-[5%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Mail</TableHead>
                             <TableHead className="w-[8%] text-[11px] font-bold text-gray-600 uppercase tracking-wide" title="Gmail account used to send this email">Gmail Acct</TableHead>
                             <TableHead className="w-[8%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Sent At</TableHead>
-                            <TableHead className="w-[8%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Created At</TableHead>
+                            <TableHead className="w-[8%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Next Followup</TableHead>
                             <TableHead className="w-[10%] text-[11px] font-bold text-gray-600 uppercase tracking-wide">Actions</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -336,8 +336,27 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                                         Due
                                                     </Badge>
                                                 )}
+                                                {lead.unsubscribed && (
+                                                    <span className="inline-block text-[9px] font-medium px-1.5 py-0.5 rounded border bg-red-50 text-red-700 border-red-200">
+                                                        Unsub
+                                                    </span>
+                                                )}
                                             </div>
-                                            {(lead.replied || lead.status === "replied") && (
+                                            {lead.replyCategory ? (
+                                                <span className={`inline-block text-[9px] font-medium px-1.5 py-0.5 rounded border ${
+                                                    lead.replyCategory === "positive" ? "bg-emerald-100 text-emerald-800 border-emerald-200" :
+                                                    lead.replyCategory === "ooo" ? "bg-yellow-100 text-yellow-800 border-yellow-200" :
+                                                    lead.replyCategory === "negative" ? "bg-red-100 text-red-800 border-red-200" :
+                                                    lead.replyCategory === "unsubscribe" ? "bg-orange-100 text-orange-800 border-orange-200" :
+                                                    "bg-gray-100 text-gray-600 border-gray-200"
+                                                }`}>
+                                                    {lead.replyCategory === "ooo" ? "Out of Office" :
+                                                     lead.replyCategory === "positive" ? "Positive" :
+                                                     lead.replyCategory === "negative" ? "Negative" :
+                                                     lead.replyCategory === "unsubscribe" ? "Unsubscribe" :
+                                                     lead.replyCategory}
+                                                </span>
+                                            ) : (lead.replied || lead.status === "replied") && (
                                                 <ReplyBadge body={lead.replyBody} />
                                             )}
                                         </div>
@@ -378,7 +397,13 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                         {lead.sentGmailAuthUser || "—"}
                                     </TableCell>
                                     <TableCell className="truncate text-xs"><ClientDate date={lead.sentAt} /></TableCell>
-                                    <TableCell className="truncate text-xs"><ClientDate date={lead.createdAt} /></TableCell>
+                                    <TableCell className="truncate text-xs">
+                                        {lead.nextFollowup ? (
+                                            <span className={new Date(lead.nextFollowup) <= new Date() && lead.status === "sent" ? "text-amber-600 font-medium" : ""}>
+                                                <ClientDate date={lead.nextFollowup} />
+                                            </span>
+                                        ) : "—"}
+                                    </TableCell>
                                     <TableCell onClick={(e) => e.stopPropagation()}>
                                         <div className="flex flex-wrap items-center gap-1">
                                             <LeadSendButton leadId={lead.id} status={lead.status} />
