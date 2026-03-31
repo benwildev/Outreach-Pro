@@ -604,6 +604,52 @@
     return /^\*{0,2}(subject(\s+(option|line)\s*\d+)?|body|email\s*body|suggested\s+subject\s+lines?|email)\*{0,2}\s*[:\-]/i.test(v);
   }
 
+  // Remove anything ChatGPT appended after the email signature.
+  // Finds the LAST stand-alone sign-off line ("Best regards,", "Thanks,", etc.),
+  // allows up to 4 non-empty lines after it for the name/title/company block,
+  // then cuts everything else (alternative subject suggestions, commentary, etc.).
+  function trimPostSignatureChatter(text) {
+    if (!text) return text;
+    const lines = text.split("\n");
+    // Matches a BARE sign-off line — just the word/phrase, nothing else on the line.
+    // "Best regards," → match. "Thanks for your time." → no match (has trailing text after "Thanks").
+    const signoffRe = /^(best\s+regards?|warm\s+regards?|kind\s+regards?|many\s+thanks|best|sincerely|cheers|thanks|thank\s+you|with\s+(?:warm\s+)?regards?|yours?\s+(?:truly|sincerely)?|looking\s+forward)[,.]?\s*$/i;
+    // A line is part of the signature block (name / title / company / contact) when it:
+    //   - is short (≤60 chars)
+    //   - does NOT end with ":" (which introduces a list / alternative options)
+    //   - does NOT end with sentence punctuation (period, !, ?)
+    //   - does NOT start with a bullet or dash
+    //   - does NOT contain ChatGPT commentary keywords
+    const isSignatureLine = (l) =>
+      l.length <= 60 &&
+      !/:\s*$/.test(l) &&
+      !/[.!?]$/.test(l) &&
+      !/^[•\-*]/.test(l) &&
+      !/\b(alternative|subject line|option|version|variation|let me know|feel free|hope this|here are|adjust|revis|chang)\b/i.test(l);
+
+    let signoffIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (signoffRe.test(lines[i].trim())) {
+        signoffIndex = i; // keep scanning — use the LAST match so mid-body "thanks" lines don't cut early
+      }
+    }
+    if (signoffIndex === -1) return text;
+
+    // Walk forward from the sign-off, collecting signature lines (name, title, company, contact).
+    // Stop at the first line that looks like ChatGPT commentary OR after 4 non-empty sig lines.
+    let end = signoffIndex + 1;
+    let sigLines = 0;
+    while (end < lines.length) {
+      const l = lines[end].trim();
+      if (l) {
+        if (!isSignatureLine(l) || sigLines >= 4) break; // commentary or too many sig lines
+        sigLines++;
+      }
+      end++;
+    }
+    return lines.slice(0, end).join("\n").trim();
+  }
+
   function parseEmailResponse(text) {
     if (!text || typeof text !== "string") {
       return { subject: "", body: "" };
@@ -696,6 +742,13 @@
         break;
       }
     }
+
+    // Strip anything ChatGPT appended after the email signature block.
+    // e.g. "Two alternative subject lines: ..." or "Let me know if you'd like changes."
+    // Strategy: find the last stand-alone sign-off line (e.g. "Best regards,"),
+    // keep up to 4 non-empty lines after it for the name/title/company signature,
+    // then discard everything beyond that.
+    body = trimPostSignatureChatter(body);
 
     if (isPromptEchoText(body)) {
       body = body
