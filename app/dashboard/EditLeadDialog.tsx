@@ -79,9 +79,11 @@ export function EditLeadDialog({
     }
   }, [open, lead]);
 
-  async function handleSubmit(formData: FormData) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     setLoading(true);
     try {
+      const formData = new FormData(e.currentTarget);
       await updateLead(lead.id, formData);
       onOpenChange(false);
       router.refresh();
@@ -96,7 +98,7 @@ export function EditLeadDialog({
         <DialogHeader className="shrink-0">
           <DialogTitle>Edit Lead</DialogTitle>
         </DialogHeader>
-        <form action={handleSubmit} ref={formRef} className="space-y-4 overflow-y-auto pr-1">
+        <form onSubmit={handleSubmit} ref={formRef} className="space-y-4 overflow-y-auto pr-1">
 
           {/* Campaign */}
           <div className="space-y-2">
