@@ -100,18 +100,20 @@ export async function importLeads(formData: FormData): Promise<ImportResult> {
     return { success: false, error: "No sheets found in file." };
   }
 
-  let rows: Record<string, unknown>[] = [];
-  let totalSheetRows = 0;
-  for (const sheetName of workbook.SheetNames) {
-    const sheet = workbook.Sheets[sheetName];
-    const sheetRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
-    totalSheetRows += sheetRows.length;
+  const sheetNameParam = formData.get("sheetName");
+  const resolvedSheetName =
+    typeof sheetNameParam === "string" &&
+    sheetNameParam.trim() &&
+    workbook.SheetNames.includes(sheetNameParam.trim())
+      ? sheetNameParam.trim()
+      : workbook.SheetNames[0];
 
-    const startIndex = startRow - 2;
-    const endIndex = endRow === Infinity ? undefined : endRow - 1;
+  const sheet = workbook.Sheets[resolvedSheetName];
+  const allSheetRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
 
-    rows = rows.concat(sheetRows.slice(startIndex, endIndex));
-  }
+  const startIndex = startRow - 2;
+  const endIndex = endRow === Infinity ? undefined : endRow - 1;
+  const rows = allSheetRows.slice(startIndex, endIndex);
 
   const toInsert: Array<{
     campaignId: string;

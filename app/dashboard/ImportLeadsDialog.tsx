@@ -43,6 +43,8 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
   const [importLogs, setImportLogs] = useState<ImportLog[]>([]);
   const [nextStartRow, setNextStartRow] = useState<number | null>(null);
   const [loadingLogs, setLoadingLogs] = useState(false);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [selectedSheet, setSelectedSheet] = useState<string>("");
 
   useEffect(() => {
     if (!selectedCampaignId) {
@@ -64,6 +66,25 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
       .finally(() => setLoadingLogs(false));
   }, [selectedCampaignId]);
 
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) {
+      setSheetNames([]);
+      setSelectedSheet("");
+      return;
+    }
+    try {
+      const XLSX = await import("xlsx");
+      const buffer = await file.arrayBuffer();
+      const wb = XLSX.read(buffer, { type: "array", bookSheets: true });
+      setSheetNames(wb.SheetNames);
+      setSelectedSheet(wb.SheetNames[0] ?? "");
+    } catch {
+      setSheetNames([]);
+      setSelectedSheet("");
+    }
+  }
+
   async function handleSubmit(formData: FormData) {
     setMessage(null);
     const campaignId = formData.get("campaignId");
@@ -75,6 +96,9 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
     if (!file || !(file instanceof File) || file.size === 0) {
       setMessage({ type: "error", text: "Please select a file." });
       return;
+    }
+    if (selectedSheet) {
+      formData.set("sheetName", selectedSheet);
     }
     const result: ImportResult = await importLeads(formData);
     if (result.success) {
@@ -94,6 +118,8 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
       setSelectedCampaignId("");
       setImportLogs([]);
       setNextStartRow(null);
+      setSheetNames([]);
+      setSelectedSheet("");
       router.refresh();
     } else {
       setMessage({ type: "error", text: result.error });
@@ -101,7 +127,17 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setMessage(null); setSelectedCampaignId(""); setImportLogs([]); setNextStartRow(null); } }}>
+    <Dialog open={open} onOpenChange={(o) => {
+      setOpen(o);
+      if (!o) {
+        setMessage(null);
+        setSelectedCampaignId("");
+        setImportLogs([]);
+        setNextStartRow(null);
+        setSheetNames([]);
+        setSelectedSheet("");
+      }
+    }}>
       <DialogTrigger asChild>
         <button className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-200 hover:text-white border border-indigo-700/60 hover:border-indigo-500 bg-indigo-900/40 hover:bg-indigo-800/60 rounded-lg px-3 py-2 transition-all duration-150">
           ↑ Import Excel
@@ -175,8 +211,31 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
               type="file"
               accept=".xlsx,.csv"
               className="cursor-pointer"
+              onChange={handleFileChange}
             />
           </div>
+
+          {sheetNames.length > 1 && (
+            <div className="space-y-2">
+              <Label htmlFor="import-sheet">Sheet Tab</Label>
+              <select
+                id="import-sheet"
+                value={selectedSheet}
+                onChange={(e) => setSelectedSheet(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                {sheetNames.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500">
+                {sheetNames.length} tabs found — select which one to import from.
+              </p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="import-start-row">Start Row (optional)</Label>
