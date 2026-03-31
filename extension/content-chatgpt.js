@@ -494,16 +494,13 @@
 
       // ChatGPT's "Email card" UI uses CSS display:block on <span> elements.
       // When the node is cloned out-of-document, CSS is lost and innerText treats
-      // them as inline — everything runs together with no newlines.
-      // Fix: if the live node's innerText has line breaks but the clone's doesn't,
-      // prefer the live version (which has CSS context) and clean noise with regex.
+      // them as inline — everything runs together with no line breaks at all.
+      // Fix: if the clone has no newlines but the live (in-document) element does,
+      // the clone lost CSS-dependent layout. Fall back to the live innerText and
+      // strip only the chat UI action-button noise with regex.
       const liveText = String(node.innerText || "").trim();
-      if (liveText.length > 30 && (
-        (liveText.includes("\n") && !rawText.includes("\n")) ||
-        liveText.length > rawText.length + 20
-      )) {
+      if (liveText.length > 30 && liveText.includes("\n") && !rawText.includes("\n")) {
         rawText = liveText
-          // Strip action-button text that follows the message in the DOM
           .replace(/\n(Copy|Edit|Read aloud|Thumb up|Thumb down|Share|Regenerate|Browse|More)\n/gi, "\n")
           .replace(/\n(Copy|Edit|Read aloud|Thumb up|Thumb down|Share|Regenerate|Browse|More)$/im, "");
       }
