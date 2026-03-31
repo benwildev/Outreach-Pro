@@ -2569,6 +2569,26 @@
     return patterns.some(p => p.test(text));
   }
 
+  function extractBouncedEmail() {
+    const text = (document.body && document.body.innerText) || "";
+    // Gmail shows the failed address inline, e.g.:
+    // "Your message wasn't delivered to sanalee.barrett@islandroutes.com because..."
+    const patterns = [
+      /wasn'?t delivered to\s+([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/i,
+      /not delivered to\s+([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/i,
+      /couldn'?t be delivered to\s+([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/i,
+      /message wasn'?t delivered to\s+([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/i,
+      /failed to deliver.*?to\s+([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})/i,
+    ];
+    for (var i = 0; i < patterns.length; i++) {
+      var m = text.match(patterns[i]);
+      if (m && m[1]) {
+        return m[1].replace(/[.,;>]$/, "").toLowerCase();
+      }
+    }
+    return null;
+  }
+
   function extractThreadReplyBody(recipientEmail) {
     const expected = normalizeEmailValue(recipientEmail);
     const messageNodes = document.querySelectorAll(".adn");
@@ -2611,8 +2631,9 @@
         // Check for bounce first
         const bounced = senders.some(isBounceSender) || hasBounceIndicators();
         if (bounced) {
-          log("Bounce detected in thread for:", recipientEmail);
-          return { replied: false, bounced: true, senders: senders };
+          var bouncedEmail = extractBouncedEmail();
+          log("Bounce detected in thread for:", recipientEmail, "| bounced address:", bouncedEmail || "unknown");
+          return { replied: false, bounced: true, senders: senders, bouncedEmail: bouncedEmail };
         }
 
         const recipients = recipientEmail.split(",").map(e => normalizeEmailValue(e)).filter(e => !!e);

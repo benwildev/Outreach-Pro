@@ -1822,7 +1822,7 @@ async function runDailyReplySweep(trigger) {
               marked += 1;
             }
             if (sweepResponse.bounced && sweepLeadId) {
-              await handleMarkLeadBounced({ leadId: sweepLeadId });
+              await handleMarkLeadBounced({ leadId: sweepLeadId, bouncedEmail: sweepResponse.bouncedEmail || null });
             }
           }
 
@@ -1905,7 +1905,7 @@ async function handleCheckReplyByThread(data) {
   }
 
   if (response.bounced && leadId) {
-    await handleMarkLeadBounced({ leadId: leadId });
+    await handleMarkLeadBounced({ leadId: leadId, bouncedEmail: response.bouncedEmail || null });
   }
 
   return {

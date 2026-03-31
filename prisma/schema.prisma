@@ -71,6 +71,7 @@ model Lead {
   lastReplyCheckedAt DateTime?
   replyCategory      String?
   unsubscribed       Boolean   @default(false)
+  bouncedEmail       String?
   campaign           Campaign  @relation(fields: [campaignId], references: [id])
 
   @@map("lead")

@@ -28,6 +28,7 @@ type LeadRow = Prisma.LeadGetPayload<{
     include: { campaign: true };
 }> & {
     sentGmailAuthUser?: string | null;
+    bouncedEmail?: string | null;
 };
 
 function getStepLabel(lead: { status: string; step: number; replied?: boolean }): string {
@@ -326,6 +327,7 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                                                             : "sent"
                                                     }
                                                     className="text-[10px] capitalize"
+                                                    title={lead.status === "bounced" && lead.bouncedEmail ? `Bounced: ${lead.bouncedEmail}` : undefined}
                                                 >
                                                     {getStepLabel(lead)}
                                                 </Badge>
@@ -407,6 +409,7 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                                     step: lead.step,
                                                     replied: lead.replied,
                                                     sentGmailAuthUser: lead.sentGmailAuthUser,
+                                                    bouncedEmail: lead.bouncedEmail,
                                                 }}
                                                 campaigns={campaigns}
                                             />

@@ -27,6 +27,7 @@ type Lead = {
   step: number;
   replied: boolean;
   sentGmailAuthUser?: string | null;
+  bouncedEmail?: string | null;
 };
 
 export function EditLeadDialog({
@@ -70,7 +71,7 @@ export function EditLeadDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Lead</DialogTitle>
         </DialogHeader>
@@ -138,6 +139,15 @@ export function EditLeadDialog({
               <Label className="text-xs text-muted-foreground">Sent from Gmail Account</Label>
               <p className="text-sm font-mono bg-muted/50 rounded-md px-3 py-2 text-muted-foreground select-all">
                 {lead.sentGmailAuthUser}
+              </p>
+            </div>
+          )}
+
+          {lead.status === "bounced" && lead.bouncedEmail && (
+            <div className="space-y-2">
+              <Label className="text-xs text-orange-600 font-semibold">Bounced Address</Label>
+              <p className="text-sm font-mono bg-orange-50 border border-orange-200 rounded-md px-3 py-2 text-orange-700 select-all">
+                {lead.bouncedEmail}
               </p>
             </div>
           )}
