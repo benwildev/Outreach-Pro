@@ -67,12 +67,15 @@ export async function POST(request: Request) {
     const targetStatus = status || "sent";
     const isDelivered = targetStatus === "sent" || targetStatus === "scheduled";
 
-    // Update the lead with thread ID, subject, body, AND mark as sent/scheduled/failed
+    // Update the lead with thread ID, subject, body, AND mark as sent/scheduled/failed.
+    // Always clear claimedAt so the lead is no longer locked — it has reached a
+    // terminal status and the claim lock is no longer needed.
     const updatedLead = await prisma.lead.update({
       where: { id: targetLeadId },
       data: {
         status: targetStatus,
         step: isDelivered ? 1 : lead.step,
+        claimedAt: null,
         ...(isDelivered ? {
           sentAt: effectiveSentAt,
           nextFollowup: nextFollowupDate

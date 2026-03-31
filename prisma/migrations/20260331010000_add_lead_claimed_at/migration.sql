@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "lead" ADD COLUMN IF NOT EXISTS "claimedAt" TIMESTAMPTZ;
