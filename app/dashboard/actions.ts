@@ -57,6 +57,26 @@ export async function updateLead(leadId: string, formData: FormData) {
   const status = trim(formData.get("status") as string | null) || existing.status;
   const step = Number.parseInt(formData.get("step") as string || String(existing.step), 10);
   const replied = formData.get("replied") === "true";
+  const unsubscribed = formData.get("unsubscribed") === "true";
+
+  const sentGmailAuthUser = trim(formData.get("sentGmailAuthUser") as string | null) || null;
+  const gmailThreadId = trim(formData.get("gmailThreadId") as string | null) || null;
+  const replyCategory = trim(formData.get("replyCategory") as string | null) || null;
+
+  // Parse optional datetime fields — empty string means clear the value.
+  function parseDateTime(raw: FormDataEntryValue | null): Date | null | undefined {
+    const s = trim(raw as string | null);
+    if (!s) return null; // explicit clear
+    const d = new Date(s);
+    return isNaN(d.getTime()) ? undefined : d; // undefined = don't touch
+  }
+
+  const sentAt = parseDateTime(formData.get("sentAt"));
+  const nextFollowupRaw = parseDateTime(formData.get("nextFollowup"));
+
+  // If status/replied forces clearing the followup, honour that.
+  const clearFollowup = status === "replied" || status === "bounced" || replied;
+  const nextFollowup = clearFollowup ? null : nextFollowupRaw;
 
   await prisma.lead.update({
     where: { id: leadId },
@@ -69,7 +89,12 @@ export async function updateLead(leadId: string, formData: FormData) {
       status,
       step: isNaN(step) ? existing.step : step,
       replied,
-      ...(status === "replied" || status === "bounced" || replied ? { nextFollowup: null } : {}),
+      unsubscribed,
+      replyCategory,
+      sentGmailAuthUser,
+      gmailThreadId,
+      ...(sentAt !== undefined ? { sentAt } : {}),
+      ...(nextFollowup !== undefined ? { nextFollowup } : {}),
     },
   });
 

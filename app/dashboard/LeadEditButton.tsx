@@ -19,6 +19,11 @@ type Lead = {
   replied: boolean;
   sentGmailAuthUser?: string | null;
   bouncedEmail?: string | null;
+  gmailThreadId?: string | null;
+  sentAt?: Date | string | null;
+  nextFollowup?: Date | string | null;
+  replyCategory?: string | null;
+  unsubscribed?: boolean;
 };
 
 export function LeadEditButton({

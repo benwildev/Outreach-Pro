@@ -410,6 +410,11 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                                     replied: lead.replied,
                                                     sentGmailAuthUser: lead.sentGmailAuthUser,
                                                     bouncedEmail: lead.bouncedEmail,
+                                                    gmailThreadId: lead.gmailThreadId,
+                                                    sentAt: lead.sentAt,
+                                                    nextFollowup: lead.nextFollowup,
+                                                    replyCategory: lead.replyCategory,
+                                                    unsubscribed: lead.unsubscribed,
                                                 }}
                                                 campaigns={campaigns}
                                             />
