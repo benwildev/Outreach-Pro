@@ -32,7 +32,10 @@ type LeadRow = Prisma.LeadGetPayload<{
 
 function getStepLabel(lead: { status: string; step: number; replied?: boolean }): string {
     if (lead.replied || lead.status === "replied") return "Replied";
+    if (lead.status === "bounced") return "Bounced";
     if (lead.status === "pending") return "Pending";
+    if (lead.status === "failed") return "Failed";
+    if (lead.status === "scheduled") return "Scheduled";
     if (lead.step === 1) return "Sent";
     if (lead.step === 2) return "Follow up 1";
     if (lead.step === 3) return "Follow up 2";
@@ -312,9 +315,15 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                                     variant={
                                                         lead.replied || lead.status === "replied"
                                                             ? "replied"
-                                                            : lead.status === "pending"
-                                                                ? "pending"
-                                                                : "sent"
+                                                            : lead.status === "bounced"
+                                                                ? "bounced"
+                                                                : lead.status === "failed"
+                                                                    ? "failed"
+                                                                    : lead.status === "scheduled"
+                                                                        ? "scheduled"
+                                                                        : lead.status === "pending"
+                                                                            ? "pending"
+                                                                            : "sent"
                                                     }
                                                     className="text-[10px] capitalize"
                                                 >
@@ -397,6 +406,7 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                                     status: lead.status,
                                                     step: lead.step,
                                                     replied: lead.replied,
+                                                    sentGmailAuthUser: lead.sentGmailAuthUser,
                                                 }}
                                                 campaigns={campaigns}
                                             />

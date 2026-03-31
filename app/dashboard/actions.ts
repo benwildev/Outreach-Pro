@@ -69,7 +69,7 @@ export async function updateLead(leadId: string, formData: FormData) {
       status,
       step: isNaN(step) ? existing.step : step,
       replied,
-      ...(status === "replied" || replied ? { nextFollowup: null } : {}),
+      ...(status === "replied" || status === "bounced" || replied ? { nextFollowup: null } : {}),
     },
   });
 

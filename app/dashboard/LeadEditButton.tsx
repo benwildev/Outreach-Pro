@@ -17,6 +17,7 @@ type Lead = {
   status: string;
   step: number;
   replied: boolean;
+  sentGmailAuthUser?: string | null;
 };
 
 export function LeadEditButton({

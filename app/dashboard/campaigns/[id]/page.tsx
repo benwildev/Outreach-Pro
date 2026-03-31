@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { updateCampaign } from "../actions";
-import { Zap, ArrowLeft, Download, Sheet } from "lucide-react";
+import { Zap, ArrowLeft, Download, Sheet, AlertTriangle } from "lucide-react";
 import Followup1TemplatesEditor from "../Followup1TemplatesEditor";
 
 export const dynamic = "force-dynamic";
@@ -18,6 +18,17 @@ export default async function CampaignEditorPage({
   const { id } = await params;
   const campaign = await prisma.campaign.findUnique({ where: { id } });
   if (!campaign) notFound();
+
+  const bouncedLeads = await prisma.lead.findMany({
+    where: { campaignId: id, status: "bounced" },
+    select: { sentGmailAuthUser: true },
+  });
+  const bounceCounts: Record<string, number> = {};
+  for (const l of bouncedLeads) {
+    const acct = l.sentGmailAuthUser ?? "unknown";
+    bounceCounts[acct] = (bounceCounts[acct] ?? 0) + 1;
+  }
+  const bounceEntries = Object.entries(bounceCounts).sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="min-h-screen bg-[#f4f6fb]">
@@ -69,6 +80,27 @@ export default async function CampaignEditorPage({
             </a>
           </div>
         </div>
+
+        {bounceEntries.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-orange-200/80 overflow-hidden">
+            <div className="px-6 py-4 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50/50 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-orange-500" />
+              <h2 className="text-sm font-semibold text-gray-800">Bounce Summary</h2>
+              <span className="ml-auto text-xs text-orange-600 font-medium">{bouncedLeads.length} total bounced</span>
+            </div>
+            <div className="px-6 py-4 space-y-2">
+              <p className="text-xs text-gray-500 mb-3">Bounced emails per sending account for this campaign.</p>
+              {bounceEntries.map(([acct, count]) => (
+                <div key={acct} className="flex items-center justify-between text-sm">
+                  <span className="font-mono text-gray-700 text-xs">{acct}</span>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-semibold">
+                    {count} bounce{count !== 1 ? "s" : ""}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-indigo-50/50">

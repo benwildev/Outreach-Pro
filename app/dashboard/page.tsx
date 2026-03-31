@@ -16,7 +16,7 @@ import { AdvancedFilters } from "./AdvancedFilters";
 import { Settings, Download, FileDown, BarChart2, Zap, LayoutDashboard } from "lucide-react";
 import { promoteScheduledLeads } from "@/lib/promoteScheduledLeads";
 
-const VALID_STATUSES = ["pending", "sent", "scheduled", "failed", "replied"] as const;
+const VALID_STATUSES = ["pending", "sent", "scheduled", "failed", "replied", "bounced"] as const;
 const PAGE_SIZE = 50;
 
 type LeadRow = Prisma.LeadGetPayload<{

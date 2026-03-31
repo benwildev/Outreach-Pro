@@ -26,6 +26,7 @@ type Lead = {
   status: string;
   step: number;
   replied: boolean;
+  sentGmailAuthUser?: string | null;
 };
 
 export function EditLeadDialog({
@@ -131,6 +132,15 @@ export function EditLeadDialog({
               defaultValue={lead.niche ?? ""}
             />
           </div>
+
+          {lead.sentGmailAuthUser && (
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">Sent from Gmail Account</Label>
+              <p className="text-sm font-mono bg-muted/50 rounded-md px-3 py-2 text-muted-foreground select-all">
+                {lead.sentGmailAuthUser}
+              </p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
