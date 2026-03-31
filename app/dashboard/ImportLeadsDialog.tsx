@@ -143,11 +143,11 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
           ↑ Import Excel
         </button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-lg flex flex-col max-h-[85vh]">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Import Leads</DialogTitle>
         </DialogHeader>
-        <form action={handleSubmit} ref={formRef} className="space-y-4">
+        <form action={handleSubmit} ref={formRef} className="space-y-4 overflow-y-auto pr-1 flex-1">
           <div className="space-y-2">
             <Label htmlFor="import-campaignId">Campaign (required)</Label>
             <select

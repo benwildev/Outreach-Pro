@@ -36,11 +36,11 @@ export function AddLeadDialog({ campaigns }: { campaigns: Campaign[] }) {
           + Add Lead
         </button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-md flex flex-col max-h-[85vh]">
+        <DialogHeader className="shrink-0">
           <DialogTitle>Add Lead</DialogTitle>
         </DialogHeader>
-        <form action={handleSubmit} ref={formRef} className="space-y-4">
+        <form action={handleSubmit} ref={formRef} className="space-y-4 overflow-y-auto pr-1">
           <div className="space-y-2">
             <Label htmlFor="campaignId">Campaign (required)</Label>
             <select
