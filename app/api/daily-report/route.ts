@@ -8,11 +8,18 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const dateParam = url.searchParams.get("date");
 
-    const targetDate = dateParam ? new Date(dateParam) : new Date();
-    const start = new Date(targetDate);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(targetDate);
-    end.setHours(23, 59, 59, 999);
+    let start: Date;
+    let end: Date;
+
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      const [year, month, day] = dateParam.split("-").map(Number);
+      start = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
+      end = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+    } else {
+      const now = new Date();
+      start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+      end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+    }
 
     const leads = await prisma.lead.findMany({
       where: {
