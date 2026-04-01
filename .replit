@@ -36,3 +36,8 @@ externalPort = 3000
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+NEXT_PUBLIC_APP_URL = "https://91d4b772-5c3c-46ca-8cdf-7b7cecf55c32-00-e45cpu0nhcfn.riker.replit.dev"
