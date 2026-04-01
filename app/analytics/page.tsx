@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BarChart2, ArrowLeft, TrendingUp, Mail, Reply, UserX, Clock, ThumbsUp, Calendar, Zap } from "lucide-react";
 import Image from "next/image";
 import DailyReportCard from "./DailyReportCard";
+import ScheduleCalendar from "./ScheduleCalendar";
 import { getAnalytics } from "@/lib/getAnalytics";
 
 export const dynamic = "force-dynamic";
@@ -116,6 +117,9 @@ export default async function AnalyticsPage({
 
         {/* Daily Report Card */}
         <DailyReportCard />
+
+        {/* Schedule Calendar */}
+        <ScheduleCalendar />
 
         {/* Stat cards */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
