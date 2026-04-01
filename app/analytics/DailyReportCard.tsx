@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Calendar, Copy, Check, RefreshCw } from "lucide-react";
 
 function todayISODate() {
@@ -51,6 +51,10 @@ export default function DailyReportCard() {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    fetchReport(todayISODate());
+  }, [fetchReport]);
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value;
@@ -161,7 +165,7 @@ export default function DailyReportCard() {
 
       {!data && !loading && !error && (
         <div className="text-center py-8 text-sm text-gray-400">
-          Pick a date and click Load to generate the report.
+          Select a date and click Load to generate the report.
         </div>
       )}
     </div>
