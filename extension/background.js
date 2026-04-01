@@ -453,6 +453,27 @@ async function handleChatGptDone(data, chatTabId) {
     pending.completed = true;
     pendingWorkflows.set(workflowKey, pending);
   }
+
+  // Resolve scheduleSendTime: prefer the in-memory pending workflow data, but fall back to
+  // chrome.storage.local in case the service worker was restarted (which clears pendingWorkflows).
+  // This prevents emails from sending immediately instead of being scheduled when the worker
+  // restarts mid-bulk-run and loses its in-memory state.
+  let resolvedScheduleTime = pending && pending.data && pending.data.scheduleSendTime
+    ? String(pending.data.scheduleSendTime).trim()
+    : "";
+  if (!resolvedScheduleTime) {
+    try {
+      const stored = await chrome.storage.local.get("pendingScheduleSendTime");
+      if (stored && stored.pendingScheduleSendTime) {
+        resolvedScheduleTime = String(stored.pendingScheduleSendTime).trim();
+        console.log("[Leads Extension] handleChatGptDone - recovered scheduleSendTime from storage fallback:", resolvedScheduleTime);
+      }
+    } catch (e) {
+      console.warn("[Leads Extension] handleChatGptDone - failed to read pendingScheduleSendTime from storage:", e);
+    }
+  }
+  console.log("[Leads Extension] handleChatGptDone - scheduleSendTime sent to Gmail:", resolvedScheduleTime || "(NONE — immediate send)");
+
   const customSignature = await getCustomSignatureSetting();
   const encodedTo = encodeURIComponent(recipientEmail || "");
   const encodedSu = encodeURIComponent(subject || "");
@@ -475,10 +496,9 @@ async function handleChatGptDone(data, chatTabId) {
       templateHasSignature: !!templateHasSignature,
       isFollowup: false,
       autoSend: true,
-      scheduleSendTime: pending && pending.data && pending.data.scheduleSendTime ? pending.data.scheduleSendTime : "",
+      scheduleSendTime: resolvedScheduleTime,
     },
   }, 7, 900);
-  console.log("[Leads Extension] handleChatGptDone - scheduleSendTime sent to Gmail:", pending && pending.data && pending.data.scheduleSendTime ? pending.data.scheduleSendTime : "(NONE)");
   if (!sentToGmail) {
     console.warn("[Leads Extension] Initial Gmail handoff failed, retrying:", tab.id);
     if (!RUN_TABS_IN_BACKGROUND) {
@@ -503,7 +523,7 @@ async function handleChatGptDone(data, chatTabId) {
         templateHasSignature: !!templateHasSignature,
         isFollowup: false,
         autoSend: true,
-        scheduleSendTime: pending && pending.data && pending.data.scheduleSendTime ? pending.data.scheduleSendTime : "",
+        scheduleSendTime: resolvedScheduleTime,
       },
     }, 10, 1200);
     if (!sentToGmail) {
