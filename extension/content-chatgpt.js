@@ -452,24 +452,30 @@
            el.parentNode.removeChild(el);
         }
       }
+      // Regex that matches text that is itself a bare URL or domain (what ChatGPT uses as source pill text)
+      const domainTextRe = /^(?:https?:\/\/|www\.)?[a-zA-Z0-9](?:[a-zA-Z0-9-]*\.)+[a-zA-Z]{2,}(?:\/[^\s]*)?$/;
       const links = clone.querySelectorAll('a');
       for (let j = 0; j < links.length; j++) {
         const text = (links[j].innerText || links[j].textContent || "").trim();
-        // If it looks like a citation link (short, maybe at the end of a sentence or in a pill)
-        // ChatGPT often uses very short titles or domain-like names for sources.
+
+        // Remove the link entirely if:
+        //   a) Its visible text IS a URL / domain (e.g. "joy.shelfexpression.net") — ChatGPT source pills
+        //   b) It looks like a traditional citation element
+        const textIsUrl = domainTextRe.test(text);
         const isCitation = text.length < 30 && (
-          links[j].className.match(/citation|source|reference/i) || 
+          links[j].className.match(/citation|source|reference/i) ||
           links[j].getAttribute('data-testid')?.match(/citation|source/i) ||
-          links[j].href.includes('muckrack.com') || // specific common sources
+          links[j].href.includes('muckrack.com') ||
           links[j].href.includes('morningadvertiser.co.uk')
         );
 
-        if (isCitation) {
-           if (links[j].parentNode) links[j].parentNode.removeChild(links[j]);
-           continue;
+        if (textIsUrl || isCitation) {
+          if (links[j].parentNode) links[j].parentNode.removeChild(links[j]);
+          continue;
         }
 
-        const textNode = document.createTextNode(links[j].innerText || links[j].textContent || "");
+        // For all other links keep their visible text but strip the hyperlink
+        const textNode = document.createTextNode(text);
         if (links[j].parentNode) links[j].parentNode.replaceChild(textNode, links[j]);
       }
       
@@ -505,12 +511,18 @@
           .replace(/\n(Copy|Edit|Read aloud|Thumb up|Thumb down|Share|Regenerate|Browse|More)$/im, "");
       }
 
-      // Also strip typical markdown patterns like [Immovario](https://...)
-      rawText = rawText.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1");
-      // Strip isolated domains/pills at the end of paragraphs that might have leaked through
-      rawText = rawText.replace(/(?:^|\n)([ \t]*[a-zA-Z0-9-]+\.[a-zA-Z]{2,}[ \t]*)(?=\n|$)/g, ""); // Matches isolated domain names on their own line
-      // Strip inline domains placed right before a newline (e.g. "...audience. immovario.com\n")
-      rawText = rawText.replace(/\s+[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?=\n|$)/g, "");
+      // Strip markdown links like [Immovario](https://...) — keep the label text
+      rawText = rawText.replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, "$1");
+      // Strip bare https?:// URLs anywhere in the text
+      rawText = rawText.replace(/https?:\/\/[^\s)>\]"]+/g, "");
+      // Strip isolated domain-only lines (e.g. a line that is just "shelfexpression.net")
+      rawText = rawText.replace(/(?:^|\n)([ \t]*(?:www\.)?[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\.[a-zA-Z]{2,})?[ \t]*)(?=\n|$)/g, "");
+      // Strip inline domains appended mid-sentence or before punctuation
+      // Matches patterns like " joy.shelfexpression.net" or ". example.com"
+      rawText = rawText.replace(/[\s.](?:www\.)?[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,}(?=[.,;:\s]|$)/g, function(match) {
+        // Only strip if it looks like a standalone domain (no surrounding word chars)
+        return match.replace(/(?:www\.)?[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.[a-zA-Z]{2,}/, "").trimEnd();
+      });
       return rawText;
     }
 

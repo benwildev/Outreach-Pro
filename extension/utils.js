@@ -219,6 +219,18 @@ function cleanEmailBody(text, data) {
     }
   }
 
+  // Strip any bare URLs or domain-only text that ChatGPT may have inserted as source references.
+  // These appear as hyperlinks in the sent email even though the body is plain text.
+  // 1) Full https?:// URLs
+  cleaned = cleaned.replace(/https?:\/\/[^\s)>\]"]+/g, "");
+  // 2) Bare "www." URLs
+  cleaned = cleaned.replace(/\bwww\.[a-zA-Z0-9-]+\.[a-zA-Z]{2,}(?:\/[^\s]*)?\b/g, "");
+  // 3) Inline domain text that looks like a website URL appended mid-sentence
+  //    e.g. " joy.shelfexpression.net" or ". shelfexpression.net"
+  //    Requires at least two dot-separated segments with a valid 2+ letter TLD.
+  //    Only strips when it appears after whitespace/punctuation and before whitespace/punctuation/end.
+  cleaned = cleaned.replace(/(?<=[\s.])(?![\w.+-]+@)[a-zA-Z0-9][a-zA-Z0-9-]*(?:\.[a-zA-Z0-9-]+)+\.[a-zA-Z]{2,}(?=[.,;:\s]|$)/gm, "");
+
   cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
   return cleaned;
 }
