@@ -2,17 +2,9 @@ import Link from "next/link";
 import { BarChart2, ArrowLeft, TrendingUp, Mail, Reply, UserX, Clock, ThumbsUp, Calendar, Zap } from "lucide-react";
 import Image from "next/image";
 import DailyReportCard from "./DailyReportCard";
+import { getAnalytics } from "@/lib/getAnalytics";
 
 export const dynamic = "force-dynamic";
-
-async function getAnalytics(days: number, campaignId: string) {
-  const base = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:5000";
-  const params = new URLSearchParams({ days: String(days) });
-  if (campaignId) params.set("campaignId", campaignId);
-  const res = await fetch(`${base}/api/analytics?${params}`, { cache: "no-store" });
-  if (!res.ok) return null;
-  return res.json();
-}
 
 export default async function AnalyticsPage({
   searchParams,
@@ -21,24 +13,30 @@ export default async function AnalyticsPage({
 }) {
   const days = Math.min(Math.max(Number(searchParams.days ?? "30"), 7), 90);
   const campaignId = searchParams.campaign ?? "";
-  const data = await getAnalytics(days, campaignId);
+
+  let data: Awaited<ReturnType<typeof getAnalytics>> | null = null;
+  try {
+    data = await getAnalytics(days, campaignId);
+  } catch {
+    data = null;
+  }
 
   const today = data?.today ?? { sent: 0, scheduled: 0 };
   const totals = data?.totals ?? { sent: 0, replied: 0, positive: 0, ooo: 0, negative: 0, unsubscribed: 0, replyRate: 0 };
   const dailyVolume: Array<{ date: string; sent: number; scheduled: number; replied: number }> = data?.dailyVolume ?? [];
-  const accountStats: Array<{ 
-    account: string; sent: number; replied: number; replyRate: number; 
+  const accountStats: Array<{
+    account: string; sent: number; replied: number; replyRate: number;
     todaySent: number; todayScheduled: number; totalScheduled: number;
-    positive: number; ooo: number; negative: number; unsubscribed: number 
+    positive: number; ooo: number; negative: number; unsubscribed: number;
   }> = data?.accountStats ?? [];
-  const campaignStats: Array<{ 
-    id: string; name: string; sent: number; replied: number; replyRate: number; 
+  const campaignStats: Array<{
+    id: string; name: string; sent: number; replied: number; replyRate: number;
     todaySent: number; todayScheduled: number;
-    positive: number; ooo: number; negative: number; unsubscribed: number 
+    positive: number; ooo: number; negative: number; unsubscribed: number;
   }> = data?.campaignStats ?? [];
 
   const sendsPerDay = data?.sendsPerDay ?? [];
-  const maxDailySends = Math.max(...sendsPerDay.map((d: any) => d.sent + d.scheduled), 1);
+  const maxDailySends = Math.max(...sendsPerDay.map((d: { sent: number; scheduled: number }) => d.sent + d.scheduled), 1);
 
   const todayCards = [
     { label: "Sent Today", value: today.sent, icon: Zap, color: "text-indigo-600", bg: "bg-indigo-50", border: "border-indigo-200" },
@@ -60,6 +58,10 @@ export default async function AnalyticsPage({
     negative: "bg-rose-400",
     unsubscribe: "bg-red-600",
   };
+
+  const todayISO = new Date().toISOString().slice(0, 10);
+
+  const activeDailyVolume = dailyVolume.filter((d) => d.sent > 0 || d.scheduled > 0 || d.replied > 0);
 
   return (
     <div className="min-h-screen bg-[#f4f6fb]">
@@ -131,15 +133,15 @@ export default async function AnalyticsPage({
         {/* Sends per day chart */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-sm font-semibold text-gray-800 mb-4">Volume Trends</h2>
-          {sendsPerDay.length === 0 ? (
+          {sendsPerDay.filter((d: { sent: number; scheduled: number }) => d.sent + d.scheduled > 0).length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-8">No data for this period.</p>
           ) : (
             <div className="overflow-x-auto">
               <div className="flex items-end gap-1 min-w-0" style={{ minWidth: `${sendsPerDay.length * 28}px` }}>
-                {sendsPerDay.map((d: any) => (
+                {sendsPerDay.map((d: { date: string; sent: number; scheduled: number; replied: number }) => (
                   <div key={d.date} className="flex-1 flex flex-col items-center gap-1 group relative">
                     <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10 transition-opacity">
-                      {d.date}<br/>{d.sent} sent · {d.scheduled} scheduled
+                      {d.date}<br />{d.sent} sent · {d.scheduled} scheduled
                     </div>
                     <div className="w-full flex flex-col-reverse gap-px h-16 justify-end">
                       <div className="w-full bg-indigo-200 rounded-t-sm" style={{ height: `${maxDailySends > 0 ? Math.max(1, Math.round((d.sent / maxDailySends) * 100)) : 0}%` }} />
@@ -183,14 +185,12 @@ export default async function AnalyticsPage({
                         <span className="font-medium text-emerald-600">{a.replyRate}% reply</span>
                       </div>
                     </div>
-                    
                     <div className="flex items-center gap-2">
-                       <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden flex">
-                          <div className="h-full bg-indigo-500" style={{ width: `${a.sent > 0 ? (a.sent / (a.sent + a.totalScheduled)) * 100 : 0}%` }} />
-                          <div className="h-full bg-amber-400" style={{ width: `${a.totalScheduled > 0 ? (a.totalScheduled / (a.sent + a.totalScheduled)) * 100 : 0}%` }} />
-                       </div>
+                      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden flex">
+                        <div className="h-full bg-indigo-500" style={{ width: `${a.sent > 0 ? (a.sent / (a.sent + a.totalScheduled)) * 100 : 0}%` }} />
+                        <div className="h-full bg-amber-400" style={{ width: `${a.totalScheduled > 0 ? (a.totalScheduled / (a.sent + a.totalScheduled)) * 100 : 0}%` }} />
+                      </div>
                     </div>
-
                     <div className="flex items-center justify-between text-[10px]">
                       <div className="flex gap-2">
                         {a.todaySent > 0 && <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-bold">Today: {a.todaySent} sent</span>}
@@ -208,39 +208,45 @@ export default async function AnalyticsPage({
             )}
           </div>
 
-          {/* Daily Table Summary */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 overflow-hidden">
-            <h2 className="text-sm font-semibold text-gray-800 mb-4 inline-flex items-center gap-2">
+          {/* Daily Volume Summary */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col">
+            <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
               <Calendar className="w-4 h-4" /> Daily Volume Summary
             </h2>
-            <div className="overflow-x-auto -mx-6">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider font-bold">
-                  <tr>
-                    <th className="px-6 py-3 border-b border-gray-100">Date</th>
-                    <th className="px-6 py-3 border-b border-gray-100 text-center">Sent</th>
-                    <th className="px-6 py-3 border-b border-gray-100 text-center">Scheduled</th>
-                    <th className="px-6 py-3 border-b border-gray-100 text-center">Replied</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {dailyVolume.slice().reverse().map((d) => (
-                    <tr key={d.date} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-3 font-medium text-gray-700">{d.date === new Date().toISOString().slice(0,10) ? "Today" : d.date}</td>
-                      <td className="px-6 py-3 text-center">
-                        {d.sent > 0 ? <span className="font-bold text-indigo-600">{d.sent}</span> : "—"}
-                      </td>
-                      <td className="px-6 py-3 text-center">
-                        {d.scheduled > 0 ? <span className="font-bold text-amber-600">{d.scheduled}</span> : "—"}
-                      </td>
-                      <td className="px-6 py-3 text-center">
-                        {d.replied > 0 ? <span className="font-bold text-emerald-600">{d.replied}</span> : "—"}
-                      </td>
+            {activeDailyVolume.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-8">No data for this period.</p>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-gray-100">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider font-bold">
+                    <tr>
+                      <th className="px-4 py-3 border-b border-gray-100">Date</th>
+                      <th className="px-4 py-3 border-b border-gray-100 text-center">Sent</th>
+                      <th className="px-4 py-3 border-b border-gray-100 text-center">Scheduled</th>
+                      <th className="px-4 py-3 border-b border-gray-100 text-center">Replied</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {activeDailyVolume.slice().reverse().map((d) => (
+                      <tr key={d.date} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-4 py-3 font-medium text-gray-700">
+                          {d.date === todayISO ? <span className="text-indigo-600 font-bold">Today</span> : d.date}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {d.sent > 0 ? <span className="font-bold text-indigo-600">{d.sent}</span> : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {d.scheduled > 0 ? <span className="font-bold text-amber-600">{d.scheduled}</span> : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {d.replied > 0 ? <span className="font-bold text-emerald-600">{d.replied}</span> : <span className="text-gray-300">—</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 
@@ -309,4 +315,3 @@ export default async function AnalyticsPage({
     </div>
   );
 }
-

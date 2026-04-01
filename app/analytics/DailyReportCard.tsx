@@ -19,11 +19,17 @@ function formatDateLabel(iso: string) {
 interface Sender {
   email: string;
   count: number;
+  initial: number;
+  followup1: number;
+  followup2: number;
 }
 
 interface ReportData {
   date: string;
   total: number;
+  totalInitial: number;
+  totalFollowup1: number;
+  totalFollowup2: number;
   senders: Sender[];
 }
 
@@ -115,12 +121,37 @@ export default function DailyReportCard() {
 
       {data && !loading && (
         <div className="space-y-4">
+          {/* Totals summary with step breakdown */}
           <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4">
             <div className="text-xs text-indigo-500 font-semibold uppercase tracking-wider mb-1">
               {formatDateLabel(data.date)}
             </div>
             <div className="text-3xl font-black text-indigo-700">{data.total}</div>
-            <div className="text-xs text-indigo-400 mt-0.5">emails sent / scheduled</div>
+            <div className="text-xs text-indigo-400 mt-0.5 mb-3">emails sent / scheduled</div>
+
+            {/* Step breakdown pills */}
+            {data.total > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {data.totalInitial > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-indigo-100 text-indigo-700 text-xs font-bold border border-indigo-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 inline-block" />
+                    Initial: {data.totalInitial}
+                  </span>
+                )}
+                {data.totalFollowup1 > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-xs font-bold border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                    Follow-up 1: {data.totalFollowup1}
+                  </span>
+                )}
+                {data.totalFollowup2 > 0 && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-700 text-xs font-bold border border-amber-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block" />
+                    Follow-up 2: {data.totalFollowup2}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
 
           {data.senders.length === 0 ? (
@@ -128,9 +159,32 @@ export default function DailyReportCard() {
           ) : (
             <div className="divide-y divide-gray-50">
               {data.senders.map((s) => (
-                <div key={s.email} className="flex items-center justify-between py-2.5">
-                  <span className="text-sm text-gray-700 font-medium truncate max-w-[70%]">{s.email}</span>
-                  <span className="text-sm font-bold text-indigo-600 shrink-0">{s.count}</span>
+                <div key={s.email} className="py-2.5">
+                  {/* Sender row */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-700 font-medium truncate max-w-[70%]">{s.email}</span>
+                    <span className="text-sm font-bold text-indigo-600 shrink-0">{s.count}</span>
+                  </div>
+                  {/* Step sub-row */}
+                  {(s.initial > 0 || s.followup1 > 0 || s.followup2 > 0) && (
+                    <div className="flex gap-2 mt-1">
+                      {s.initial > 0 && (
+                        <span className="text-[10px] font-semibold text-indigo-500 bg-indigo-50 rounded px-1.5 py-0.5">
+                          Init: {s.initial}
+                        </span>
+                      )}
+                      {s.followup1 > 0 && (
+                        <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 rounded px-1.5 py-0.5">
+                          FU1: {s.followup1}
+                        </span>
+                      )}
+                      {s.followup2 > 0 && (
+                        <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 rounded px-1.5 py-0.5">
+                          FU2: {s.followup2}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
