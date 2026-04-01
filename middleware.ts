@@ -84,6 +84,8 @@ export function middleware(request: NextRequest) {
     .map((ip) => ip.trim())
     .filter(Boolean);
 
+  // x-forwarded-for is trusted here because Replit's infrastructure injects it.
+  // The first entry is the real client IP when running behind Replit's proxy.
   const forwarded = request.headers.get("x-forwarded-for");
   const clientIp = forwarded ? forwarded.split(",")[0].trim() : request.ip ?? "";
 
@@ -99,6 +101,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!denied|_next/static|_next/image|favicon.ico|icon.png|logo.png).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|logo.png).*)",
   ],
 };
