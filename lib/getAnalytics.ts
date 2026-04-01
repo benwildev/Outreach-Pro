@@ -178,7 +178,9 @@ export async function getAnalytics(days: number, campaignId: string) {
   const sendsPerDay = Object.keys(allSentByDay)
     .map((date) => ({
       date,
-      sent: allSentByDay[date],
+      sent: sentStep1ByDay[date] ?? 0,
+      followup1: followup1ByDay[date] ?? 0,
+      followup2: followup2ByDay[date] ?? 0,
       scheduled: scheduledByDay[date] ?? 0,
       replied: repliesByDay[date] ?? 0,
       replyRate: allSentByDay[date] > 0

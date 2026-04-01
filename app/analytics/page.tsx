@@ -3,6 +3,7 @@ import { BarChart2, ArrowLeft, TrendingUp, Mail, Reply, UserX, Clock, ThumbsUp, 
 import Image from "next/image";
 import DailyReportCard from "./DailyReportCard";
 import ScheduleCalendar from "./ScheduleCalendar";
+import VolumeTrendsChart from "./VolumeTrendsChart";
 import { getAnalytics } from "@/lib/getAnalytics";
 
 export const dynamic = "force-dynamic";
@@ -37,7 +38,6 @@ export default async function AnalyticsPage({
   }> = data?.campaignStats ?? [];
 
   const sendsPerDay = data?.sendsPerDay ?? [];
-  const maxDailySends = Math.max(...sendsPerDay.map((d: { sent: number; scheduled: number }) => d.sent + d.scheduled), 1);
 
   const todayCards = [
     { label: "Sent Today", value: today.sent, icon: Zap, color: "text-indigo-600", bg: "bg-indigo-50", border: "border-indigo-200" },
@@ -137,38 +137,7 @@ export default async function AnalyticsPage({
         {/* Sends per day chart */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
           <h2 className="text-sm font-semibold text-gray-800 mb-4">Volume Trends</h2>
-          {sendsPerDay.filter((d: { sent: number; scheduled: number }) => d.sent + d.scheduled > 0).length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">No data for this period.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <div className="flex items-end gap-1 min-w-0" style={{ minWidth: `${sendsPerDay.length * 28}px` }}>
-                {sendsPerDay.map((d: { date: string; sent: number; scheduled: number; replied: number }) => (
-                  <div key={d.date} className="flex-1 flex flex-col items-center gap-1 group relative">
-                    <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[10px] rounded px-2 py-1 opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10 transition-opacity">
-                      {d.date}<br />{d.sent} sent · {d.scheduled} scheduled
-                    </div>
-                    <div className="w-full flex flex-col-reverse gap-px h-16 justify-end">
-                      <div className="w-full bg-indigo-200 rounded-t-sm" style={{ height: `${maxDailySends > 0 ? Math.max(1, Math.round((d.sent / maxDailySends) * 100)) : 0}%` }} />
-                      {d.scheduled > 0 && (
-                        <div className="w-full bg-amber-200 rounded-sm" style={{ height: `${maxDailySends > 0 ? Math.max(1, Math.round((d.scheduled / maxDailySends) * 100)) : 0}%` }} />
-                      )}
-                      {d.replied > 0 && (
-                        <div className="w-full bg-emerald-400 rounded-sm" style={{ height: `${maxDailySends > 0 ? Math.max(1, Math.round((d.replied / maxDailySends) * 100)) : 0}%` }} />
-                      )}
-                    </div>
-                    <span className="text-[8px] text-gray-400 rotate-45 origin-left mt-1 whitespace-nowrap">
-                      {d.date.slice(5)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="flex items-center gap-4 mt-6 text-xs text-gray-500">
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-indigo-200 inline-block" /> Sent</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-amber-200 inline-block" /> Scheduled</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-emerald-400 inline-block" /> Replied</span>
-              </div>
-            </div>
-          )}
+          <VolumeTrendsChart data={sendsPerDay} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
