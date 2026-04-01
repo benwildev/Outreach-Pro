@@ -84,9 +84,26 @@ export function EditLeadDialog({
     setLoading(true);
     try {
       const formData = new FormData(e.currentTarget);
+
+      // datetime-local inputs return LOCAL time strings (e.g. "2026-04-01T14:09").
+      // new Date() in the browser treats them as LOCAL, so .toISOString() converts
+      // to the correct UTC equivalent before the server action receives the value.
+      for (const field of ["sentAt", "nextFollowup"] as const) {
+        const raw = formData.get(field);
+        if (typeof raw === "string" && raw.trim()) {
+          const d = new Date(raw.trim());
+          if (!isNaN(d.getTime())) {
+            formData.set(field, d.toISOString());
+          }
+        }
+      }
+
       await updateLead(lead.id, formData);
       onOpenChange(false);
       router.refresh();
+    } catch (err) {
+      console.error("Failed to save lead:", err);
+      alert("Failed to save. Please try again.");
     } finally {
       setLoading(false);
     }
