@@ -13,7 +13,7 @@ import { BulkSchedulePanel } from "./BulkSchedulePanel";
 import { BulkActionsRow } from "./BulkActionsRow";
 import { LeadsTableClient } from "./LeadsTableClient";
 import { AdvancedFilters } from "./AdvancedFilters";
-import { Settings, Download, FileDown, BarChart2, Zap, LayoutDashboard } from "lucide-react";
+import { ShieldCheck, Download, FileDown, BarChart2, Zap, LayoutDashboard, Settings } from "lucide-react";
 import { promoteScheduledLeads } from "@/lib/promoteScheduledLeads";
 import Image from "next/image";
 
@@ -189,6 +189,13 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
               >
                 <BarChart2 className="w-3.5 h-3.5" />
                 Analytics
+              </Link>
+              <Link
+                href="/dashboard/settings"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-200 hover:text-white border border-indigo-700/60 hover:border-indigo-500 bg-indigo-900/40 hover:bg-indigo-800/60 rounded-lg px-3 py-2 transition-all duration-150"
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                Security
               </Link>
               <a
                 href="/api/download-extension"

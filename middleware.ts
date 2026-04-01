@@ -72,24 +72,68 @@ const DENIED_HTML = `<!DOCTYPE html>
 </body>
 </html>`;
 
-export function middleware(request: NextRequest) {
+interface IpListCache {
+  enabled: boolean;
+  ips: string[];
+  fetchedAt: number;
+}
+
+let ipListCache: IpListCache | null = null;
+const CACHE_TTL_MS = 30_000;
+
+async function getDbIpList(baseUrl: string): Promise<IpListCache> {
+  if (ipListCache && Date.now() - ipListCache.fetchedAt < CACHE_TTL_MS) {
+    return ipListCache;
+  }
+
+  try {
+    const res = await fetch(`${baseUrl}/api/internal/ip-list`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(3000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      ipListCache = { enabled: !!data.enabled, ips: data.ips ?? [], fetchedAt: Date.now() };
+      return ipListCache;
+    }
+  } catch {
+  }
+
+  return { enabled: false, ips: [], fetchedAt: Date.now() };
+}
+
+export async function middleware(request: NextRequest) {
   const allowedIpsEnv = process.env.ALLOWED_IPS ?? "";
 
-  if (!allowedIpsEnv.trim()) {
+  const forwarded = request.headers.get("x-forwarded-for");
+  const clientIp = forwarded ? forwarded.split(",")[0].trim() : (request.ip ?? "");
+
+  if (allowedIpsEnv.trim()) {
+    const allowedIps = allowedIpsEnv
+      .split(",")
+      .map((ip) => ip.trim())
+      .filter(Boolean);
+
+    if (allowedIps.includes(clientIp)) {
+      return NextResponse.next();
+    }
+    return new NextResponse(DENIED_HTML, {
+      status: 403,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    });
+  }
+
+  const baseUrl =
+    process.env.NEXT_PUBLIC_APP_URL ??
+    `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+
+  const ipList = await getDbIpList(baseUrl);
+
+  if (!ipList.enabled || ipList.ips.length === 0) {
     return NextResponse.next();
   }
 
-  const allowedIps = allowedIpsEnv
-    .split(",")
-    .map((ip) => ip.trim())
-    .filter(Boolean);
-
-  // x-forwarded-for is trusted here because Replit's infrastructure injects it.
-  // The first entry is the real client IP when running behind Replit's proxy.
-  const forwarded = request.headers.get("x-forwarded-for");
-  const clientIp = forwarded ? forwarded.split(",")[0].trim() : request.ip ?? "";
-
-  if (allowedIps.includes(clientIp)) {
+  if (ipList.ips.includes(clientIp)) {
     return NextResponse.next();
   }
 
@@ -101,6 +145,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.png|logo.png).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|logo.png|api/internal/.*).*)",
   ],
 };

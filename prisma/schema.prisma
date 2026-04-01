@@ -44,6 +44,23 @@ model ImportLog {
   @@map("import_log")
 }
 
+model AllowedIp {
+  id        String   @id @default(cuid())
+  ip        String   @unique
+  label     String?
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("allowed_ip")
+}
+
+model AppSetting {
+  key   String @id
+  value String
+
+  @@map("app_setting")
+}
+
 model Lead {
   id                 String    @id @default(cuid())
   campaignId         String
