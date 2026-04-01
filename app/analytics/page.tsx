@@ -23,7 +23,7 @@ export default async function AnalyticsPage({
 
   const today = data?.today ?? { sent: 0, scheduled: 0 };
   const totals = data?.totals ?? { sent: 0, replied: 0, positive: 0, ooo: 0, negative: 0, unsubscribed: 0, replyRate: 0 };
-  const dailyVolume: Array<{ date: string; sent: number; scheduled: number; replied: number }> = data?.dailyVolume ?? [];
+  const dailyVolume: Array<{ date: string; sent: number; scheduled: number; followup1: number; followup2: number; replied: number }> = data?.dailyVolume ?? [];
   const accountStats: Array<{
     account: string; sent: number; replied: number; replyRate: number;
     todaySent: number; todayScheduled: number; totalScheduled: number;
@@ -61,7 +61,7 @@ export default async function AnalyticsPage({
 
   const todayISO = new Date().toISOString().slice(0, 10);
 
-  const activeDailyVolume = dailyVolume.filter((d) => d.sent > 0 || d.scheduled > 0 || d.replied > 0);
+  const activeDailyVolume = dailyVolume.filter((d) => d.sent > 0 || d.scheduled > 0 || d.followup1 > 0 || d.followup2 > 0 || d.replied > 0);
 
   return (
     <div className="min-h-screen bg-[#f4f6fb]">
@@ -220,26 +220,34 @@ export default async function AnalyticsPage({
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider font-bold">
                     <tr>
-                      <th className="px-4 py-3 border-b border-gray-100">Date</th>
-                      <th className="px-4 py-3 border-b border-gray-100 text-center">Sent</th>
-                      <th className="px-4 py-3 border-b border-gray-100 text-center">Scheduled</th>
-                      <th className="px-4 py-3 border-b border-gray-100 text-center">Replied</th>
+                      <th className="px-3 py-3 border-b border-gray-100">Date</th>
+                      <th className="px-3 py-3 border-b border-gray-100 text-center">Sent</th>
+                      <th className="px-3 py-3 border-b border-gray-100 text-center">Scheduled</th>
+                      <th className="px-3 py-3 border-b border-gray-100 text-center">FU 1</th>
+                      <th className="px-3 py-3 border-b border-gray-100 text-center">FU 2</th>
+                      <th className="px-3 py-3 border-b border-gray-100 text-center">Replied</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {activeDailyVolume.slice().reverse().map((d) => (
-                      <tr key={d.date} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 py-3 font-medium text-gray-700">
+                      <tr key={d.date} className={`hover:bg-gray-50 transition-colors ${d.date === todayISO ? "bg-indigo-50/60" : ""}`}>
+                        <td className="px-3 py-3 font-medium text-gray-700 whitespace-nowrap">
                           {d.date === todayISO ? <span className="text-indigo-600 font-bold">Today</span> : d.date}
                         </td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-3 py-3 text-center">
                           {d.sent > 0 ? <span className="font-bold text-indigo-600">{d.sent}</span> : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-3 py-3 text-center">
                           {d.scheduled > 0 ? <span className="font-bold text-amber-600">{d.scheduled}</span> : <span className="text-gray-300">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-center">
-                          {d.replied > 0 ? <span className="font-bold text-emerald-600">{d.replied}</span> : <span className="text-gray-300">—</span>}
+                        <td className="px-3 py-3 text-center">
+                          {d.followup1 > 0 ? <span className="font-bold text-emerald-600">{d.followup1}</span> : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          {d.followup2 > 0 ? <span className="font-bold text-violet-600">{d.followup2}</span> : <span className="text-gray-300">—</span>}
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          {d.replied > 0 ? <span className="font-bold text-teal-600">{d.replied}</span> : <span className="text-gray-300">—</span>}
                         </td>
                       </tr>
                     ))}
