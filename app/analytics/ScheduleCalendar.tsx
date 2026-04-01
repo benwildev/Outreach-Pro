@@ -11,11 +11,11 @@ const DAY_LABELS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 interface DayData {
   sent: number;
-  scheduled: number;
   followup1: number;
   followup2: number;
+  bulkQueued: number;
+  autoFollowup: number;
   replied: number;
-  futureScheduled: number;
 }
 
 type CalendarDays = Record<string, DayData>;
@@ -38,56 +38,49 @@ interface DayCellProps {
   data?: DayData;
   isToday: boolean;
   isFuture: boolean;
-  isPast: boolean;
 }
 
 function DayCell({ dateStr, dayNum, data, isToday, isFuture }: DayCellProps) {
-  const total =
+  const hasData =
     (data?.sent ?? 0) +
-    (data?.scheduled ?? 0) +
-    (data?.followup1 ?? 0) +
-    (data?.followup2 ?? 0) +
-    (data?.futureScheduled ?? 0);
-  const hasData = total > 0 || (data?.replied ?? 0) > 0;
+      (data?.followup1 ?? 0) +
+      (data?.followup2 ?? 0) +
+      (data?.bulkQueued ?? 0) +
+      (data?.autoFollowup ?? 0) +
+      (data?.replied ?? 0) >
+    0;
+
+  const hasBulkOrAuto = (data?.bulkQueued ?? 0) + (data?.autoFollowup ?? 0) > 0;
+
+  // Tooltip text
+  const tooltipParts = [
+    data?.sent ? `Sent: ${data.sent}` : "",
+    data?.followup1 ? `FU1 sent: ${data.followup1}` : "",
+    data?.followup2 ? `FU2 sent: ${data.followup2}` : "",
+    data?.bulkQueued ? `Bulk queued (you set this): ${data.bulkQueued}` : "",
+    data?.autoFollowup ? `Auto follow-ups due (system): ${data.autoFollowup}` : "",
+    data?.replied ? `Replied: ${data.replied}` : "",
+  ].filter(Boolean);
 
   return (
     <div
-      title={
-        hasData
-          ? [
-              data?.sent ? `Sent: ${data.sent}` : "",
-              data?.scheduled ? `Queued: ${data.scheduled}` : "",
-              data?.followup1 ? `FU1: ${data.followup1}` : "",
-              data?.followup2 ? `FU2: ${data.followup2}` : "",
-              data?.futureScheduled ? `Upcoming: ${data.futureScheduled}` : "",
-              data?.replied ? `Replied: ${data.replied}` : "",
-            ]
-              .filter(Boolean)
-              .join(" · ")
-          : dateStr
-      }
+      title={hasData ? tooltipParts.join(" · ") : dateStr}
       className={[
-        "relative rounded-xl p-1.5 min-h-[72px] flex flex-col transition-all border",
+        "relative rounded-xl p-1.5 min-h-[76px] flex flex-col transition-all border",
         isToday
           ? "bg-indigo-600 border-indigo-700 text-white shadow-lg"
-          : isFuture && hasData
-          ? "bg-amber-50 border-amber-200 hover:border-amber-400"
+          : isFuture && hasBulkOrAuto
+          ? "bg-blue-50 border-blue-200 hover:border-blue-400"
           : hasData
           ? "bg-white border-gray-200 hover:border-indigo-200 hover:shadow-sm"
-          : "bg-gray-50 border-gray-100",
+          : "bg-gray-50/60 border-gray-100",
       ].join(" ")}
     >
       {/* Day number */}
-      <span
-        className={[
-          "text-xs font-bold mb-1 self-start leading-none",
-          isToday ? "text-white" : "text-gray-500",
-        ].join(" ")}
-      >
+      <span className={`text-xs font-bold mb-1 self-start leading-none ${isToday ? "text-white" : "text-gray-500"}`}>
         {dayNum}
       </span>
 
-      {/* Data pills */}
       {hasData && (
         <div className="flex flex-col gap-0.5 mt-auto">
           {/* Sent (initial) */}
@@ -96,28 +89,28 @@ function DayCell({ dateStr, dayNum, data, isToday, isFuture }: DayCellProps) {
               ✉ {data!.sent}
             </span>
           )}
-          {/* Scheduled / queued on this date */}
-          {(data?.scheduled ?? 0) > 0 && (
-            <span className={`text-[10px] font-bold leading-none px-1 py-0.5 rounded ${isToday ? "bg-white/20 text-white" : "bg-amber-100 text-amber-700"}`}>
-              ⏳ {data!.scheduled}
-            </span>
-          )}
-          {/* FU1 */}
+          {/* FU1 sent */}
           {(data?.followup1 ?? 0) > 0 && (
             <span className={`text-[10px] font-bold leading-none px-1 py-0.5 rounded ${isToday ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700"}`}>
-              ↩ FU1 {data!.followup1}
+              FU1 {data!.followup1}
             </span>
           )}
-          {/* FU2 */}
+          {/* FU2 sent */}
           {(data?.followup2 ?? 0) > 0 && (
             <span className={`text-[10px] font-bold leading-none px-1 py-0.5 rounded ${isToday ? "bg-white/20 text-white" : "bg-violet-100 text-violet-700"}`}>
-              ↩ FU2 {data!.followup2}
+              FU2 {data!.followup2}
             </span>
           )}
-          {/* Future scheduled (upcoming) */}
-          {(data?.futureScheduled ?? 0) > 0 && (
-            <span className="text-[10px] font-bold leading-none px-1 py-0.5 rounded bg-orange-100 text-orange-700">
-              📅 {data!.futureScheduled}
+          {/* Bulk queued by user */}
+          {(data?.bulkQueued ?? 0) > 0 && (
+            <span className={`text-[10px] font-bold leading-none px-1 py-0.5 rounded ${isToday ? "bg-white/20 text-white" : "bg-amber-100 text-amber-800"}`}>
+              ⏳ {data!.bulkQueued}
+            </span>
+          )}
+          {/* Auto follow-up (system-scheduled) */}
+          {(data?.autoFollowup ?? 0) > 0 && (
+            <span className={`text-[10px] font-bold leading-none px-1 py-0.5 rounded ${isToday ? "bg-white/20 text-white" : "bg-sky-100 text-sky-700"}`}>
+              🔄 {data!.autoFollowup}
             </span>
           )}
           {/* Replied */}
@@ -155,19 +148,16 @@ export default function ScheduleCalendar() {
   useEffect(() => { fetchData(year, month); }, [year, month, fetchData]);
 
   const prevMonth = () => {
-    if (month === 1) { setYear(y => y - 1); setMonth(12); }
-    else setMonth(m => m - 1);
+    if (month === 1) { setYear(y => y - 1); setMonth(12); } else setMonth(m => m - 1);
   };
   const nextMonth = () => {
-    if (month === 12) { setYear(y => y + 1); setMonth(1); }
-    else setMonth(m => m + 1);
+    if (month === 12) { setYear(y => y + 1); setMonth(1); } else setMonth(m => m + 1);
   };
   const goToday = () => { setYear(today.getFullYear()); setMonth(today.getMonth() + 1); };
 
   const daysInMonth = getDaysInMonth(year, month);
   const firstWeekday = getFirstWeekday(year, month);
 
-  // Build grid cells: empty leading cells + day cells
   const cells: Array<{ dayNum: number; dateStr: string } | null> = [
     ...Array(firstWeekday).fill(null),
     ...Array.from({ length: daysInMonth }, (_, i) => ({
@@ -175,15 +165,14 @@ export default function ScheduleCalendar() {
       dateStr: dayKey(year, month, i + 1),
     })),
   ];
-  // Pad to complete last row
   while (cells.length % 7 !== 0) cells.push(null);
 
-  // Monthly summary
-  const monthlySent = Object.values(days).reduce((s, d) => s + (d.sent ?? 0), 0);
-  const monthlyFU1 = Object.values(days).reduce((s, d) => s + (d.followup1 ?? 0), 0);
-  const monthlyFU2 = Object.values(days).reduce((s, d) => s + (d.followup2 ?? 0), 0);
-  const monthlyScheduled = Object.values(days).reduce((s, d) => s + (d.futureScheduled ?? 0), 0);
-  const monthlyReplied = Object.values(days).reduce((s, d) => s + (d.replied ?? 0), 0);
+  const monthlySent     = Object.values(days).reduce((s, d) => s + d.sent, 0);
+  const monthlyFU1      = Object.values(days).reduce((s, d) => s + d.followup1, 0);
+  const monthlyFU2      = Object.values(days).reduce((s, d) => s + d.followup2, 0);
+  const monthlyQueued   = Object.values(days).reduce((s, d) => s + d.bulkQueued, 0);
+  const monthlyAutoFU   = Object.values(days).reduce((s, d) => s + d.autoFollowup, 0);
+  const monthlyReplied  = Object.values(days).reduce((s, d) => s + d.replied, 0);
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
@@ -211,21 +200,18 @@ export default function ScheduleCalendar() {
 
       {/* Monthly summary pills */}
       <div className="flex flex-wrap gap-2 mb-4">
-        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100">✉ Sent: {monthlySent}</span>
-        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100">↩ FU1: {monthlyFU1}</span>
-        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-violet-50 text-violet-700 border border-violet-100">↩ FU2: {monthlyFU2}</span>
-        {monthlyScheduled > 0 && (
-          <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-orange-50 text-orange-700 border border-orange-100">📅 Upcoming: {monthlyScheduled}</span>
-        )}
-        <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-teal-50 text-teal-700 border border-teal-100">✓ Replied: {monthlyReplied}</span>
+        {monthlySent > 0 && <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100">✉ Sent: {monthlySent}</span>}
+        {monthlyFU1 > 0 && <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100">FU1 sent: {monthlyFU1}</span>}
+        {monthlyFU2 > 0 && <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-violet-50 text-violet-700 border border-violet-100">FU2 sent: {monthlyFU2}</span>}
+        {monthlyQueued > 0 && <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200">⏳ Bulk queued: {monthlyQueued}</span>}
+        {monthlyAutoFU > 0 && <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-sky-50 text-sky-700 border border-sky-200">🔄 Auto follow-ups: {monthlyAutoFU}</span>}
+        {monthlyReplied > 0 && <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-teal-50 text-teal-700 border border-teal-100">✓ Replied: {monthlyReplied}</span>}
       </div>
 
       {/* Day-of-week headers */}
       <div className="grid grid-cols-7 gap-1 mb-1">
         {DAY_LABELS.map((d) => (
-          <div key={d} className="text-center text-[10px] font-bold text-gray-400 uppercase py-1">
-            {d}
-          </div>
+          <div key={d} className="text-center text-[10px] font-bold text-gray-400 uppercase py-1">{d}</div>
         ))}
       </div>
 
@@ -233,7 +219,7 @@ export default function ScheduleCalendar() {
       <div className={`grid grid-cols-7 gap-1 transition-opacity ${loading ? "opacity-40 pointer-events-none" : "opacity-100"}`}>
         {cells.map((cell, i) =>
           cell === null ? (
-            <div key={`empty-${i}`} className="min-h-[72px] rounded-xl bg-gray-50/50" />
+            <div key={`empty-${i}`} className="min-h-[76px] rounded-xl bg-gray-50/40" />
           ) : (
             <DayCell
               key={cell.dateStr}
@@ -242,7 +228,6 @@ export default function ScheduleCalendar() {
               data={days[cell.dateStr]}
               isToday={cell.dateStr === todayStr}
               isFuture={cell.dateStr > todayStr}
-              isPast={cell.dateStr < todayStr}
             />
           )
         )}
@@ -250,12 +235,12 @@ export default function ScheduleCalendar() {
 
       {/* Legend */}
       <div className="flex flex-wrap gap-3 mt-4 pt-4 border-t border-gray-50 text-[10px] text-gray-500">
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-indigo-100 inline-block" /> Sent (initial)</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-100 inline-block" /> Queued</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-100 inline-block" /> Follow-up 1</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-violet-100 inline-block" /> Follow-up 2</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-orange-100 inline-block" /> Upcoming scheduled</span>
-        <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-teal-100 inline-block" /> Replied</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-indigo-100 inline-block" /> Sent (initial)</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-emerald-100 inline-block" /> FU1 sent</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-violet-100 inline-block" /> FU2 sent</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-amber-100 inline-block" /> ⏳ Bulk queued (you set this)</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-sky-100 inline-block" /> 🔄 Auto follow-ups (system)</span>
+        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded bg-teal-100 inline-block" /> Replied</span>
       </div>
     </div>
   );
