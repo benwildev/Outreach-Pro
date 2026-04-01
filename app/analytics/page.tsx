@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart2, ArrowLeft, TrendingUp, Mail, Reply, UserX, Clock, ThumbsUp, Calendar, Zap } from "lucide-react";
+import { ArrowLeft, TrendingUp, Mail, Reply, UserX, Clock, ThumbsUp, Zap, Users, BarChart2 } from "lucide-react";
 import Image from "next/image";
 import DailyReportCard from "./DailyReportCard";
 import ScheduleCalendar from "./ScheduleCalendar";
@@ -23,9 +23,8 @@ export default async function AnalyticsPage({
     data = null;
   }
 
-  const today = data?.today ?? { sent: 0, scheduled: 0 };
-  const totals = data?.totals ?? { sent: 0, replied: 0, positive: 0, ooo: 0, negative: 0, unsubscribed: 0, replyRate: 0 };
-  const dailyVolume: Array<{ date: string; sent: number; scheduled: number; followup1: number; followup2: number; replied: number }> = data?.dailyVolume ?? [];
+  const today   = data?.today   ?? { sent: 0, scheduled: 0 };
+  const totals  = data?.totals  ?? { sent: 0, replied: 0, positive: 0, ooo: 0, negative: 0, unsubscribed: 0, replyRate: 0 };
   const accountStats: Array<{
     account: string; sent: number; replied: number; replyRate: number;
     todaySent: number; todayScheduled: number; totalScheduled: number;
@@ -39,50 +38,32 @@ export default async function AnalyticsPage({
 
   const sendsPerDay = data?.sendsPerDay ?? [];
 
-  const todayCards = [
-    { label: "Sent Today", value: today.sent, icon: Zap, color: "text-indigo-600", bg: "bg-indigo-50", border: "border-indigo-200" },
-    { label: "Scheduled Today", value: today.scheduled, icon: Clock, color: "text-amber-600", bg: "bg-amber-50", border: "border-amber-200" },
-  ];
-
-  const statCards = [
-    { label: "Emails Sent", value: totals.sent, icon: Mail, color: "text-indigo-600", bg: "bg-indigo-50" },
-    { label: "Replied", value: totals.replied, icon: Reply, color: "text-emerald-600", bg: "bg-emerald-50" },
-    { label: "Reply Rate", value: `${totals.replyRate}%`, icon: TrendingUp, color: "text-blue-600", bg: "bg-blue-50" },
-    { label: "Positive", value: totals.positive, icon: ThumbsUp, color: "text-green-600", bg: "bg-green-50" },
-    { label: "Out of Office", value: totals.ooo, icon: Clock, color: "text-amber-600", bg: "bg-amber-50" },
-    { label: "Unsubscribed", value: totals.unsubscribed, icon: UserX, color: "text-red-600", bg: "bg-red-50" },
-  ];
-
-  const CATEGORY_COLORS: Record<string, string> = {
-    positive: "bg-emerald-500",
-    ooo: "bg-amber-400",
-    negative: "bg-rose-400",
-    unsubscribe: "bg-red-600",
-  };
-
-  const todayISO = new Date().toISOString().slice(0, 10);
-
-  const activeDailyVolume = dailyVolume.filter((d) => d.sent > 0 || d.scheduled > 0 || d.followup1 > 0 || d.followup2 > 0 || d.replied > 0);
+  const totalEmails = totals.sent;
+  const replyTotal  = totals.positive + totals.ooo + totals.negative + totals.unsubscribed;
 
   return (
-    <div className="min-h-screen bg-[#f4f6fb]">
-      {/* Header */}
-      <header className="bg-gradient-to-r from-[#1a1f5e] to-[#2d3491] border-b border-indigo-900/30 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between gap-4">
+    <div className="min-h-screen bg-[#f0f2f9]">
+      {/* ── Header ── */}
+      <header className="bg-gradient-to-r from-[#12175c] to-[#2a3299] shadow-lg">
+        <div className="max-w-7xl mx-auto px-5 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Image src="/logo.png" alt="Benwill Outreach" width={36} height={36} className="w-9 h-9 rounded-full object-contain bg-white/10 p-0.5" />
+            <Image src="/logo.png" alt="Benwill Outreach" width={36} height={36} className="w-9 h-9 rounded-xl object-contain bg-white/10 p-0.5" />
             <div>
-              <h1 className="text-base font-bold text-white">Campaign Analytics</h1>
-              <p className="text-xs text-indigo-300">Last {days} days</p>
+              <h1 className="text-base font-bold text-white tracking-tight">Campaign Analytics</h1>
+              <p className="text-[11px] text-indigo-300 font-medium">Last {days} days</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-1 bg-indigo-900/40 rounded-lg p-1 border border-indigo-700/40">
+            <div className="flex items-center gap-0.5 bg-white/10 rounded-xl p-1 border border-white/10">
               {[7, 14, 30, 60, 90].map((d) => (
                 <Link
                   key={d}
                   href={`/analytics?days=${d}${campaignId ? `&campaign=${campaignId}` : ""}`}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${days === d ? "bg-white text-indigo-900" : "text-indigo-200 hover:text-white"}`}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                    days === d
+                      ? "bg-white text-indigo-900 shadow-sm"
+                      : "text-indigo-200 hover:text-white hover:bg-white/10"
+                  }`}
                 >
                   {d}d
                 </Link>
@@ -90,7 +71,7 @@ export default async function AnalyticsPage({
             </div>
             <Link
               href="/dashboard"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-200 hover:text-white border border-indigo-700/60 hover:border-indigo-500 bg-indigo-900/40 hover:bg-indigo-800/60 rounded-lg px-3 py-2 transition-all"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-200 hover:text-white border border-white/20 hover:border-white/40 bg-white/10 hover:bg-white/20 rounded-xl px-3 py-2 transition-all"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               Dashboard
@@ -99,199 +80,254 @@ export default async function AnalyticsPage({
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 py-6 space-y-6">
-        {/* Today's Activity Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {todayCards.map((card) => (
-            <div key={card.label} className={`bg-white rounded-2xl shadow-sm border-2 ${card.border} p-5 flex items-center gap-5`}>
-              <div className={`${card.bg} ${card.color} rounded-xl p-3`}>
-                <card.icon className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="text-2xl font-black text-gray-900">{card.value}</div>
-                <div className="text-xs text-gray-500 font-bold uppercase tracking-wider">{card.label}</div>
-              </div>
+      <main className="max-w-7xl mx-auto px-5 py-7 space-y-6">
+
+        {/* ── Row 1a: Today hero cards ── */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-2xl p-5 shadow-md flex items-center gap-4">
+            <div className="bg-white/20 rounded-xl p-3"><Zap className="w-6 h-6 text-white" /></div>
+            <div>
+              <div className="text-3xl font-black text-white leading-none">{today.sent}</div>
+              <div className="text-[11px] font-semibold text-indigo-200 uppercase tracking-wider mt-1">Sent Today</div>
             </div>
-          ))}
+          </div>
+          <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl p-5 shadow-md flex items-center gap-4">
+            <div className="bg-white/20 rounded-xl p-3"><Clock className="w-6 h-6 text-white" /></div>
+            <div>
+              <div className="text-3xl font-black text-white leading-none">{today.scheduled}</div>
+              <div className="text-[11px] font-semibold text-orange-100 uppercase tracking-wider mt-1">Queued Today</div>
+            </div>
+          </div>
         </div>
 
-        {/* Daily Report Card */}
-        <DailyReportCard />
-
-        {/* Schedule Calendar */}
-        <ScheduleCalendar />
-
-        {/* Stat cards */}
+        {/* ── Row 1b: Period stat cards ── */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {statCards.map(({ label, value, icon: Icon, color, bg }) => (
-            <div key={label} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-2">
-              <div className={`${bg} ${color} rounded-lg p-2 w-fit`}>
-                <Icon className="w-4 h-4" />
+          {[
+            { label: "Total Sent",    value: totals.sent,           icon: Mail,       color: "text-indigo-600",  bg: "bg-indigo-50",  border: "border-indigo-100" },
+            { label: "Replied",       value: totals.replied,        icon: Reply,      color: "text-emerald-600", bg: "bg-emerald-50", border: "border-emerald-100" },
+            { label: "Reply Rate",    value: `${totals.replyRate}%`, icon: TrendingUp, color: "text-blue-600",   bg: "bg-blue-50",    border: "border-blue-100" },
+            { label: "Positive",      value: totals.positive,       icon: ThumbsUp,   color: "text-green-600",  bg: "bg-green-50",   border: "border-green-100" },
+            { label: "Out of Office", value: totals.ooo,            icon: Clock,      color: "text-amber-600",  bg: "bg-amber-50",   border: "border-amber-100" },
+            { label: "Unsubscribed",  value: totals.unsubscribed,   icon: UserX,      color: "text-red-600",    bg: "bg-red-50",     border: "border-red-100" },
+          ].map(({ label, value, icon: Icon, color, bg, border }) => (
+            <div key={label} className={`bg-white rounded-2xl shadow-sm border ${border} p-4 flex flex-col gap-3`}>
+              <div className={`${bg} ${color} rounded-lg p-1.5 w-fit`}>
+                <Icon className="w-3.5 h-3.5" />
               </div>
-              <div className="text-xl font-bold text-gray-900">{value}</div>
-              <div className="text-xs text-gray-500 font-medium">{label}</div>
+              <div className="text-xl font-black text-gray-900 leading-none">{value}</div>
+              <div className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider leading-tight">{label}</div>
             </div>
           ))}
         </div>
 
-        {/* Sends per day chart */}
+        {/* ── Row 2: Volume Trends Chart ── */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-sm font-semibold text-gray-800 mb-4">Volume Trends</h2>
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-indigo-500" />
+                Volume Trends
+              </h2>
+              <p className="text-[11px] text-gray-400 mt-0.5">Daily breakdown across all send types</p>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-black text-indigo-700">{totalEmails.toLocaleString()}</div>
+              <div className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Total in period</div>
+            </div>
+          </div>
           <VolumeTrendsChart data={sendsPerDay} />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Account performance */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col">
-            <h2 className="text-sm font-semibold text-gray-800 mb-4">Account Performance</h2>
+        {/* ── Row 3: Account Performance + Reply Breakdown ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+
+          {/* Account Performance — 3/5 */}
+          <div className="lg:col-span-3 bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <Users className="w-4 h-4 text-indigo-500" />
+                Account Performance
+              </h2>
+              <span className="text-[11px] text-gray-400 font-medium">{accountStats.length} accounts</span>
+            </div>
             {accountStats.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">No data.</p>
+              <p className="text-sm text-gray-400 text-center py-12">No data for this period.</p>
             ) : (
-              <div className="space-y-4 flex-1">
-                {accountStats.map((a) => (
-                  <div key={a.account} className="space-y-2 border-b border-gray-50 pb-3 last:border-0">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-bold text-gray-800 truncate max-w-[50%]">{a.account}</span>
-                      <div className="flex gap-3 text-gray-500 shrink-0">
-                        <span title="Total scheduled"><Clock className="w-3 h-3 inline mr-0.5" />{a.totalScheduled}</span>
-                        <span title="Total sent"><Mail className="w-3 h-3 inline mr-0.5" />{a.sent}</span>
-                        <span className="font-medium text-emerald-600">{a.replyRate}% reply</span>
+              <div className="space-y-3">
+                {accountStats.map((a) => {
+                  const total = a.sent + a.totalScheduled;
+                  const sentPct = total > 0 ? (a.sent / total) * 100 : 0;
+                  const schPct  = total > 0 ? (a.totalScheduled / total) * 100 : 0;
+                  return (
+                    <div key={a.account} className="group p-3 rounded-xl border border-gray-100 hover:border-indigo-100 hover:bg-indigo-50/30 transition-all">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-gray-800 truncate max-w-[55%]">{a.account}</span>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {a.todaySent > 0 && (
+                            <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-md">
+                              {a.todaySent} today
+                            </span>
+                          )}
+                          <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md">
+                            {a.replyRate}% reply
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Progress bar */}
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden flex gap-px">
+                        <div className="h-full bg-indigo-500 rounded-l-full transition-all" style={{ width: `${sentPct}%` }} />
+                        <div className="h-full bg-amber-400 rounded-r-full transition-all" style={{ width: `${schPct}%` }} />
+                      </div>
+
+                      {/* Counters row */}
+                      <div className="flex items-center justify-between mt-1.5">
+                        <div className="flex gap-3 text-[10px] text-gray-500">
+                          <span><span className="font-bold text-indigo-600">{a.sent}</span> sent</span>
+                          {a.totalScheduled > 0 && <span><span className="font-bold text-amber-600">{a.totalScheduled}</span> queued</span>}
+                        </div>
+                        <div className="flex gap-2 text-[10px]">
+                          {a.positive > 0 && <span className="text-emerald-600 font-semibold">+{a.positive}</span>}
+                          {a.ooo > 0 && <span className="text-amber-500 font-semibold">{a.ooo} OOO</span>}
+                          {a.unsubscribed > 0 && <span className="text-red-500 font-semibold">{a.unsubscribed} unsub</span>}
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden flex">
-                        <div className="h-full bg-indigo-500" style={{ width: `${a.sent > 0 ? (a.sent / (a.sent + a.totalScheduled)) * 100 : 0}%` }} />
-                        <div className="h-full bg-amber-400" style={{ width: `${a.totalScheduled > 0 ? (a.totalScheduled / (a.sent + a.totalScheduled)) * 100 : 0}%` }} />
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between text-[10px]">
-                      <div className="flex gap-2">
-                        {a.todaySent > 0 && <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-bold">Today: {a.todaySent} sent</span>}
-                        {a.todayScheduled > 0 && <span className="bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded font-bold">Today: {a.todayScheduled} due</span>}
-                      </div>
-                      <div className="flex gap-2 text-gray-400">
-                        {a.positive > 0 && <span className="text-emerald-600">+{a.positive} pos</span>}
-                        {a.ooo > 0 && <span className="text-amber-500">{a.ooo} OOO</span>}
-                        {a.unsubscribed > 0 && <span className="text-red-500">{a.unsubscribed} unsub</span>}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
 
-          {/* Daily Volume Summary */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col">
-            <h2 className="text-sm font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              <Calendar className="w-4 h-4" /> Daily Volume Summary
-            </h2>
-            {activeDailyVolume.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-8">No data for this period.</p>
+          {/* Reply Breakdown — 2/5 */}
+          <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <Reply className="w-4 h-4 text-emerald-500" />
+                Reply Breakdown
+              </h2>
+              <span className="text-[11px] text-gray-400 font-medium">{totals.replied} total</span>
+            </div>
+
+            {totals.replied === 0 ? (
+              <div className="flex-1 flex flex-col items-center justify-center text-gray-400 py-10 gap-2">
+                <Reply className="w-8 h-8 opacity-30" />
+                <p className="text-sm">No replies yet</p>
+              </div>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-gray-100">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider font-bold">
-                    <tr>
-                      <th className="px-3 py-3 border-b border-gray-100">Date</th>
-                      <th className="px-3 py-3 border-b border-gray-100 text-center">Sent</th>
-                      <th className="px-3 py-3 border-b border-gray-100 text-center">Scheduled</th>
-                      <th className="px-3 py-3 border-b border-gray-100 text-center">FU 1</th>
-                      <th className="px-3 py-3 border-b border-gray-100 text-center">FU 2</th>
-                      <th className="px-3 py-3 border-b border-gray-100 text-center">Replied</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {activeDailyVolume.slice().reverse().map((d) => (
-                      <tr key={d.date} className={`hover:bg-gray-50 transition-colors ${d.date === todayISO ? "bg-indigo-50/60" : ""}`}>
-                        <td className="px-3 py-3 font-medium text-gray-700 whitespace-nowrap">
-                          {d.date === todayISO ? <span className="text-indigo-600 font-bold">Today</span> : d.date}
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          {d.sent > 0 ? <span className="font-bold text-indigo-600">{d.sent}</span> : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          {d.scheduled > 0 ? <span className="font-bold text-amber-600">{d.scheduled}</span> : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          {d.followup1 > 0 ? <span className="font-bold text-emerald-600">{d.followup1}</span> : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          {d.followup2 > 0 ? <span className="font-bold text-violet-600">{d.followup2}</span> : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-3 py-3 text-center">
-                          {d.replied > 0 ? <span className="font-bold text-teal-600">{d.replied}</span> : <span className="text-gray-300">—</span>}
-                        </td>
-                      </tr>
+              <div className="flex-1 flex flex-col gap-5">
+                {/* Stacked bar */}
+                <div className="flex h-10 rounded-xl overflow-hidden gap-0.5">
+                  {[
+                    { key: "positive",   val: totals.positive,     color: "bg-emerald-500", label: "Positive" },
+                    { key: "ooo",        val: totals.ooo,           color: "bg-amber-400",   label: "OOO" },
+                    { key: "negative",   val: totals.negative,      color: "bg-rose-400",    label: "Negative" },
+                    { key: "unsub",      val: totals.unsubscribed,  color: "bg-red-600",     label: "Unsub" },
+                  ]
+                    .filter((c) => c.val > 0)
+                    .map((c) => (
+                      <div
+                        key={c.key}
+                        className={`${c.color} flex items-center justify-center text-white text-[10px] font-bold transition-all`}
+                        style={{ flex: c.val }}
+                        title={`${c.label}: ${c.val}`}
+                      >
+                        {c.val}
+                      </div>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
+                </div>
 
-        {/* Campaign performance */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-          <h2 className="text-sm font-semibold text-gray-800 mb-4">Campaign Performance</h2>
-          {campaignStats.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">No data.</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {campaignStats.map((c) => (
-                <div key={c.id} className="p-4 rounded-xl border border-gray-100 hover:border-indigo-100 transition-colors group">
-                  <div className="flex flex-col gap-1 mb-3">
-                    <h3 className="font-bold text-gray-800 text-sm group-hover:text-indigo-600 transition-colors truncate">{c.name}</h3>
-                    <div className="flex items-center justify-between text-[10px] text-gray-500">
-                      <span>{c.sent} sent · {c.replyRate}% reply</span>
-                      {c.todayScheduled > 0 && <span className="text-amber-600 font-bold">Due today: {c.todayScheduled}</span>}
+                {/* Category rows */}
+                <div className="space-y-2.5">
+                  {[
+                    { label: "Positive",    val: totals.positive,    color: "bg-emerald-500", text: "text-emerald-700", lightBg: "bg-emerald-50" },
+                    { label: "Out of Office", val: totals.ooo,       color: "bg-amber-400",   text: "text-amber-700",  lightBg: "bg-amber-50" },
+                    { label: "Negative",    val: totals.negative,    color: "bg-rose-400",    text: "text-rose-700",   lightBg: "bg-rose-50" },
+                    { label: "Unsubscribed",val: totals.unsubscribed, color: "bg-red-600",    text: "text-red-700",    lightBg: "bg-red-50" },
+                  ].map(({ label, val, color, text, lightBg }) => (
+                    <div key={label} className="flex items-center gap-3">
+                      <span className={`w-2.5 h-2.5 rounded-sm ${color} shrink-0`} />
+                      <span className="flex-1 text-xs text-gray-600">{label}</span>
+                      <span className={`text-xs font-black ${text} ${lightBg} px-2 py-0.5 rounded-lg`}>{val}</span>
+                      <span className="text-[10px] text-gray-400 w-10 text-right">
+                        {replyTotal > 0 ? `${Math.round((val / replyTotal) * 100)}%` : "—"}
+                      </span>
                     </div>
+                  ))}
+                </div>
+
+                {/* Rate */}
+                <div className="mt-auto pt-4 border-t border-gray-50">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">Overall reply rate</span>
+                    <span className="text-sm font-black text-indigo-700">{totals.replyRate}%</span>
                   </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-blue-500" style={{ width: `${campaignStats[0]?.sent > 0 ? Math.round((c.sent / campaignStats[0].sent) * 100) : 0}%` }} />
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {c.positive > 0 && <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[9px] font-bold">+{c.positive} Pos</span>}
-                    {c.ooo > 0 && <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 text-[9px] font-bold">{c.ooo} OOO</span>}
-                    {c.unsubscribed > 0 && <span className="px-1.5 py-0.5 rounded bg-red-50 text-red-700 text-[9px] font-bold">{c.unsubscribed} Unsub</span>}
+                  <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-indigo-500 to-emerald-500 rounded-full transition-all"
+                      style={{ width: `${totals.replyRate}%` }}
+                    />
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Reply category breakdown */}
-        {totals.replied > 0 && (
+        {/* ── Row 4: Schedule Calendar ── */}
+        <ScheduleCalendar />
+
+        {/* ── Row 5: Campaign Performance ── */}
+        {campaignStats.length > 0 && (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <h2 className="text-sm font-semibold text-gray-800 mb-4">Reply Breakdown</h2>
-            <div className="flex gap-2 h-8 rounded-lg overflow-hidden">
-              {Object.entries({
-                positive: totals.positive,
-                ooo: totals.ooo,
-                negative: totals.negative,
-                unsubscribe: totals.unsubscribed,
-              })
-                .filter(([, v]) => v > 0)
-                .map(([cat, count]) => (
-                  <div
-                    key={cat}
-                    className={`${CATEGORY_COLORS[cat] ?? "bg-gray-300"} flex items-center justify-center text-white text-[10px] font-bold rounded-sm`}
-                    style={{ flex: count }}
-                    title={`${cat}: ${count}`}
-                  >
-                    {count}
-                  </div>
-                ))}
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                <BarChart2 className="w-4 h-4 text-blue-500" />
+                Campaign Performance
+              </h2>
+              <span className="text-[11px] text-gray-400 font-medium">{campaignStats.length} campaigns</span>
             </div>
-            <div className="flex flex-wrap gap-4 mt-3 text-xs text-gray-500">
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" /> Positive ({totals.positive})</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block" /> OOO ({totals.ooo})</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-rose-400 inline-block" /> Negative ({totals.negative})</span>
-              <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-red-600 inline-block" /> Unsubscribed ({totals.unsubscribed})</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {campaignStats.map((c) => {
+                const maxSent = campaignStats[0]?.sent ?? 1;
+                const barPct = maxSent > 0 ? Math.round((c.sent / maxSent) * 100) : 0;
+                return (
+                  <div key={c.id} className="group p-4 rounded-xl border border-gray-100 hover:border-indigo-200 hover:shadow-sm transition-all">
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <h3 className="font-bold text-gray-800 text-xs group-hover:text-indigo-600 transition-colors leading-snug flex-1">{c.name}</h3>
+                      {c.todayScheduled > 0 && (
+                        <span className="shrink-0 text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md">
+                          Due: {c.todayScheduled}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Bar */}
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden mb-3">
+                      <div className="h-full bg-gradient-to-r from-indigo-500 to-blue-400 rounded-full transition-all" style={{ width: `${barPct}%` }} />
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px]">
+                      <div className="flex gap-3 text-gray-500">
+                        <span><span className="font-bold text-gray-700">{c.sent}</span> sent</span>
+                        <span><span className="font-bold text-emerald-600">{c.replyRate}%</span> reply</span>
+                      </div>
+                      <div className="flex gap-1.5">
+                        {c.positive > 0 && <span className="px-1 py-0.5 rounded bg-emerald-50 text-emerald-700 font-bold">+{c.positive}</span>}
+                        {c.ooo > 0 && <span className="px-1 py-0.5 rounded bg-amber-50 text-amber-700 font-bold">{c.ooo} OOO</span>}
+                        {c.unsubscribed > 0 && <span className="px-1 py-0.5 rounded bg-red-50 text-red-700 font-bold">{c.unsubscribed} ✗</span>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
+
+        {/* ── Row 6: Daily Report ── */}
+        <DailyReportCard />
+
       </main>
     </div>
   );
