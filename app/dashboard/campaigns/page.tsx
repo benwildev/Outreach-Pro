@@ -55,7 +55,7 @@ export default async function DashboardCampaignsPage() {
         <div className="mx-auto px-6 py-5">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <Image src="/logo.png" alt="Benwill Outreach" className="w-10 h-10 rounded-full object-contain bg-white/10 p-0.5" />
+              <Image src="/logo.png" alt="Benwill Outreach" width={40} height={40} className="w-10 h-10 rounded-full object-contain bg-white/10 p-0.5" />
               <div>
                 <h1 className="text-2xl font-bold text-white tracking-tight">Campaigns</h1>
                 <p className="text-indigo-300 text-xs mt-0.5 font-medium">Manage your outreach campaigns</p>
