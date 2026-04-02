@@ -47,6 +47,128 @@ export type ImportResult =
   | { success: true; count: number; skipped: number; nextStartRow: number }
   | { success: false; error: string };
 
+type LeadRow = {
+  campaignId: string;
+  recipientName: string;
+  recipientEmail: string;
+  websiteUrl?: string | null;
+  niche?: string | null;
+};
+
+async function processRows(
+  allSheetRows: Record<string, unknown>[],
+  campaignId: string,
+  startRow: number,
+  endRow: number
+): Promise<{ toInsert: LeadRow[]; skippedCount: number; actualEndRow: number; nextStartRow: number }> {
+  const startIndex = startRow - 2;
+  const endIndex = endRow === Infinity ? undefined : endRow - 1;
+  const rows = allSheetRows.slice(startIndex, endIndex);
+
+  const existingLeads = await prisma.lead.findMany({
+    where: { campaignId },
+    select: { recipientEmail: true },
+  });
+
+  const PUBLIC_DOMAINS = new Set([
+    "gmail.com", "yahoo.com", "hotmail.com", "outlook.com",
+    "icloud.com", "aol.com", "ymail.com", "live.com", "msn.com",
+  ]);
+
+  const existingEmails = new Set(
+    existingLeads.map(l => l.recipientEmail.split(",")[0].trim().toLowerCase())
+  );
+  const existingDomains = new Set(
+    existingLeads
+      .map(l => l.recipientEmail.split(",")[0].trim().toLowerCase().split("@")[1]?.trim())
+      .filter(Boolean)
+  );
+
+  const seenEmailsInSheet = new Set<string>();
+  const seenDomainsInSheet = new Set<string>();
+  const toInsert: LeadRow[] = [];
+  let skippedCount = 0;
+
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const lead = rowToLead(row, campaignId);
+    if (lead) {
+      const primaryEmailLower = lead.recipientEmail.split(",")[0].trim().toLowerCase();
+      const domainLower = primaryEmailLower.split("@")[1]?.trim() || "";
+      const isPublic = PUBLIC_DOMAINS.has(domainLower);
+
+      const isDuplicateEmail = existingEmails.has(primaryEmailLower) || seenEmailsInSheet.has(primaryEmailLower);
+      const isDuplicateDomain = !isPublic && domainLower ? (existingDomains.has(domainLower) || seenDomainsInSheet.has(domainLower)) : false;
+
+      if (!isDuplicateEmail && !isDuplicateDomain) {
+        toInsert.push(lead);
+        seenEmailsInSheet.add(primaryEmailLower);
+        if (domainLower && !isPublic) seenDomainsInSheet.add(domainLower);
+      } else {
+        skippedCount++;
+      }
+    }
+  }
+
+  const actualEndRow = startRow - 1 + rows.length;
+  const nextStartRow = actualEndRow + 1;
+  return { toInsert, skippedCount, actualEndRow, nextStartRow };
+}
+
+async function saveAndReturn(
+  toInsert: LeadRow[],
+  skippedCount: number,
+  campaignId: string,
+  fileName: string,
+  startRow: number,
+  actualEndRow: number,
+  nextStartRow: number
+): Promise<ImportResult> {
+  if (toInsert.length === 0) {
+    await prisma.importLog.create({
+      data: { campaignId, fileName, startRow, endRow: actualEndRow, importedCount: 0, skippedCount },
+    });
+    revalidatePath("/dashboard");
+    return { success: true, count: 0, skipped: skippedCount, nextStartRow };
+  }
+
+  try {
+    const result = await prisma.lead.createMany({ data: toInsert });
+    await prisma.importLog.create({
+      data: { campaignId, fileName, startRow, endRow: actualEndRow, importedCount: result.count, skippedCount },
+    });
+    revalidatePath("/dashboard");
+    return { success: true, count: result.count, skipped: skippedCount, nextStartRow };
+  } catch (err) {
+    console.error("Import error:", err);
+    return { success: false, error: err instanceof Error ? err.message : "Failed to import leads." };
+  }
+}
+
+function parseRowRange(formData: FormData): { startRow: number; endRow: number } {
+  const startRowStr = formData.get("startRow");
+  const endRowStr = formData.get("endRow");
+
+  let startRow = 2;
+  if (startRowStr && typeof startRowStr === "string" && startRowStr.trim()) {
+    const parsed = parseInt(startRowStr.trim(), 10);
+    if (!isNaN(parsed) && parsed >= 2) startRow = parsed;
+  }
+
+  let endRow = Infinity;
+  if (endRowStr && typeof endRowStr === "string" && endRowStr.trim()) {
+    const parsed = parseInt(endRowStr.trim(), 10);
+    if (!isNaN(parsed) && parsed >= 2) endRow = parsed;
+  }
+
+  if (startRow > endRow) {
+    const temp = startRow;
+    startRow = endRow;
+    endRow = temp;
+  }
+  return { startRow, endRow };
+}
+
 export async function importLeads(formData: FormData): Promise<ImportResult> {
   const campaignId = formData.get("campaignId");
   if (!campaignId || typeof campaignId !== "string" || !campaignId.trim()) {
@@ -75,27 +197,6 @@ export async function importLeads(formData: FormData): Promise<ImportResult> {
     return { success: false, error: "Invalid or unsupported file format." };
   }
 
-  const startRowStr = formData.get("startRow");
-  const endRowStr = formData.get("endRow");
-
-  let startRow = 2;
-  if (startRowStr && typeof startRowStr === "string" && startRowStr.trim()) {
-    const parsed = parseInt(startRowStr.trim(), 10);
-    if (!isNaN(parsed) && parsed >= 2) startRow = parsed;
-  }
-
-  let endRow = Infinity;
-  if (endRowStr && typeof endRowStr === "string" && endRowStr.trim()) {
-    const parsed = parseInt(endRowStr.trim(), 10);
-    if (!isNaN(parsed) && parsed >= 2) endRow = parsed;
-  }
-
-  if (startRow > endRow) {
-    const temp = startRow;
-    startRow = endRow;
-    endRow = temp;
-  }
-
   if (workbook.SheetNames.length === 0) {
     return { success: false, error: "No sheets found in file." };
   }
@@ -111,104 +212,102 @@ export async function importLeads(formData: FormData): Promise<ImportResult> {
   const sheet = workbook.Sheets[resolvedSheetName];
   const allSheetRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
 
-  const startIndex = startRow - 2;
-  const endIndex = endRow === Infinity ? undefined : endRow - 1;
-  const rows = allSheetRows.slice(startIndex, endIndex);
-
-  const toInsert: Array<{
-    campaignId: string;
-    recipientName: string;
-    recipientEmail: string;
-    websiteUrl?: string | null;
-    niche?: string | null;
-  }> = [];
-
-  const existingLeads = await prisma.lead.findMany({
-    where: { campaignId: campaignId.trim() },
-    select: { recipientEmail: true },
-  });
-
-  const existingEmails = new Set(
-    existingLeads.map(l => l.recipientEmail.split(',')[0].trim().toLowerCase())
-  );
-  const existingDomains = new Set(
-    existingLeads
-      .map(l => l.recipientEmail.split(',')[0].trim().toLowerCase().split('@')[1]?.trim())
-      .filter(Boolean)
+  const { startRow, endRow } = parseRowRange(formData);
+  const { toInsert, skippedCount, actualEndRow, nextStartRow } = await processRows(
+    allSheetRows,
+    campaignId.trim(),
+    startRow,
+    endRow
   );
 
-  const seenEmailsInSheet = new Set<string>();
-  const seenDomainsInSheet = new Set<string>();
-  const PUBLIC_DOMAINS = new Set([
-    'gmail.com', 'yahoo.com', 'hotmail.com', 'outlook.com',
-    'icloud.com', 'aol.com', 'ymail.com', 'live.com', 'msn.com'
-  ]);
+  return saveAndReturn(toInsert, skippedCount, campaignId.trim(), file.name, startRow, actualEndRow, nextStartRow);
+}
 
-  let skippedCount = 0;
-  for (const row of rows) {
-    if (!row || typeof row !== "object") continue;
-    const lead = rowToLead(row, campaignId.trim());
-    if (lead) {
-      const primaryEmailLower = lead.recipientEmail.split(',')[0].trim().toLowerCase();
-      const domainLower = primaryEmailLower.split('@')[1]?.trim() || '';
-      const isPublic = PUBLIC_DOMAINS.has(domainLower);
-
-      const isDuplicateEmail = existingEmails.has(primaryEmailLower) || seenEmailsInSheet.has(primaryEmailLower);
-      const isDuplicateDomain = !isPublic && domainLower ? (existingDomains.has(domainLower) || seenDomainsInSheet.has(domainLower)) : false;
-
-      if (!isDuplicateEmail && !isDuplicateDomain) {
-        toInsert.push(lead);
-        seenEmailsInSheet.add(primaryEmailLower);
-        if (domainLower && !isPublic) {
-          seenDomainsInSheet.add(domainLower);
-        }
-      } else {
-        skippedCount++;
-      }
-    }
-  }
-
-  const actualEndRow = startRow - 1 + rows.length;
-  const nextStartRow = actualEndRow + 1;
-
-  if (toInsert.length === 0) {
-    await prisma.importLog.create({
-      data: {
-        campaignId: campaignId.trim(),
-        fileName: file.name,
-        startRow,
-        endRow: actualEndRow,
-        importedCount: 0,
-        skippedCount,
-      },
-    });
-    revalidatePath("/dashboard");
-    return { success: true, count: 0, skipped: skippedCount, nextStartRow };
-  }
-
+function parseGSheetsUrl(url: string): { spreadsheetId: string; gid: string } | null {
   try {
-    const result = await prisma.lead.createMany({
-      data: toInsert,
-    });
+    // Extract spreadsheet ID from path: /spreadsheets/d/{ID}/
+    const idMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+    if (!idMatch) return null;
+    const spreadsheetId = idMatch[1];
 
-    await prisma.importLog.create({
-      data: {
-        campaignId: campaignId.trim(),
-        fileName: file.name,
-        startRow,
-        endRow: actualEndRow,
-        importedCount: result.count,
-        skippedCount,
-      },
-    });
+    // Extract GID from fragment (#gid=...) or query param (gid=...)
+    const gidMatch = url.match(/[#&?]gid=(\d+)/);
+    const gid = gidMatch ? gidMatch[1] : "0";
 
-    revalidatePath("/dashboard");
-    return { success: true, count: result.count, skipped: skippedCount, nextStartRow };
-  } catch (err) {
-    console.error("Import error:", err);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : "Failed to import leads.",
-    };
+    return { spreadsheetId, gid };
+  } catch {
+    return null;
   }
+}
+
+export async function importLeadsFromGSheets(formData: FormData): Promise<ImportResult> {
+  const campaignId = formData.get("campaignId");
+  if (!campaignId || typeof campaignId !== "string" || !campaignId.trim()) {
+    return { success: false, error: "Please select a campaign." };
+  }
+
+  const campaign = await prisma.campaign.findUnique({ where: { id: campaignId.trim() } });
+  if (!campaign) {
+    return { success: false, error: "Campaign not found." };
+  }
+
+  const sheetUrl = formData.get("sheetUrl");
+  if (!sheetUrl || typeof sheetUrl !== "string" || !sheetUrl.trim()) {
+    return { success: false, error: "Please paste a Google Sheets URL." };
+  }
+
+  const parsed = parseGSheetsUrl(sheetUrl.trim());
+  if (!parsed) {
+    return { success: false, error: "Invalid Google Sheets URL. Make sure it looks like: https://docs.google.com/spreadsheets/d/..." };
+  }
+
+  const { spreadsheetId, gid } = parsed;
+  const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`;
+
+  let csvText: string;
+  try {
+    const res = await fetch(exportUrl, { redirect: "follow" });
+    if (!res.ok) {
+      if (res.status === 401 || res.status === 403) {
+        return { success: false, error: "Access denied. Make sure the sheet is shared as 'Anyone with the link can view'." };
+      }
+      return { success: false, error: `Could not fetch sheet (HTTP ${res.status}). Check that the URL is correct and the sheet is publicly viewable.` };
+    }
+    const contentType = res.headers.get("content-type") || "";
+    if (contentType.includes("text/html")) {
+      return { success: false, error: "Could not access this sheet. Make sure it is shared as 'Anyone with the link can view'." };
+    }
+    csvText = await res.text();
+  } catch (err) {
+    return { success: false, error: `Failed to fetch Google Sheet: ${err instanceof Error ? err.message : String(err)}` };
+  }
+
+  if (!csvText.trim()) {
+    return { success: false, error: "The sheet appears to be empty." };
+  }
+
+  let workbook: XLSX.WorkBook;
+  try {
+    workbook = XLSX.read(csvText, { type: "string", raw: true });
+  } catch {
+    return { success: false, error: "Failed to parse the sheet data." };
+  }
+
+  if (workbook.SheetNames.length === 0) {
+    return { success: false, error: "No data found in sheet." };
+  }
+
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const allSheetRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
+
+  const { startRow, endRow } = parseRowRange(formData);
+  const { toInsert, skippedCount, actualEndRow, nextStartRow } = await processRows(
+    allSheetRows,
+    campaignId.trim(),
+    startRow,
+    endRow
+  );
+
+  const logFileName = `gsheets:${spreadsheetId}#${gid}`;
+  return saveAndReturn(toInsert, skippedCount, campaignId.trim(), logFileName, startRow, actualEndRow, nextStartRow);
 }
