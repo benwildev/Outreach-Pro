@@ -322,7 +322,7 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
               />
               <p className="text-xs text-slate-500 leading-relaxed">
                 Paste the full URL from your browser. The sheet must be shared as{" "}
-                <strong>"Anyone with the link can view"</strong>. The tab is determined by the{" "}
+                <strong>&quot;Anyone with the link can view&quot;</strong>. The tab is determined by the{" "}
                 <code className="bg-slate-100 px-1 rounded text-[11px]">#gid=</code> in your URL.
               </p>
             </div>
