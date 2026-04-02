@@ -225,6 +225,9 @@ export async function importLeads(formData: FormData): Promise<ImportResult> {
 
 function parseGSheetsUrl(url: string): { spreadsheetId: string; gid: string } | null {
   try {
+    const parsed = new URL(url);
+    if (parsed.hostname !== "docs.google.com") return null;
+
     // Extract spreadsheet ID from path: /spreadsheets/d/{ID}/
     const idMatch = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
     if (!idMatch) return null;
