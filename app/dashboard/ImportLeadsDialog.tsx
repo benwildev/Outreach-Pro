@@ -35,7 +35,7 @@ function formatDate(iso: string) {
 }
 
 function formatLogSource(fileName: string) {
-  if (fileName.startsWith("gsheets:")) {
+  if (fileName.startsWith("https://docs.google.com/spreadsheets/")) {
     return <span className="text-indigo-500 font-medium">Google Sheet</span>;
   }
   return <span className="text-slate-300 truncate max-w-[140px]">{fileName}</span>;
@@ -75,8 +75,7 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
   const [sheetUrl, setSheetUrl] = useState("");
   const [importing, setImporting] = useState(false);
 
-  function resetForm() {
-    setMessage(null);
+  function clearInputs() {
     setSelectedCampaignId("");
     setImportLogs([]);
     setNextStartRow(null);
@@ -85,6 +84,11 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
     setSheetUrl("");
     if (fileInputRef.current) fileInputRef.current.value = "";
     formRef.current?.reset();
+  }
+
+  function resetForm() {
+    setMessage(null);
+    clearInputs();
   }
 
   useEffect(() => {
@@ -131,8 +135,8 @@ export function ImportLeadsDialog({ campaigns }: { campaigns: Campaign[] }) {
     parts.push(result.count > 0 ? `${result.count} lead${result.count !== 1 ? "s" : ""} imported` : "0 leads imported");
     if (result.skipped > 0) parts.push(`${result.skipped} skipped (duplicates)`);
     parts.push(`Next start row: ${result.nextStartRow}`);
+    clearInputs();
     setMessage({ type: "success", text: parts.join(" · "), skipped: result.skipped });
-    resetForm();
     router.refresh();
   }
 

@@ -308,6 +308,5 @@ export async function importLeadsFromGSheets(formData: FormData): Promise<Import
     endRow
   );
 
-  const logFileName = `gsheets:${spreadsheetId}#${gid}`;
-  return saveAndReturn(toInsert, skippedCount, campaignId.trim(), logFileName, startRow, actualEndRow, nextStartRow);
+  return saveAndReturn(toInsert, skippedCount, campaignId.trim(), sheetUrl.trim(), startRow, actualEndRow, nextStartRow);
 }
