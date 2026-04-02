@@ -65,9 +65,9 @@ async function processRows(
   const endIndex = endRow === Infinity ? undefined : endRow - 1;
   const rows = allSheetRows.slice(startIndex, endIndex);
 
+  // Check duplicates across ALL campaigns (entire dashboard), not just current campaign
   const existingLeads = await prisma.lead.findMany({
-    where: { campaignId },
-    select: { recipientEmail: true },
+    select: { recipientEmail: true, websiteUrl: true },
   });
 
   const PUBLIC_DOMAINS = new Set([
@@ -83,9 +83,15 @@ async function processRows(
       .map(l => l.recipientEmail.split(",")[0].trim().toLowerCase().split("@")[1]?.trim())
       .filter(Boolean)
   );
+  const existingWebsites = new Set(
+    existingLeads
+      .map(l => l.websiteUrl?.trim().toLowerCase().replace(/\/+$/, ""))
+      .filter(Boolean) as string[]
+  );
 
   const seenEmailsInSheet = new Set<string>();
   const seenDomainsInSheet = new Set<string>();
+  const seenWebsitesInSheet = new Set<string>();
   const toInsert: LeadRow[] = [];
   let skippedCount = 0;
 
@@ -96,14 +102,17 @@ async function processRows(
       const primaryEmailLower = lead.recipientEmail.split(",")[0].trim().toLowerCase();
       const domainLower = primaryEmailLower.split("@")[1]?.trim() || "";
       const isPublic = PUBLIC_DOMAINS.has(domainLower);
+      const websiteNorm = lead.websiteUrl?.trim().toLowerCase().replace(/\/+$/, "") || "";
 
       const isDuplicateEmail = existingEmails.has(primaryEmailLower) || seenEmailsInSheet.has(primaryEmailLower);
       const isDuplicateDomain = !isPublic && domainLower ? (existingDomains.has(domainLower) || seenDomainsInSheet.has(domainLower)) : false;
+      const isDuplicateWebsite = websiteNorm ? (existingWebsites.has(websiteNorm) || seenWebsitesInSheet.has(websiteNorm)) : false;
 
-      if (!isDuplicateEmail && !isDuplicateDomain) {
+      if (!isDuplicateEmail && !isDuplicateDomain && !isDuplicateWebsite) {
         toInsert.push(lead);
         seenEmailsInSheet.add(primaryEmailLower);
         if (domainLower && !isPublic) seenDomainsInSheet.add(domainLower);
+        if (websiteNorm) seenWebsitesInSheet.add(websiteNorm);
       } else {
         skippedCount++;
       }
