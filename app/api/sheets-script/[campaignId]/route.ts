@@ -76,37 +76,46 @@ function syncBenwillData() {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
 
-  var emailColIndex = columnToIndex(EMAIL_COLUMN) - 1; // 0-indexed
-  var accountIdx = COLUMNS.OUTREACH_ACCOUNT ? columnToIndex(COLUMNS.OUTREACH_ACCOUNT) - 1 : -1;
-  var sentIdx = COLUMNS.SENT_AT ? columnToIndex(COLUMNS.SENT_AT) - 1 : -1;
-  var followupIdx = COLUMNS.NEXT_FOLLOWUP ? columnToIndex(COLUMNS.NEXT_FOLLOWUP) - 1 : -1;
-  var repliedIdx = COLUMNS.REPLIED ? columnToIndex(COLUMNS.REPLIED) - 1 : -1;
+  var numDataRows = lastRow - 1; // data starts at row 2
+  var emailColIdx    = columnToIndex(EMAIL_COLUMN);
+  var accountColIdx  = COLUMNS.OUTREACH_ACCOUNT ? columnToIndex(COLUMNS.OUTREACH_ACCOUNT) : -1;
+  var sentColIdx     = COLUMNS.SENT_AT          ? columnToIndex(COLUMNS.SENT_AT)          : -1;
+  var followupColIdx = COLUMNS.NEXT_FOLLOWUP    ? columnToIndex(COLUMNS.NEXT_FOLLOWUP)    : -1;
+  var repliedColIdx  = COLUMNS.REPLIED          ? columnToIndex(COLUMNS.REPLIED)          : -1;
 
-  var maxColIdx = Math.max(emailColIndex, accountIdx, sentIdx, followupIdx, repliedIdx) + 1;
-  var targetLastCol = Math.max(sheet.getLastColumn(), maxColIdx);
-  
-  // Batch read
-  var range = sheet.getRange(1, 1, lastRow, targetLastCol);
-  var values = range.getValues();
+  // Read ONLY the email column — never touch other columns (preserves all formulas)
+  var emailVals = sheet.getRange(2, emailColIdx, numDataRows, 1).getValues();
+
+  // Read ONLY the 4 target columns so we can write them back as full-column arrays
+  // (rows that don't match keep their existing values)
+  var accountVals  = accountColIdx  >= 0 ? sheet.getRange(2, accountColIdx,  numDataRows, 1).getValues() : null;
+  var sentVals     = sentColIdx     >= 0 ? sheet.getRange(2, sentColIdx,     numDataRows, 1).getValues() : null;
+  var followupVals = followupColIdx >= 0 ? sheet.getRange(2, followupColIdx, numDataRows, 1).getValues() : null;
+  var repliedVals  = repliedColIdx  >= 0 ? sheet.getRange(2, repliedColIdx,  numDataRows, 1).getValues() : null;
+
   var updated = 0;
 
-  for (var r = 1; r < lastRow; r++) { // skip header row 0
-    var cellEmail = String(values[r][emailColIndex] || "").toLowerCase().trim();
+  for (var r = 0; r < numDataRows; r++) {
+    var cellEmail = String(emailVals[r][0] || "").toLowerCase().trim();
     if (!cellEmail || !leadMap[cellEmail]) continue;
 
     var lead = leadMap[cellEmail];
 
-    if (accountIdx >= 0) values[r][accountIdx] = lead.sentFrom || "";
-    if (sentIdx >= 0) values[r][sentIdx] = lead.sentAt ? new Date(lead.sentAt) : "";
-    if (followupIdx >= 0) values[r][followupIdx] = lead.nextFollowup ? new Date(lead.nextFollowup) : "";
-    if (repliedIdx >= 0) values[r][repliedIdx] = lead.replied;
+    if (accountVals)  accountVals[r][0]  = lead.sentFrom || "";
+    if (sentVals)     sentVals[r][0]     = lead.sentAt       ? new Date(lead.sentAt)       : "";
+    if (followupVals) followupVals[r][0] = lead.nextFollowup ? new Date(lead.nextFollowup) : "";
+    if (repliedVals)  repliedVals[r][0]  = lead.replied;
 
     updated++;
   }
 
-  // Batch write
+  // Write back ONLY the 4 target columns — all other columns (including any with
+  // formulas like column D) are never read from as a whole range and never overwritten
   if (updated > 0) {
-    range.setValues(values);
+    if (accountVals)  sheet.getRange(2, accountColIdx,  numDataRows, 1).setValues(accountVals);
+    if (sentVals)     sheet.getRange(2, sentColIdx,     numDataRows, 1).setValues(sentVals);
+    if (followupVals) sheet.getRange(2, followupColIdx, numDataRows, 1).setValues(followupVals);
+    if (repliedVals)  sheet.getRange(2, repliedColIdx,  numDataRows, 1).setValues(repliedVals);
   }
 
   SpreadsheetApp.getUi().alert(
