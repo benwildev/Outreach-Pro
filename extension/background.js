@@ -1288,10 +1288,12 @@ async function runSingleBulkWorkflow(item) {
   }
   const workflowData = Object.assign({}, current, {
     scheduleSendTime: effectiveScheduleTime,
+    requireSchedule: !!bulkAutomationState.scheduleSendTime,
   });
   console.log("[Leads Extension] Bulk: dispatching handleStartWorkflow for", leadId,
     "index:", leadIndex,
     "scheduleSendTime:", workflowData.scheduleSendTime || "(none — immediate send)",
+    workflowData.requireSchedule ? "requireSchedule:true" : "",
     staggerMs > 0 ? ("stagger: " + (staggerMs / 60000) + "min") : "");
   await handleStartWorkflow(workflowData);
   await completionPromise;

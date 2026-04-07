@@ -458,9 +458,16 @@
       for (let j = 0; j < links.length; j++) {
         const text = (links[j].innerText || links[j].textContent || "").trim();
 
+        // Detect ChatGPT browse source chips by their "+N" count-badge sibling
+        // e.g. <a>green magazine</a><text> +1</text> — the sibling marks it as a citation chip
+        const nextSib = links[j].nextSibling;
+        const hasBadgeSibling = nextSib && nextSib.nodeType === 3 &&
+          /^\s*\+\d/.test(nextSib.textContent || "");
+
         // Remove the link entirely if:
         //   a) Its visible text IS a URL / domain (e.g. "joy.shelfexpression.net") — ChatGPT source pills
         //   b) It looks like a traditional citation element
+        //   c) It has a "+N" count badge sibling — ChatGPT browse source chip
         const textIsUrl = domainTextRe.test(text);
         const isCitation = text.length < 30 && (
           links[j].className.match(/citation|source|reference/i) ||
@@ -468,8 +475,13 @@
           links[j].href.includes('muckrack.com') ||
           links[j].href.includes('morningadvertiser.co.uk')
         );
+        const isBrowseChip = hasBadgeSibling;
 
-        if (textIsUrl || isCitation) {
+        if (textIsUrl || isCitation || isBrowseChip) {
+          // Also remove the "+N" sibling text node so it doesn't appear in the output
+          if (hasBadgeSibling && nextSib.parentNode) {
+            nextSib.parentNode.removeChild(nextSib);
+          }
           if (links[j].parentNode) links[j].parentNode.removeChild(links[j]);
           continue;
         }
@@ -508,7 +520,9 @@
       if (liveText.length > 30 && liveText.includes("\n") && !rawText.includes("\n")) {
         rawText = liveText
           .replace(/\n(Copy|Edit|Read aloud|Thumb up|Thumb down|Share|Regenerate|Browse|More)\n/gi, "\n")
-          .replace(/\n(Copy|Edit|Read aloud|Thumb up|Thumb down|Share|Regenerate|Browse|More)$/im, "");
+          .replace(/\n(Copy|Edit|Read aloud|Thumb up|Thumb down|Share|Regenerate|Browse|More)$/im, "")
+          // Strip browse citation chip "+N" count badges (e.g. " +1", " +2") left in live innerText
+          .replace(/[ \t]+\+\d+(?=\s|$)/gm, "");
       }
 
       // Strip markdown links like [Immovario](https://...) — keep the label text

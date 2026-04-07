@@ -3402,6 +3402,16 @@
         log("Lead updated after schedule send");
         await closeCurrentAutomationTab();
         return;
+      } else if (data.requireSchedule) {
+        // This workflow was dispatched as a bulk scheduling job but the schedule
+        // time is missing (lost due to service-worker restart or storage race).
+        // Never fall back to an immediate send — abort and let the lead stay as draft.
+        const errMsg = "Schedule time was lost — aborting to prevent immediate send";
+        logError(errMsg);
+        try {
+          await chrome.runtime.sendMessage({ action: "sendScheduleError", data: { leadId: leadId, email: data.to, error: errMsg } });
+        } catch (e) { }
+        return;
       } else {
         const sendBaseline = {
           hadMessageSent: getSendStatusText() === "message sent",

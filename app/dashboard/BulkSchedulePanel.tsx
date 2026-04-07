@@ -42,7 +42,8 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
       const saved = window.localStorage.getItem(K_SCHEDULE_TIME) || "";
       if (saved.includes("T")) {
         const [datePart, timePart] = saved.split("T");
-        setScheduleDate(datePart || getTomorrowDate());
+        const today = localDateString(new Date());
+        setScheduleDate(datePart && datePart >= today ? datePart : getTomorrowDate());
         setScheduleTime(normalizeTime(timePart || "", ""));
       }
     }
