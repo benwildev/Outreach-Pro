@@ -63,7 +63,7 @@ function normalizeGmailAuthUser(value: string): string {
   return raw;
 }
 
-const MAX_FOLLOWUP1_TEMPLATES = 5;
+const MAX_FOLLOWUP1_TEMPLATES = 50;
 
 function parseFollowup1Templates(raw: string | null): string | null {
   if (!raw) return null;

@@ -166,34 +166,36 @@ export default function Followup1TemplatesEditor({ initialTemplates, initialFoll
 
             return (
               <div key={i} className="border border-gray-200 rounded-xl overflow-hidden bg-white shadow-sm">
-                <button
-                  type="button"
-                  onClick={() => toggleExpand(i)}
-                  className="w-full flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left"
-                >
-                  <span className="flex-shrink-0 w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">
-                    {i + 1}
-                  </span>
-                  <span className={`flex-1 text-xs truncate ${isEmpty ? "text-gray-400 italic" : "text-gray-700"}`}>
-                    {isEmpty ? "Empty — click to edit" : firstLine}
-                  </span>
-                  <span className="flex-shrink-0 text-xs text-gray-400 tabular-nums">
-                    {charCount > 0 ? `${charCount} chars` : ""}
-                  </span>
+                <div className="flex items-center">
+                  <button
+                    type="button"
+                    onClick={() => toggleExpand(i)}
+                    className="flex-1 min-w-0 flex items-center gap-2.5 px-3 py-2.5 hover:bg-gray-50 transition-colors text-left"
+                  >
+                    <span className="flex-shrink-0 w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold flex items-center justify-center">
+                      {i + 1}
+                    </span>
+                    <span className={`flex-1 min-w-0 text-xs truncate ${isEmpty ? "text-gray-400 italic" : "text-gray-700"}`}>
+                      {isEmpty ? "Empty — click to edit" : firstLine}
+                    </span>
+                    <span className="flex-shrink-0 text-xs text-gray-400 tabular-nums pr-1">
+                      {charCount > 0 ? `${charCount} chars` : ""}
+                    </span>
+                    <span className="flex-shrink-0 text-gray-400">
+                      {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    </span>
+                  </button>
                   {templates.length > 1 && (
                     <button
                       type="button"
-                      onClick={(e) => { e.stopPropagation(); removeTemplate(i); }}
-                      className="flex-shrink-0 text-gray-300 hover:text-red-500 transition-colors p-0.5"
+                      onClick={() => removeTemplate(i)}
+                      className="flex-shrink-0 px-2.5 py-2.5 text-gray-300 hover:text-red-500 transition-colors border-l border-gray-100"
                       title="Remove template"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
-                  <span className="flex-shrink-0 text-gray-400">
-                    {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                  </span>
-                </button>
+                </div>
 
                 {isExpanded && (
                   <div className="px-3 pb-3 pt-0 border-t border-gray-100">
