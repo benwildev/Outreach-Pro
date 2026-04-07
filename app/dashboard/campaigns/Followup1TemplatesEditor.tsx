@@ -59,11 +59,11 @@ export default function Followup1TemplatesEditor({ initialTemplates, initialFoll
 
   function handleBulkImport() {
     const parts = bulkText
-      .split(/^---$/m)
+      .split(/^\s*---\s*$/m)
       .map((s) => s.trim())
       .filter(Boolean);
     if (parts.length === 0) return;
-    const combined = [...templates.filter(Boolean), ...parts];
+    const combined = [...templates.map((t) => t.trim()).filter(Boolean), ...parts];
     const capped = combined.slice(0, MAX_TEMPLATES);
     const next = capped.length > 0 ? capped : [""];
     setTemplates(next);
@@ -87,7 +87,7 @@ export default function Followup1TemplatesEditor({ initialTemplates, initialFoll
         <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
           Follow-up 1 Templates
           <span className="ml-1.5 text-indigo-500 font-normal normal-case tracking-normal">
-            ({filledCount}/{MAX_TEMPLATES} filled) — one picked at random per lead
+            ({filledCount} / {MAX_TEMPLATES} templates) — one picked at random per lead
           </span>
         </label>
         <div className="flex items-center gap-2">
@@ -149,7 +149,7 @@ export default function Followup1TemplatesEditor({ initialTemplates, initialFoll
             </button>
             {bulkText.trim() && (
               <span className="text-xs text-indigo-500 ml-auto">
-                ~{bulkText.split(/^---$/m).filter((s) => s.trim()).length} template(s) detected
+                ~{bulkText.split(/^\s*---\s*$/m).filter((s) => s.trim()).length} template(s) detected
               </span>
             )}
           </div>
