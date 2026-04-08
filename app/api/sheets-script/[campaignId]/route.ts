@@ -42,8 +42,20 @@ export async function GET(
 var BENWILL_API_URL = "${dataUrl}";
 
 // Column mapping — update these letters if your layout differs
-//   L = Outreach account  |  M = Date sent  |  N = Follow up  |  O = Got Reply
-var EMAIL_COLUMN = "J";  // Column with email addresses (used for row matching)
+//
+//   EMAIL lookup (read-only, used for row matching only):
+//     I = primary email column (e.g. "Email")
+//     J = fallback email column (e.g. "Contact us") — checked when col I is empty
+//   The script checks column I first; if no match is found there it tries column J.
+//
+//   Columns written by this script:
+//     L = Outreach account  |  M = Date sent  |  N = Follow up  |  O = Got Reply
+//
+//   Columns NEVER touched (formulas are safe):
+//     C, D, E — and every other column not listed above
+//
+var EMAIL_COL_PRIMARY  = "I";  // Primary email column (checked first)
+var EMAIL_COL_FALLBACK = "J";  // Fallback email column (checked when col I has no match)
 var COLUMNS = {
   OUTREACH_ACCOUNT:"L",  // Outreach account — Gmail account used to send
   SENT_AT:         "M",  // Date column — writes the sent date
@@ -76,18 +88,22 @@ function syncBenwillData() {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return;
 
-  var numDataRows = lastRow - 1; // data starts at row 2
-  var emailColIdx    = columnToIndex(EMAIL_COLUMN);
+  var numDataRows    = lastRow - 1; // data starts at row 2
+  var primaryColIdx  = columnToIndex(EMAIL_COL_PRIMARY);
+  var fallbackColIdx = columnToIndex(EMAIL_COL_FALLBACK);
   var accountColIdx  = COLUMNS.OUTREACH_ACCOUNT ? columnToIndex(COLUMNS.OUTREACH_ACCOUNT) : -1;
   var sentColIdx     = COLUMNS.SENT_AT          ? columnToIndex(COLUMNS.SENT_AT)          : -1;
   var followupColIdx = COLUMNS.NEXT_FOLLOWUP    ? columnToIndex(COLUMNS.NEXT_FOLLOWUP)    : -1;
   var repliedColIdx  = COLUMNS.REPLIED          ? columnToIndex(COLUMNS.REPLIED)          : -1;
 
-  // Read ONLY the email column — never touch other columns (preserves all formulas)
-  var emailVals = sheet.getRange(2, emailColIdx, numDataRows, 1).getValues();
+  // Read ONLY the two email-lookup columns (I and J) — read-only, never written back.
+  // All other columns (including formula columns C, D, E) are never read as a whole
+  // range and are never overwritten.
+  var primaryVals  = sheet.getRange(2, primaryColIdx,  numDataRows, 1).getValues();
+  var fallbackVals = sheet.getRange(2, fallbackColIdx, numDataRows, 1).getValues();
 
-  // Read ONLY the 4 target columns so we can write them back as full-column arrays
-  // (rows that don't match keep their existing values)
+  // Read ONLY the 4 target output columns so we can write them back as full-column
+  // arrays (rows that don't match keep their existing values unchanged).
   var accountVals  = accountColIdx  >= 0 ? sheet.getRange(2, accountColIdx,  numDataRows, 1).getValues() : null;
   var sentVals     = sentColIdx     >= 0 ? sheet.getRange(2, sentColIdx,     numDataRows, 1).getValues() : null;
   var followupVals = followupColIdx >= 0 ? sheet.getRange(2, followupColIdx, numDataRows, 1).getValues() : null;
@@ -96,10 +112,12 @@ function syncBenwillData() {
   var updated = 0;
 
   for (var r = 0; r < numDataRows; r++) {
-    var cellEmail = String(emailVals[r][0] || "").toLowerCase().trim();
-    if (!cellEmail || !leadMap[cellEmail]) continue;
+    // Try primary column (I) first; fall back to secondary column (J)
+    var primaryEmail  = String(primaryVals[r][0]  || "").toLowerCase().trim();
+    var fallbackEmail = String(fallbackVals[r][0] || "").toLowerCase().trim();
 
-    var lead = leadMap[cellEmail];
+    var lead = leadMap[primaryEmail] || leadMap[fallbackEmail] || null;
+    if (!lead) continue;
 
     if (accountVals)  accountVals[r][0]  = lead.sentFrom || "";
     if (sentVals)     sentVals[r][0]     = lead.sentAt       ? new Date(lead.sentAt)       : "";
@@ -109,8 +127,8 @@ function syncBenwillData() {
     updated++;
   }
 
-  // Write back ONLY the 4 target columns — all other columns (including any with
-  // formulas like column D) are never read from as a whole range and never overwritten
+  // Write back ONLY the 4 target columns (L, M, N, O).
+  // Every other column — including formula columns C, D, E — is never touched.
   if (updated > 0) {
     if (accountVals)  sheet.getRange(2, accountColIdx,  numDataRows, 1).setValues(accountVals);
     if (sentVals)     sheet.getRange(2, sentColIdx,     numDataRows, 1).setValues(sentVals);
