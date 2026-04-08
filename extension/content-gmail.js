@@ -3148,6 +3148,21 @@
 
     log("Session verified or trusted. Current URL Auth:", currentAuthUser, "UI Email:", currentAccountEmail || "unknown", "Proceeding.");
 
+    // Seed the persistent email→index cache whenever we successfully land on a numeric-indexed
+    // Gmail URL and know the account email. This means subsequent runs (including when no Gmail
+    // tab is open) can use the cached index without a tab scan.
+    try {
+      const numericIndex = /^\d+$/.test(currentAuthUser) ? currentAuthUser : null;
+      const knownEmail = currentAccountEmail || (expectedGmailAuthUser && expectedGmailAuthUser.includes("@") ? expectedGmailAuthUser : "");
+      if (numericIndex && knownEmail) {
+        chrome.runtime.sendMessage(
+          { action: "cacheGmailAccountIndex", email: knownEmail, index: numericIndex },
+          function() {}
+        );
+        log("Seeded Gmail index cache:", knownEmail, "→", numericIndex);
+      }
+    } catch (_) {}
+
     function hasConversationNoLongerExistsError() {
       const text = (document.body && document.body.innerText) || "";
       return /conversation that you requested no longer exists/i.test(text) ||

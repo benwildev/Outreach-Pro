@@ -338,6 +338,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((err) => sendResponse({ success: false, index: null, error: String(err.message) }));
     return true;
   }
+
+  if (message.action === "cacheGmailAccountIndex") {
+    (async () => {
+      try {
+        const email = String(message.email || "").toLowerCase().trim();
+        const index = String(message.index || "").trim();
+        if (!email.includes("@") || !/^\d+$/.test(index)) {
+          sendResponse({ success: false, reason: "invalid email or index" });
+          return;
+        }
+        const stored = await chrome.storage.local.get("gmailAccountIndexCache");
+        const cache = stored.gmailAccountIndexCache || {};
+        if (cache[email] !== index) {
+          cache[email] = index;
+          await chrome.storage.local.set({ gmailAccountIndexCache: cache });
+          console.log("[Leads Extension] Gmail index cache updated:", email, "→", index);
+        }
+        sendResponse({ success: true });
+      } catch (err) {
+        sendResponse({ success: false, error: String(err.message) });
+      }
+    })();
+    return true;
+  }
 });
 
 async function handleStartWorkflow(data) {
@@ -562,6 +586,18 @@ function getWorkflowKey(data) {
 async function resolveGmailAccountIndex(emailAddress) {
   if (!emailAddress || !String(emailAddress).includes("@")) return null;
   const targetEmail = String(emailAddress).toLowerCase().trim();
+
+  // 1. Check persistent cache first — survives service worker restarts and browser sessions.
+  try {
+    const stored = await chrome.storage.local.get("gmailAccountIndexCache");
+    const cache = stored.gmailAccountIndexCache || {};
+    if (cache[targetEmail] !== undefined) {
+      console.log("[Leads Extension] Gmail index cache HIT for", targetEmail, "→", cache[targetEmail]);
+      return String(cache[targetEmail]);
+    }
+  } catch (_) {}
+
+  // 2. Fall back to scanning currently open Gmail tabs.
   try {
     const tabs = await chrome.tabs.query({ url: "https://mail.google.com/*" });
     for (const tab of tabs) {
@@ -609,6 +645,13 @@ async function resolveGmailAccountIndex(emailAddress) {
           const foundEmail = String(results[0].result).toLowerCase().trim();
           if (foundEmail === targetEmail) {
             console.log("[Leads Extension] Resolved Gmail index for", targetEmail, "→", index);
+            // Save to persistent cache so future calls don't need a tab scan.
+            try {
+              const stored2 = await chrome.storage.local.get("gmailAccountIndexCache");
+              const cache2 = stored2.gmailAccountIndexCache || {};
+              cache2[targetEmail] = index;
+              await chrome.storage.local.set({ gmailAccountIndexCache: cache2 });
+            } catch (_) {}
             return index;
           }
         }
