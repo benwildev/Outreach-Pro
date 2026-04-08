@@ -690,18 +690,23 @@ async function resolveGmailAccountIndex(emailAddress) {
     const accountMap = await fetchGmailAccountMap();
     if (Object.keys(accountMap).length > 0) {
       // Persist ALL discovered email→index pairs to the cache in one shot.
+      // Only cache entries where the index is a valid numeric string.
+      const validMap = {};
+      for (const [em, idx] of Object.entries(accountMap)) {
+        if (/^\d+$/.test(idx)) validMap[em] = idx;
+      }
       try {
         const stored = await chrome.storage.local.get("gmailAccountIndexCache");
         const cache = stored.gmailAccountIndexCache || {};
-        Object.assign(cache, accountMap);
+        Object.assign(cache, validMap);
         await chrome.storage.local.set({ gmailAccountIndexCache: cache });
-        console.log("[Leads Extension] ListAccounts: cached", Object.keys(accountMap).length, "account(s):", Object.keys(accountMap).join(", "));
+        console.log("[Leads Extension] ListAccounts: cached", Object.keys(validMap).length, "account(s)");
       } catch (_) {}
-      if (accountMap[targetEmail] !== undefined) {
-        console.log("[Leads Extension] ListAccounts resolved index for", targetEmail, "→", accountMap[targetEmail]);
-        return accountMap[targetEmail];
+      if (validMap[targetEmail] !== undefined) {
+        console.log("[Leads Extension] ListAccounts resolved index for target email →", validMap[targetEmail]);
+        return validMap[targetEmail];
       }
-      console.log("[Leads Extension] ListAccounts: target email", targetEmail, "not found in signed-in accounts");
+      console.log("[Leads Extension] ListAccounts: target email not found in signed-in accounts");
     }
   } catch (listErr) {
     console.warn("[Leads Extension] ListAccounts fetch failed — falling back to tab scan:", listErr && listErr.message ? listErr.message : String(listErr));
@@ -770,79 +775,7 @@ async function resolveGmailAccountIndex(emailAddress) {
       }
     }
   } catch (_) {}
-  // 3. Last resort: probe /u/0/ through /u/4/ by opening hidden background tabs.
-  //    This handles the case where no Gmail tab with a numeric index is currently open,
-  //    e.g. when all the user's Gmail tabs are at email-based URLs or don't exist yet.
-  console.log("[Leads Extension] No matching open tab found for", targetEmail, "— probing indices 0-4...");
-  const EMAIL_READER_FUNC = () => {
-    const ariaNodes = document.querySelectorAll(
-      'a[aria-label*="Google Account:"], button[aria-label*="Google Account:"], [aria-label*="Google Account:"]'
-    );
-    for (const node of ariaNodes) {
-      if (node.closest('li[role="presentation"]') || node.getAttribute("role") === "menuitem") continue;
-      const label = node.getAttribute("aria-label") || "";
-      const m = label.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-      if (m) return m[0].toLowerCase();
-    }
-    const dataNodes = document.querySelectorAll("[data-email]");
-    for (const node of dataNodes) {
-      const e = (node.getAttribute("data-email") || "").toLowerCase().trim();
-      if (e.includes("@")) return e;
-    }
-    const accountLinks = document.querySelectorAll('a[href*="accounts.google.com"]');
-    for (const a of accountLinks) {
-      const href = a.getAttribute("href") || "";
-      const em = href.match(/[?&][Ee]mail=([^&#]+)/);
-      if (em) {
-        try {
-          const decoded = decodeURIComponent(em[1]);
-          if (decoded.includes("@")) return decoded.toLowerCase().trim();
-        } catch (_) {}
-      }
-    }
-    return null;
-  };
-  for (let probeIndex = 0; probeIndex <= 4; probeIndex++) {
-    let probeTab = null;
-    try {
-      const probeUrl = "https://mail.google.com/mail/u/" + probeIndex + "/";
-      probeTab = await chrome.tabs.create({ url: probeUrl, active: false });
-      await waitForTabReady(probeTab.id);
-      await delay(1500);
-      const probeResults = await chrome.scripting.executeScript({
-        target: { tabId: probeTab.id },
-        func: EMAIL_READER_FUNC,
-      });
-      if (probeResults && probeResults[0] && probeResults[0].result) {
-        const probeEmail = String(probeResults[0].result).toLowerCase().trim();
-        if (probeEmail === targetEmail) {
-          const foundIndex = String(probeIndex);
-          console.log("[Leads Extension] Probe found Gmail index for", targetEmail, "→", foundIndex);
-          try {
-            const stored3 = await chrome.storage.local.get("gmailAccountIndexCache");
-            const cache3 = stored3.gmailAccountIndexCache || {};
-            cache3[targetEmail] = foundIndex;
-            await chrome.storage.local.set({ gmailAccountIndexCache: cache3 });
-          } catch (_) {}
-          return foundIndex;
-        }
-        // Cache this discovered mapping too, even if it didn't match our target.
-        try {
-          const stored4 = await chrome.storage.local.get("gmailAccountIndexCache");
-          const cache4 = stored4.gmailAccountIndexCache || {};
-          cache4[probeEmail] = String(probeIndex);
-          await chrome.storage.local.set({ gmailAccountIndexCache: cache4 });
-        } catch (_) {}
-      }
-    } catch (_) {
-      // Probe tab may have been closed or script injection failed — continue to next index.
-    } finally {
-      if (probeTab) {
-        try { await chrome.tabs.remove(probeTab.id); } catch (_) {}
-      }
-    }
-  }
-  console.log("[Leads Extension] Could not resolve Gmail index for", targetEmail, "after probing — returning null");
+  console.log("[Leads Extension] Could not resolve Gmail index for target email — returning null");
   return null;
 }
 
