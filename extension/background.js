@@ -633,34 +633,103 @@ function getWorkflowKey(data) {
   return "unknown:" + Date.now();
 }
 
-// Fetch all Google accounts signed in to the browser (in /u/N/ order) from Google's
-// ListAccounts endpoint. Returns a map of { email: indexString } or throws on failure.
-// The endpoint uses the browser's existing Google session cookies automatically.
+// Build a complete email→index map by injecting into a Gmail tab and reading the
+// account switcher DOM. Gmail renders all account links (even for other accounts)
+// in its AccountChooser links and /u/N/ hrefs, so one injection gives us all mappings.
+// Opens a background tab at /u/0/ if no Gmail tab is currently available.
 async function fetchGmailAccountMap() {
-  const url = "https://accounts.google.com/ListAccounts?gpsia=1&source=ChromiumBrowser&json=standard";
-  const resp = await fetch(url, { credentials: "include" });
-  if (!resp.ok) throw new Error("ListAccounts fetch failed: " + resp.status);
-  const text = await resp.text();
-  // Strip XSSI/JSON-hijacking prefix: starts with ")]}while(1);</x>" or similar garbage
-  const jsonStart = text.indexOf("[");
-  if (jsonStart === -1) throw new Error("ListAccounts: no JSON array found in response");
-  const parsed = JSON.parse(text.slice(jsonStart));
-  // parsed[1] is the array of account entries, ordered by /u/N/ index
-  const accounts = Array.isArray(parsed[1]) ? parsed[1] : [];
-  const map = {};
-  for (let i = 0; i < accounts.length; i++) {
-    const entry = accounts[i];
-    if (!Array.isArray(entry)) continue;
-    // Email is typically at index 3; some response variants also include it at index 10.
-    const candidates = [entry[3], entry[10]];
-    for (const candidate of candidates) {
-      if (candidate && String(candidate).includes("@")) {
-        map[String(candidate).toLowerCase().trim()] = String(i);
+  // The injected function reads ALL account→index mappings from the Gmail DOM.
+  const READ_ALL_ACCOUNTS_FUNC = () => {
+    const result = {};
+
+    // Strategy 1: AccountChooser links contain both the /u/N/ index (in the `continue`
+    // param) and the email address (in the `Email` param). These links appear in Gmail's
+    // multi-account switcher dropdown for every signed-in account.
+    // Example href: https://accounts.google.com/AccountChooser?continue=https%3A%2F%2F
+    //   mail.google.com%2Fmail%2Fu%2F2%2F&Email=user%40example.com
+    const allLinks = document.querySelectorAll("a[href]");
+    for (const link of allLinks) {
+      const href = link.getAttribute("href") || "";
+      if (!href.includes("accounts.google.com") && !href.includes("mail.google.com")) continue;
+
+      // Parse /u/N/ index — look inside encoded continue= param or direct path
+      let index = null;
+      const contMatch = href.match(/[?&]continue=[^&]*%2Fu%2F(\d+)/i)
+        || href.match(/[?&]continue=[^&]*\/u\/(\d+)/i);
+      if (contMatch) index = contMatch[1];
+      if (!index) {
+        const directMatch = href.match(/\/mail\/u\/(\d+)/);
+        if (directMatch) index = directMatch[1];
+      }
+      if (!index) continue;
+
+      // Parse email — look in Email= param, data-email attribute, or aria-label
+      let email = null;
+      const emailParam = href.match(/[?&][Ee]mail=([^&#]+)/);
+      if (emailParam) {
+        try { email = decodeURIComponent(emailParam[1]).toLowerCase().trim(); } catch (_) {}
+      }
+      if (!email || !email.includes("@")) {
+        const container = link.closest("[data-email]");
+        if (container) email = (container.getAttribute("data-email") || "").toLowerCase().trim();
+      }
+      if (!email || !email.includes("@")) {
+        const aria = link.getAttribute("aria-label") || "";
+        const ariaMatch = aria.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+        if (ariaMatch) email = ariaMatch[0].toLowerCase();
+      }
+      if (email && email.includes("@") && /^\d+$/.test(index)) {
+        result[email] = index;
+      }
+    }
+
+    // Strategy 2: Elements with data-email and a nearby /u/N/ link
+    const emailEls = document.querySelectorAll("[data-email]");
+    for (const el of emailEls) {
+      const email = (el.getAttribute("data-email") || "").toLowerCase().trim();
+      if (!email.includes("@")) continue;
+      const nearby = el.querySelector('a[href*="/u/"]') || el.closest('a[href*="/u/"]');
+      if (nearby) {
+        const m = (nearby.getAttribute("href") || "").match(/\/u\/(\d+)/);
+        if (m && /^\d+$/.test(m[1])) result[email] = m[1];
+      }
+    }
+
+    return result;
+  };
+
+  // Try to use any already-open Gmail tab.
+  let tempTabId = null;
+  let targetTabId = null;
+  try {
+    const gmailTabs = await chrome.tabs.query({ url: "https://mail.google.com/*" });
+    for (const tab of gmailTabs) {
+      if (tab.id && tab.url && /\/mail\/u\/\d+\//.test(tab.url)) {
+        targetTabId = tab.id;
         break;
       }
     }
+    // If no numeric-indexed Gmail tab found, open a background probe tab at /u/0/.
+    if (!targetTabId) {
+      const tempTab = await chrome.tabs.create({ url: "https://mail.google.com/mail/u/0/", active: false });
+      tempTabId = tempTab.id;
+      targetTabId = tempTab.id;
+      await waitForTabReady(targetTabId);
+      await delay(2000);
+    }
+
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: targetTabId },
+      func: READ_ALL_ACCOUNTS_FUNC,
+    });
+    const map = (results && results[0] && results[0].result) ? results[0].result : {};
+    console.log("[Leads Extension] fetchGmailAccountMap: found", Object.keys(map).length, "account(s) from DOM");
+    return map;
+  } finally {
+    if (tempTabId) {
+      try { await chrome.tabs.remove(tempTabId); } catch (_) {}
+    }
   }
-  return map; // e.g. { "ron.wyski@gmail.com": "2", "benwildev@gmail.com": "0" }
 }
 
 // Scan open Gmail tabs and find the numeric account index that corresponds to the given
