@@ -633,75 +633,27 @@ function getWorkflowKey(data) {
   return "unknown:" + Date.now();
 }
 
-// Build a complete email→index map by injecting into a Gmail tab and reading the
-// account switcher DOM. Gmail renders all account links (even for other accounts)
-// in its AccountChooser links and /u/N/ hrefs, so one injection gives us all mappings.
-// Opens a background tab at /u/0/ if no Gmail tab is currently available.
+// Build a complete email→index map by injecting the ListAccounts fetch INTO a Gmail tab.
+// The service worker cannot include Google's GAIA session cookies in cross-origin fetches,
+// but an injected script running inside the Gmail page can — it uses the page's cookies
+// automatically. If no Gmail tab is open, a background tab is opened at /u/0/ temporarily.
 async function fetchGmailAccountMap() {
-  // The injected function reads ALL account→index mappings from the Gmail DOM.
-  const READ_ALL_ACCOUNTS_FUNC = () => {
-    const result = {};
-
-    // Strategy 1: AccountChooser links contain both the /u/N/ index (in the `continue`
-    // param) and the email address (in the `Email` param). These links appear in Gmail's
-    // multi-account switcher dropdown for every signed-in account.
-    // Example href: https://accounts.google.com/AccountChooser?continue=https%3A%2F%2F
-    //   mail.google.com%2Fmail%2Fu%2F2%2F&Email=user%40example.com
-    const allLinks = document.querySelectorAll("a[href]");
-    for (const link of allLinks) {
-      const href = link.getAttribute("href") || "";
-      if (!href.includes("accounts.google.com") && !href.includes("mail.google.com")) continue;
-
-      // Parse /u/N/ index — look inside encoded continue= param or direct path
-      let index = null;
-      const contMatch = href.match(/[?&]continue=[^&]*%2Fu%2F(\d+)/i)
-        || href.match(/[?&]continue=[^&]*\/u\/(\d+)/i);
-      if (contMatch) index = contMatch[1];
-      if (!index) {
-        const directMatch = href.match(/\/mail\/u\/(\d+)/);
-        if (directMatch) index = directMatch[1];
-      }
-      if (!index) continue;
-
-      // Parse email — look in Email= param, data-email attribute, or aria-label
-      let email = null;
-      const emailParam = href.match(/[?&][Ee]mail=([^&#]+)/);
-      if (emailParam) {
-        try { email = decodeURIComponent(emailParam[1]).toLowerCase().trim(); } catch (_) {}
-      }
-      if (!email || !email.includes("@")) {
-        const container = link.closest("[data-email]");
-        if (container) email = (container.getAttribute("data-email") || "").toLowerCase().trim();
-      }
-      if (!email || !email.includes("@")) {
-        const aria = link.getAttribute("aria-label") || "";
-        const ariaMatch = aria.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-        if (ariaMatch) email = ariaMatch[0].toLowerCase();
-      }
-      if (email && email.includes("@") && /^\d+$/.test(index)) {
-        result[email] = index;
-      }
+  // This function is injected into a Gmail page and runs there so GAIA cookies are sent.
+  const INJECTED_LIST_ACCOUNTS = async () => {
+    try {
+      const url = "https://accounts.google.com/ListAccounts?gpsia=1&source=ChromiumBrowser&json=standard";
+      const resp = await fetch(url, { credentials: "include" });
+      if (!resp.ok) return null;
+      return await resp.text();
+    } catch (_) {
+      return null;
     }
-
-    // Strategy 2: Elements with data-email and a nearby /u/N/ link
-    const emailEls = document.querySelectorAll("[data-email]");
-    for (const el of emailEls) {
-      const email = (el.getAttribute("data-email") || "").toLowerCase().trim();
-      if (!email.includes("@")) continue;
-      const nearby = el.querySelector('a[href*="/u/"]') || el.closest('a[href*="/u/"]');
-      if (nearby) {
-        const m = (nearby.getAttribute("href") || "").match(/\/u\/(\d+)/);
-        if (m && /^\d+$/.test(m[1])) result[email] = m[1];
-      }
-    }
-
-    return result;
   };
 
-  // Try to use any already-open Gmail tab.
   let tempTabId = null;
   let targetTabId = null;
   try {
+    // Prefer an already-open Gmail tab at a numeric /u/N/ URL.
     const gmailTabs = await chrome.tabs.query({ url: "https://mail.google.com/*" });
     for (const tab of gmailTabs) {
       if (tab.id && tab.url && /\/mail\/u\/\d+\//.test(tab.url)) {
@@ -709,7 +661,7 @@ async function fetchGmailAccountMap() {
         break;
       }
     }
-    // If no numeric-indexed Gmail tab found, open a background probe tab at /u/0/.
+    // Fall back to opening a silent background tab if no Gmail tab is available.
     if (!targetTabId) {
       const tempTab = await chrome.tabs.create({ url: "https://mail.google.com/mail/u/0/", active: false });
       tempTabId = tempTab.id;
@@ -718,12 +670,32 @@ async function fetchGmailAccountMap() {
       await delay(2000);
     }
 
+    // Run the ListAccounts fetch inside the Gmail page context (cookies attached).
     const results = await chrome.scripting.executeScript({
       target: { tabId: targetTabId },
-      func: READ_ALL_ACCOUNTS_FUNC,
+      func: INJECTED_LIST_ACCOUNTS,
     });
-    const map = (results && results[0] && results[0].result) ? results[0].result : {};
-    console.log("[Leads Extension] fetchGmailAccountMap: found", Object.keys(map).length, "account(s) from DOM");
+    const responseText = results && results[0] && results[0].result ? results[0].result : null;
+    if (!responseText) throw new Error("ListAccounts injected fetch returned no data");
+
+    // Parse the XSSI-prefixed JSON response.
+    const jsonStart = responseText.indexOf("[");
+    if (jsonStart === -1) throw new Error("ListAccounts: no JSON array in response");
+    const parsed = JSON.parse(responseText.slice(jsonStart));
+    const accounts = Array.isArray(parsed[1]) ? parsed[1] : [];
+    const map = {};
+    for (let i = 0; i < accounts.length; i++) {
+      const entry = accounts[i];
+      if (!Array.isArray(entry)) continue;
+      const candidates = [entry[3], entry[10]];
+      for (const candidate of candidates) {
+        if (candidate && String(candidate).includes("@")) {
+          map[String(candidate).toLowerCase().trim()] = String(i);
+          break;
+        }
+      }
+    }
+    console.log("[Leads Extension] fetchGmailAccountMap: resolved", Object.keys(map).length, "account(s)");
     return map;
   } finally {
     if (tempTabId) {
