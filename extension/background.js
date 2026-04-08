@@ -98,8 +98,9 @@ chrome.tabs.onUpdated.addListener(function gmailIndexInterceptor(tabId, changeIn
   if (!changeInfo.url) return;
   const url = changeInfo.url;
 
-  // Match only Gmail URLs with an email address in the /u/ slot (not numeric)
-  const emailUrlMatch = url.match(/^(https:\/\/mail\.google\.com\/mail\/u\/)([^/]+@[^/]+)(\/.*)?$/);
+  // Match any Gmail /u/<slot>/ URL — capture slot without requiring a literal "@"
+  // so we also handle URL-encoded emails where "@" appears as "%40".
+  const emailUrlMatch = url.match(/^(https:\/\/mail\.google\.com\/mail\/u\/)([^/]+)(\/.*)?$/);
   if (!emailUrlMatch) return;
 
   const prefix = emailUrlMatch[1];
@@ -113,6 +114,9 @@ chrome.tabs.onUpdated.addListener(function gmailIndexInterceptor(tabId, changeIn
     emailSlot = rawSlot;
   }
 
+  // Skip purely numeric slots — those are already correctly formatted.
+  if (/^\d+$/.test(emailSlot)) return;
+  // Skip anything that doesn't resolve to an email address after decode.
   if (!emailSlot.includes("@")) return;
 
   // Resolve numeric index: persistent cache first (Task #9), then open-tab scan.
@@ -123,12 +127,19 @@ chrome.tabs.onUpdated.addListener(function gmailIndexInterceptor(tabId, changeIn
       numericIndex = "0";
     }
     const correctedUrl = prefix + numericIndex + rest;
-    console.log("[Leads Extension] Intercepted email Gmail URL → redirecting to numeric index:", correctedUrl);
-    chrome.tabs.update(tabId, { url: correctedUrl }).catch(function(err) {
-      console.warn("[Leads Extension] Tab redirect failed (tab may have closed):", err && err.message ? err.message : String(err));
+    // Verify the tab still has the same URL before rewriting — guards against the
+    // async resolution completing after the user has already navigated elsewhere.
+    return chrome.tabs.get(tabId).then(function(currentTab) {
+      if (!currentTab || currentTab.url !== url) {
+        console.log("[Leads Extension] gmailIndexInterceptor: tab URL changed before rewrite — skipping.");
+        return;
+      }
+      console.log("[Leads Extension] Intercepted email Gmail URL → redirecting to numeric index:", correctedUrl);
+      return chrome.tabs.update(tabId, { url: correctedUrl });
     });
   }).catch(function(err) {
-    console.warn("[Leads Extension] gmailIndexInterceptor resolution error:", err && err.message ? err.message : String(err));
+    // Tab may have closed or navigated away — non-fatal.
+    console.warn("[Leads Extension] gmailIndexInterceptor error:", err && err.message ? err.message : String(err));
   });
 });
 
