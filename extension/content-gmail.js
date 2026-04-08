@@ -3544,5 +3544,40 @@
     await closeCurrentAutomationTab();
   }
 
+  // Passively seed the email→index cache on every Gmail page load so the
+  // background interceptor always has a cached index without needing a tab scan.
+  // Retries for up to 5 s to let Gmail's UI elements render before reading the email.
+  (function seedGmailIndexCachePassively() {
+    var maxAttempts = 10;
+    var attempt = 0;
+    var intervalMs = 500;
+
+    function trySeed() {
+      attempt++;
+      var authUser = getCurrentAuthUser();
+      // Only seed when we are at a numeric index URL (e.g. /u/0/, /u/1/)
+      if (!authUser || !/^\d+$/.test(authUser)) {
+        if (attempt < maxAttempts) setTimeout(trySeed, intervalMs);
+        return;
+      }
+      var accountEmail = getCurrentAccountEmail();
+      if (!accountEmail) {
+        if (attempt < maxAttempts) setTimeout(trySeed, intervalMs);
+        return;
+      }
+      // We have both a numeric index and the account email — seed the cache.
+      try {
+        chrome.runtime.sendMessage(
+          { action: "cacheGmailAccountIndex", email: accountEmail, index: authUser },
+          function() {}
+        );
+        log("Passive cache seed:", accountEmail, "→", authUser);
+      } catch (_) {}
+    }
+
+    // Start after a short delay to let Gmail render its account UI elements.
+    setTimeout(trySeed, 1000);
+  })();
+
   log("Content script loaded", SCRIPT_VERSION);
 })();
