@@ -3055,7 +3055,10 @@
     const openReply = !!data.openReply;
     const threadIdForUrl = (data.threadIdForUrl || "").trim();
     const expectedGmailAuthUser = normalizeAuthUser(data.expectedGmailAuthUser || "");
-    const gmailBaseUrl = getGmailBaseUrl(expectedGmailAuthUser || getCurrentAuthUser() || "0");
+    // Prefer the numeric index already in the current URL over the stored email-based auth user.
+    // background.js resolves the numeric index before opening this tab, so getCurrentAuthUser()
+    // will return the correct index (e.g. "8"). Email-based /u/ URLs always 404 in Gmail.
+    const gmailBaseUrl = getGmailBaseUrl(getCurrentAuthUser() || expectedGmailAuthUser || "0");
     const autoSend = data.autoSend !== false;
     const requireThreadReply = isFollowup && openReply;
 
@@ -3105,12 +3108,37 @@
     if (shouldRedirect) {
       log("Redirecting:", redirectReason, "To:", expectedGmailAuthUser);
       sessionStorage.setItem(redirectKey, "true");
-      
+
       const hash = window.location.hash || "";
-      // CRITICAL: Prevent encodes of @ symbols in the /u/ section!
-      const encodedAccount = encodeURIComponent(expectedGmailAuthUser).replace(/%40/g, "@");
+      let accountSlot = expectedGmailAuthUser;
+
+      // Gmail does NOT support email addresses in /u/ URL paths — only numeric indices work.
+      // When the expected auth user is an email, ask background to resolve the numeric index
+      // from currently open Gmail tabs. Falls back to "0" if no matching tab is found.
+      if (expectedGmailAuthUser.includes("@")) {
+        try {
+          const resolveResp = await new Promise((resolve) => {
+            chrome.runtime.sendMessage(
+              { action: "resolveGmailIndex", email: expectedGmailAuthUser },
+              (resp) => resolve(resp || {})
+            );
+          });
+          if (resolveResp && resolveResp.success && resolveResp.index !== null && resolveResp.index !== undefined) {
+            accountSlot = String(resolveResp.index);
+            log("Resolved account slot for", expectedGmailAuthUser, "→", accountSlot);
+          } else {
+            accountSlot = "0";
+            log("Could not resolve account slot for", expectedGmailAuthUser, "— using 0");
+          }
+        } catch (e) {
+          accountSlot = "0";
+          log("resolveGmailIndex error:", e && e.message ? e.message : String(e), "— using 0");
+        }
+      }
+
+      const encodedAccount = encodeURIComponent(accountSlot).replace(/%40/g, "@");
       const targetUrl = "https://mail.google.com/mail/u/" + encodedAccount + "/" + (hash || "#inbox");
-      
+
       log("Executing redirect to:", targetUrl);
       window.location.href = targetUrl;
       return;

@@ -331,6 +331,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch((err) => sendResponse({ success: false, error: String(err.message) }));
     return true;
   }
+
+  if (message.action === "resolveGmailIndex") {
+    resolveGmailAccountIndex(message.email)
+      .then((index) => sendResponse({ success: true, index: index }))
+      .catch((err) => sendResponse({ success: false, index: null, error: String(err.message) }));
+    return true;
+  }
 });
 
 async function handleStartWorkflow(data) {
@@ -477,7 +484,8 @@ async function handleChatGptDone(data, chatTabId) {
   const customSignature = await getCustomSignatureSetting();
   const encodedTo = encodeURIComponent(recipientEmail || "");
   const encodedSu = encodeURIComponent(subject || "");
-  const gmailBaseUrl = getGmailBaseUrl(campaignGmailAuthUser);
+  const resolvedAuthUser = await resolveGmailAuthUser(campaignGmailAuthUser);
+  const gmailBaseUrl = getGmailBaseUrl(resolvedAuthUser);
   // Open Gmail compose in the normal inbox context so Gmail does not exit a standalone compose route after send.
   // Do NOT put body in URL - it gets truncated. Content script will fill body.
   const gmailUrl = `${gmailBaseUrl}/#inbox?compose=new&to=${encodedTo}&su=${encodedSu}`;
@@ -548,11 +556,90 @@ function getWorkflowKey(data) {
   return "unknown:" + Date.now();
 }
 
+// Scan open Gmail tabs and find the numeric account index that corresponds to the given
+// email address. Injects a tiny script into each eligible tab to read the active account
+// email from the Gmail DOM. Returns the index string (e.g. "8") or null if not found.
+async function resolveGmailAccountIndex(emailAddress) {
+  if (!emailAddress || !String(emailAddress).includes("@")) return null;
+  const targetEmail = String(emailAddress).toLowerCase().trim();
+  try {
+    const tabs = await chrome.tabs.query({ url: "https://mail.google.com/*" });
+    for (const tab of tabs) {
+      if (!tab.url || !tab.id) continue;
+      // Only look at tabs that already have a numeric index in the URL
+      const match = tab.url.match(/\/mail\/u\/(\d+)\//);
+      if (!match) continue;
+      const index = match[1];
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          func: () => {
+            // 1. aria-label on the account button (most reliable across Gmail versions)
+            const ariaNodes = document.querySelectorAll(
+              'a[aria-label*="Google Account:"], button[aria-label*="Google Account:"], [aria-label*="Google Account:"]'
+            );
+            for (const node of ariaNodes) {
+              if (node.closest('li[role="presentation"]') || node.getAttribute("role") === "menuitem") continue;
+              const label = node.getAttribute("aria-label") || "";
+              const m = label.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+              if (m) return m[0].toLowerCase();
+            }
+            // 2. data-email attribute (older Gmail / Workspace)
+            const dataNodes = document.querySelectorAll("[data-email]");
+            for (const node of dataNodes) {
+              const e = (node.getAttribute("data-email") || "").toLowerCase().trim();
+              if (e.includes("@")) return e;
+            }
+            // 3. Account-management links with Email= param
+            const accountLinks = document.querySelectorAll('a[href*="accounts.google.com"]');
+            for (const a of accountLinks) {
+              const href = a.getAttribute("href") || "";
+              const em = href.match(/[?&][Ee]mail=([^&#]+)/);
+              if (em) {
+                try {
+                  const decoded = decodeURIComponent(em[1]);
+                  if (decoded.includes("@")) return decoded.toLowerCase().trim();
+                } catch (_) {}
+              }
+            }
+            return null;
+          },
+        });
+        if (results && results[0] && results[0].result) {
+          const foundEmail = String(results[0].result).toLowerCase().trim();
+          if (foundEmail === targetEmail) {
+            console.log("[Leads Extension] Resolved Gmail index for", targetEmail, "→", index);
+            return index;
+          }
+        }
+      } catch (_) {
+        // Tab may be in an uninjectable state (about:blank, error page, etc.) — skip it.
+      }
+    }
+  } catch (_) {}
+  console.log("[Leads Extension] Could not resolve Gmail index for", targetEmail, "— defaulting to 0");
+  return null;
+}
+
+// Resolve the Gmail auth user value to a numeric account index when an email address is
+// given. Gmail does NOT support /u/email@gmail.com/ URLs — only numeric indices work.
+// If no matching open Gmail tab is found, falls back to "0".
+async function resolveGmailAuthUser(authUserValue) {
+  const raw = normalizeGmailAuthUser(authUserValue);
+  if (!raw.includes("@")) return raw; // already a numeric index or empty string
+  const resolved = await resolveGmailAccountIndex(raw);
+  return resolved !== null ? resolved : "0";
+}
+
 function normalizeGmailAuthUser(value) {
   const raw = String(value || "").trim();
   if (!raw) return "0";
 
-  // If it's already an email, return it (Gmail URLs support /u/email@gmail.com)
+  // NOTE: Gmail does NOT support email addresses in /u/ URL paths — only numeric indices.
+  // When a campaign stores an email address here, callers must first call resolveGmailAuthUser()
+  // (which finds the matching numeric index from open Gmail tabs) before building a URL.
+  // normalizeGmailAuthUser() itself is kept email-passthrough so it remains usable as a
+  // stable identifier to send to content-gmail.js for account verification purposes.
   if (raw.includes("@")) {
     return raw;
   }
@@ -578,8 +665,9 @@ function normalizeGmailAuthUser(value) {
 
 function getGmailBaseUrl(authUserValue) {
   const authUser = normalizeGmailAuthUser(authUserValue);
-  // Gmail handles the @ symbol raw in /u/ URLs better than %40.
-  // CRITICAL: A trailing slash after the email/index is required to prevent redirects to /u/0.
+  // IMPORTANT: authUserValue must already be a numeric index — NOT an email address.
+  // Call resolveGmailAuthUser() before this function whenever the campaign stores an email.
+  // Gmail only accepts /u/0/, /u/1/, etc. in URLs; email-based paths always return 404.
   const encoded = encodeURIComponent(authUser).replace(/%40/g, "@");
   return "https://mail.google.com/mail/u/" + encoded + "/";
 }
@@ -1592,7 +1680,8 @@ async function openGmailFromFallback(data, chatTabId) {
 
   const encodedTo = encodeURIComponent(recipientEmail || "");
   const encodedSu = encodeURIComponent(subject || "");
-  const gmailBaseUrl = getGmailBaseUrl(campaignGmailAuthUser);
+  const resolvedAuthUserFallback = await resolveGmailAuthUser(campaignGmailAuthUser);
+  const gmailBaseUrl = getGmailBaseUrl(resolvedAuthUserFallback);
   const gmailUrl = `${gmailBaseUrl}/#inbox?compose=new&to=${encodedTo}&su=${encodedSu}`;
   if (!recipientEmail) {
     throw new Error("Fallback workflow missing recipient email");
@@ -1661,7 +1750,8 @@ async function openGmailFromFallback(data, chatTabId) {
 async function handleStartFollowupWorkflow(data) {
   const { to, subject, body, leadId, threadId, campaignGmailAuthUser } = data;
   const customSignature = await getCustomSignatureSetting();
-  const gmailBaseUrl = getGmailBaseUrl(campaignGmailAuthUser || "");
+  const resolvedAuthUserFU = await resolveGmailAuthUser(campaignGmailAuthUser || "");
+  const gmailBaseUrl = getGmailBaseUrl(resolvedAuthUserFU);
   let gmailUrl;
   let openReply = false;
   const tid = threadId ? String(threadId).trim().replace(/^#+/, "") : "";
@@ -1809,7 +1899,8 @@ async function runDailyReplySweep(trigger) {
 
         if (!sweepLeadId || !sweepThreadId || !sweepEmail) continue;
 
-        var sweepGmailUrl = getGmailBaseUrl(sweepAuthUser) + "#all/" + encodeURIComponent(sweepThreadId);
+        var resolvedSweepAuthUser = await resolveGmailAuthUser(sweepAuthUser);
+        var sweepGmailUrl = getGmailBaseUrl(resolvedSweepAuthUser) + "#all/" + encodeURIComponent(sweepThreadId);
 
         try {
           if (sharedTabId === null) {
@@ -1897,7 +1988,8 @@ async function handleCheckReplyByThread(data) {
     return { success: false, error: "threadId and recipientEmail are required" };
   }
 
-  const gmailBaseUrl = getGmailBaseUrl(campaignGmailAuthUser);
+  const resolvedAuthUserCheck = await resolveGmailAuthUser(campaignGmailAuthUser);
+  const gmailBaseUrl = getGmailBaseUrl(resolvedAuthUserCheck);
   const gmailUrl = gmailBaseUrl + "#all/" + encodeURIComponent(threadId);
   const tab = await chrome.tabs.create({ url: gmailUrl, active: !RUN_TABS_IN_BACKGROUND });
   await waitForTabReady(tab.id);
