@@ -592,8 +592,12 @@ async function resolveGmailAccountIndex(emailAddress) {
     const stored = await chrome.storage.local.get("gmailAccountIndexCache");
     const cache = stored.gmailAccountIndexCache || {};
     if (cache[targetEmail] !== undefined) {
-      console.log("[Leads Extension] Gmail index cache HIT for", targetEmail, "→", cache[targetEmail]);
-      return String(cache[targetEmail]);
+      const cachedIndex = String(cache[targetEmail]);
+      if (/^\d+$/.test(cachedIndex)) {
+        console.log("[Leads Extension] Gmail index cache HIT for", targetEmail, "→", cachedIndex);
+        return cachedIndex;
+      }
+      console.warn("[Leads Extension] Gmail index cache value invalid for", targetEmail, "— ignoring:", cachedIndex);
     }
   } catch (_) {}
 
