@@ -90,6 +90,48 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   });
 });
 
+// Intercept any Gmail tab that navigates to an email-based /u/email@domain/ URL
+// and immediately rewrite it to the correct numeric /u/N/ index.
+// This is a global safety net — it catches URLs from any source (dashboard links,
+// extension-opened tabs, manual navigation) regardless of pre-open resolution.
+chrome.tabs.onUpdated.addListener(function gmailIndexInterceptor(tabId, changeInfo) {
+  if (!changeInfo.url) return;
+  const url = changeInfo.url;
+
+  // Match only Gmail URLs with an email address in the /u/ slot (not numeric)
+  const emailUrlMatch = url.match(/^(https:\/\/mail\.google\.com\/mail\/u\/)([^/]+@[^/]+)(\/.*)?$/);
+  if (!emailUrlMatch) return;
+
+  const prefix = emailUrlMatch[1];
+  const rawSlot = emailUrlMatch[2];
+  const rest = emailUrlMatch[3] || "/";
+
+  let emailSlot;
+  try {
+    emailSlot = decodeURIComponent(rawSlot);
+  } catch (_) {
+    emailSlot = rawSlot;
+  }
+
+  if (!emailSlot.includes("@")) return;
+
+  // Resolve numeric index: persistent cache first (Task #9), then open-tab scan.
+  // resolveGmailAccountIndex is defined later in this file but hoisting is fine for
+  // the async callback which only executes after the module has fully loaded.
+  resolveGmailAccountIndex(emailSlot).then(function(numericIndex) {
+    if (numericIndex === null || numericIndex === undefined) {
+      numericIndex = "0";
+    }
+    const correctedUrl = prefix + numericIndex + rest;
+    console.log("[Leads Extension] Intercepted email Gmail URL → redirecting to numeric index:", correctedUrl);
+    chrome.tabs.update(tabId, { url: correctedUrl }).catch(function(err) {
+      console.warn("[Leads Extension] Tab redirect failed (tab may have closed):", err && err.message ? err.message : String(err));
+    });
+  }).catch(function(err) {
+    console.warn("[Leads Extension] gmailIndexInterceptor resolution error:", err && err.message ? err.message : String(err));
+  });
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "startWorkflow") {
     console.log("[Leads Extension] RAW startWorkflow data keys:", message.data ? Object.keys(message.data).join(",") : "(no data)", "scheduleSendTime:", message.data && message.data.scheduleSendTime ? message.data.scheduleSendTime : "(MISSING)");
