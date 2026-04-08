@@ -639,14 +639,15 @@ function getWorkflowKey(data) {
 // automatically. If no Gmail tab is open, a background tab is opened at /u/0/ temporarily.
 async function fetchGmailAccountMap() {
   // This function is injected into a Gmail page and runs there so GAIA cookies are sent.
+  // Returns { status, text } so the caller can log a diagnostic snippet on failure.
   const INJECTED_LIST_ACCOUNTS = async () => {
     try {
       const url = "https://accounts.google.com/ListAccounts?gpsia=1&source=ChromiumBrowser&json=standard";
       const resp = await fetch(url, { credentials: "include" });
-      if (!resp.ok) return null;
-      return await resp.text();
-    } catch (_) {
-      return null;
+      const text = await resp.text();
+      return { status: resp.status, ok: resp.ok, text };
+    } catch (e) {
+      return { status: 0, ok: false, text: "", error: String(e) };
     }
   };
 
@@ -675,12 +676,18 @@ async function fetchGmailAccountMap() {
       target: { tabId: targetTabId },
       func: INJECTED_LIST_ACCOUNTS,
     });
-    const responseText = results && results[0] && results[0].result ? results[0].result : null;
-    if (!responseText) throw new Error("ListAccounts injected fetch returned no data");
+    const raw = results && results[0] && results[0].result ? results[0].result : null;
+    if (!raw || !raw.ok) {
+      const snippet = raw ? (raw.error || ("HTTP " + raw.status + " text:" + (raw.text || "").slice(0, 120))) : "null result";
+      throw new Error("ListAccounts injected fetch failed: " + snippet);
+    }
+    const responseText = raw.text || "";
+    // Log a diagnostic snippet so issues with the response format are visible.
+    console.log("[Leads Extension] ListAccounts raw snippet:", responseText.slice(0, 200).replace(/\n/g, "\\n"));
 
     // Parse the XSSI-prefixed JSON response.
     const jsonStart = responseText.indexOf("[");
-    if (jsonStart === -1) throw new Error("ListAccounts: no JSON array in response");
+    if (jsonStart === -1) throw new Error("ListAccounts: no JSON array in response (snippet logged above)");
     const parsed = JSON.parse(responseText.slice(jsonStart));
     const accounts = Array.isArray(parsed[1]) ? parsed[1] : [];
     const map = {};
@@ -816,6 +823,74 @@ async function resolveGmailAccountIndex(emailAddress) {
       }
     }
   } catch (_) {}
+
+  // 4. Last resort: probe /u/0/ through /u/4/ by opening hidden background tabs.
+  //    Each tab is opened, checked, then immediately closed — clean and minimal.
+  const READ_EMAIL_FROM_PAGE = () => {
+    const ariaNodes = document.querySelectorAll(
+      'a[aria-label*="Google Account:"], button[aria-label*="Google Account:"], [aria-label*="Google Account:"]'
+    );
+    for (const node of ariaNodes) {
+      if (node.closest('li[role="presentation"]') || node.getAttribute("role") === "menuitem") continue;
+      const label = node.getAttribute("aria-label") || "";
+      const m = label.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+      if (m) return m[0].toLowerCase();
+    }
+    const dataNodes = document.querySelectorAll("[data-email]");
+    for (const node of dataNodes) {
+      const e = (node.getAttribute("data-email") || "").toLowerCase().trim();
+      if (e.includes("@")) return e;
+    }
+    const accountLinks = document.querySelectorAll('a[href*="accounts.google.com"]');
+    for (const a of accountLinks) {
+      const href = a.getAttribute("href") || "";
+      const em = href.match(/[?&][Ee]mail=([^&#]+)/);
+      if (em) {
+        try {
+          const decoded = decodeURIComponent(em[1]);
+          if (decoded.includes("@")) return decoded.toLowerCase().trim();
+        } catch (_) {}
+      }
+    }
+    return null;
+  };
+  console.log("[Leads Extension] Probing /u/0-4/ for", targetEmail);
+  for (let probeIndex = 0; probeIndex <= 4; probeIndex++) {
+    let probeTab = null;
+    try {
+      probeTab = await chrome.tabs.create({
+        url: "https://mail.google.com/mail/u/" + probeIndex + "/",
+        active: false,
+      });
+      await waitForTabReady(probeTab.id);
+      await delay(1500);
+      const probeResults = await chrome.scripting.executeScript({
+        target: { tabId: probeTab.id },
+        func: READ_EMAIL_FROM_PAGE,
+      });
+      if (probeResults && probeResults[0] && probeResults[0].result) {
+        const probeEmail = String(probeResults[0].result).toLowerCase().trim();
+        // Cache this mapping regardless of whether it's our target.
+        try {
+          const st = await chrome.storage.local.get("gmailAccountIndexCache");
+          const c = st.gmailAccountIndexCache || {};
+          c[probeEmail] = String(probeIndex);
+          await chrome.storage.local.set({ gmailAccountIndexCache: c });
+        } catch (_) {}
+        if (probeEmail === targetEmail) {
+          console.log("[Leads Extension] Probe found index for", targetEmail, "→", probeIndex);
+          return String(probeIndex);
+        }
+      }
+    } catch (_) {
+      // Probe tab may fail (injection error, tab closed early) — skip to next index.
+    } finally {
+      if (probeTab) {
+        try { await chrome.tabs.remove(probeTab.id); } catch (_) {}
+      }
+    }
+  }
+
   console.log("[Leads Extension] Could not resolve Gmail index for target email — returning null");
   return null;
 }
