@@ -633,6 +633,36 @@ function getWorkflowKey(data) {
   return "unknown:" + Date.now();
 }
 
+// Fetch all Google accounts signed in to the browser (in /u/N/ order) from Google's
+// ListAccounts endpoint. Returns a map of { email: indexString } or throws on failure.
+// The endpoint uses the browser's existing Google session cookies automatically.
+async function fetchGmailAccountMap() {
+  const url = "https://accounts.google.com/ListAccounts?gpsia=1&source=ChromiumBrowser&json=standard";
+  const resp = await fetch(url, { credentials: "include" });
+  if (!resp.ok) throw new Error("ListAccounts fetch failed: " + resp.status);
+  const text = await resp.text();
+  // Strip XSSI/JSON-hijacking prefix: starts with ")]}while(1);</x>" or similar garbage
+  const jsonStart = text.indexOf("[");
+  if (jsonStart === -1) throw new Error("ListAccounts: no JSON array found in response");
+  const parsed = JSON.parse(text.slice(jsonStart));
+  // parsed[1] is the array of account entries, ordered by /u/N/ index
+  const accounts = Array.isArray(parsed[1]) ? parsed[1] : [];
+  const map = {};
+  for (let i = 0; i < accounts.length; i++) {
+    const entry = accounts[i];
+    if (!Array.isArray(entry)) continue;
+    // Email is typically at index 3; some response variants also include it at index 10.
+    const candidates = [entry[3], entry[10]];
+    for (const candidate of candidates) {
+      if (candidate && String(candidate).includes("@")) {
+        map[String(candidate).toLowerCase().trim()] = String(i);
+        break;
+      }
+    }
+  }
+  return map; // e.g. { "ron.wyski@gmail.com": "2", "benwildev@gmail.com": "0" }
+}
+
 // Scan open Gmail tabs and find the numeric account index that corresponds to the given
 // email address. Injects a tiny script into each eligible tab to read the active account
 // email from the Gmail DOM. Returns the index string (e.g. "8") or null if not found.
@@ -654,7 +684,30 @@ async function resolveGmailAccountIndex(emailAddress) {
     }
   } catch (_) {}
 
-  // 2. Fall back to scanning currently open Gmail tabs.
+  // 2. Fetch the browser's full Google account list from ListAccounts API.
+  //    This returns all signed-in accounts in /u/N/ order — instant and requires no tabs.
+  try {
+    const accountMap = await fetchGmailAccountMap();
+    if (Object.keys(accountMap).length > 0) {
+      // Persist ALL discovered email→index pairs to the cache in one shot.
+      try {
+        const stored = await chrome.storage.local.get("gmailAccountIndexCache");
+        const cache = stored.gmailAccountIndexCache || {};
+        Object.assign(cache, accountMap);
+        await chrome.storage.local.set({ gmailAccountIndexCache: cache });
+        console.log("[Leads Extension] ListAccounts: cached", Object.keys(accountMap).length, "account(s):", Object.keys(accountMap).join(", "));
+      } catch (_) {}
+      if (accountMap[targetEmail] !== undefined) {
+        console.log("[Leads Extension] ListAccounts resolved index for", targetEmail, "→", accountMap[targetEmail]);
+        return accountMap[targetEmail];
+      }
+      console.log("[Leads Extension] ListAccounts: target email", targetEmail, "not found in signed-in accounts");
+    }
+  } catch (listErr) {
+    console.warn("[Leads Extension] ListAccounts fetch failed — falling back to tab scan:", listErr && listErr.message ? listErr.message : String(listErr));
+  }
+
+  // 3. Fall back to scanning currently open Gmail tabs.
   try {
     const tabs = await chrome.tabs.query({ url: "https://mail.google.com/*" });
     for (const tab of tabs) {
