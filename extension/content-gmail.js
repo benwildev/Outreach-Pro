@@ -3072,10 +3072,12 @@
     let currentAccountEmail = getCurrentAccountEmail();
 
     // MATCHING STRATEGY (DEFINITIVE):
-    // 1. If we are at a non-zero numeric index (u/1, u/2, etc.) -> PROCEED.
-    //    Gmail automatically maps u/email/ to u/N/. If we are at N > 0, we trust Gmail got it right.
+    // NOTE: Gmail does NOT support /u/email@.../  URLs — only numeric indices (/u/0/, /u/1/, etc.).
+    //       background.js resolves the campaign email to a numeric index before opening this tab,
+    //       so the current URL should already be a numeric-indexed Gmail URL.
+    // 1. If we are at a non-zero numeric index (u/1, u/2, etc.) -> PROCEED (background resolved correctly).
     // 2. If we are at u/0 -> We only redirect if we have NOT already tried redirecting in this session.
-    // 3. If we are already at u/email@... -> PROCEED (it will likely redirect itself soon).
+    // 3. If we are at a u/email@... URL (unexpected) -> trigger redirect with index resolution.
 
     const urlIsEmail = currentAuthUser.includes("@");
     const urlIsZero = (currentAuthUser === "0");

@@ -1888,6 +1888,10 @@ async function runDailyReplySweep(trigger) {
       var acctLeads = accountGroups[acctKey];
       var sharedTabId = null;
 
+      // Resolve the Gmail account index once per account group (not per lead) to avoid
+      // repeated tab-scanning for the same auth user across all leads in this group.
+      var resolvedSweepAuthUserForGroup = await resolveGmailAuthUser(acctKey);
+
       for (var li = 0; li < acctLeads.length; li++) {
         if (replySweepStopped) break;
 
@@ -1895,12 +1899,10 @@ async function runDailyReplySweep(trigger) {
         var sweepLeadId = sweepLead.id ? String(sweepLead.id) : "";
         var sweepThreadId = sweepLead.gmailThreadId ? String(sweepLead.gmailThreadId).trim().replace(/^#+/, "") : "";
         var sweepEmail = sweepLead.recipientEmail ? String(sweepLead.recipientEmail).trim().toLowerCase() : "";
-        var sweepAuthUser = sweepLead.campaignGmailAuthUser ? String(sweepLead.campaignGmailAuthUser).trim() : "";
 
         if (!sweepLeadId || !sweepThreadId || !sweepEmail) continue;
 
-        var resolvedSweepAuthUser = await resolveGmailAuthUser(sweepAuthUser);
-        var sweepGmailUrl = getGmailBaseUrl(resolvedSweepAuthUser) + "#all/" + encodeURIComponent(sweepThreadId);
+        var sweepGmailUrl = getGmailBaseUrl(resolvedSweepAuthUserForGroup) + "#all/" + encodeURIComponent(sweepThreadId);
 
         try {
           if (sharedTabId === null) {
