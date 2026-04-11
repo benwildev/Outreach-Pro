@@ -1669,6 +1669,28 @@ async function runSingleBulkWorkflow(item) {
       return;
     }
 
+    // Compute staggered schedule time for this follow-up (same logic as initial sends).
+    const fuBaseScheduleTime = current.scheduleSendTime || bulkAutomationState.scheduleSendTime || "";
+    const fuStaggerMs = bulkAutomationState.scheduleStaggerMs || 0;
+    const fuLeadIndex = bulkAutomationState.currentIndex || 0;
+    let fuEffectiveScheduleTime = fuBaseScheduleTime;
+    if (fuBaseScheduleTime && fuStaggerMs > 0 && fuLeadIndex > 0) {
+      try {
+        const fuBase = new Date(fuBaseScheduleTime);
+        if (!isNaN(fuBase.getTime())) {
+          const fuStaggered = new Date(fuBase.getTime() + fuLeadIndex * fuStaggerMs);
+          const y = fuStaggered.getFullYear();
+          const mo = String(fuStaggered.getMonth() + 1).padStart(2, "0");
+          const d = String(fuStaggered.getDate()).padStart(2, "0");
+          const h = String(fuStaggered.getHours()).padStart(2, "0");
+          const mi = String(fuStaggered.getMinutes()).padStart(2, "0");
+          fuEffectiveScheduleTime = `${y}-${mo}-${d}T${h}:${mi}`;
+        }
+      } catch (e) {
+        console.warn("[Leads Extension] Failed to compute staggered follow-up time:", e);
+      }
+    }
+
     const payload = {
       leadId: leadId,
       to: recipientEmail,
@@ -1677,6 +1699,7 @@ async function runSingleBulkWorkflow(item) {
       threadId: current.gmailThreadId || null,
       campaignGmailAuthUser: current.campaignGmailAuthUser || "",
       campaignGmailAccountIndex: current.campaignGmailAccountIndex || "",
+      scheduleSendTime: fuEffectiveScheduleTime,
     };
     const completionPromise = waitForBulkWorkflowCompletion(leadId, BULK_WORKFLOW_TIMEOUT_MS);
     await handleStartFollowupWorkflow(payload);
@@ -2082,7 +2105,7 @@ async function openGmailFromFallback(data, chatTabId) {
 }
 
 async function handleStartFollowupWorkflow(data) {
-  const { to, subject, body, leadId, threadId, campaignGmailAuthUser, campaignGmailAccountIndex } = data;
+  const { to, subject, body, leadId, threadId, campaignGmailAuthUser, campaignGmailAccountIndex, scheduleSendTime } = data;
   const customSignature = await getCustomSignatureSetting();
   const resolvedAuthUserFU = await resolveGmailIndex(campaignGmailAuthUser, campaignGmailAccountIndex);
   const gmailBaseUrl = getGmailBaseUrl(resolvedAuthUserFU);
@@ -2103,6 +2126,7 @@ async function handleStartFollowupWorkflow(data) {
   const tab = await chrome.tabs.create({ url: gmailUrl, active: !RUN_TABS_IN_BACKGROUND });
   await waitForTabReady(tab.id);
   await delay(threadId ? 3000 : 2000);
+  const resolvedScheduleTime = scheduleSendTime ? String(scheduleSendTime).trim() : "";
   const sentToGmail = await sendMessageToTabWithRetry(tab.id, {
     action: "fillAndSend",
     data: {
@@ -2115,7 +2139,8 @@ async function handleStartFollowupWorkflow(data) {
       isFollowup: true,
       openReply: openReply,
       threadIdForUrl: threadId ? String(threadId).trim().replace(/^#+/, "") : "",
-      autoSend: true,
+      scheduleSendTime: resolvedScheduleTime,
+      autoSend: !resolvedScheduleTime,
     },
   }, 7, 900);
   if (!sentToGmail) {

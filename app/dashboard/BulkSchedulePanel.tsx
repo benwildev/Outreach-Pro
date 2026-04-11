@@ -18,16 +18,20 @@ import {
   K_SCHEDULE_TIME,
   K_SCHED_LIMIT,
   K_SCHED_STAGGER,
+  K_SCHED_PHASE,
 } from "./extensionBridge";
 import { Play, Square, CalendarClock, ChevronDown, ChevronUp, Unlock } from "lucide-react";
 
 const SCHED_COMPOSE_DELAY_MS = 10000;
+
+type SchedPhase = "send" | "followup" | "both" | "followup1" | "followup2";
 
 export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: string | null }) {
   const [scheduleDate, setScheduleDate] = useState(getTomorrowDate);
   const [scheduleTime, setScheduleTime] = useState("");
   const [limit, setLimit] = useState(50);
   const [staggerMin, setStaggerMin] = useState(3);
+  const [schedPhase, setSchedPhase] = useState<SchedPhase>("send");
   const [state, setState] = useState<BulkState>({});
   const [error, setError] = useState("");
   const [hasRuntime, setHasRuntime] = useState(false);
@@ -46,6 +50,8 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
         setScheduleDate(datePart && datePart >= today ? datePart : getTomorrowDate());
         setScheduleTime(normalizeTime(timePart || "", ""));
       }
+      const savedPhase = window.localStorage.getItem(K_SCHED_PHASE) ?? "send";
+      setSchedPhase((["send", "both", "followup", "followup1", "followup2"].includes(savedPhase) ? savedPhase : "send") as SchedPhase);
     }
   }, []);
 
@@ -89,10 +95,12 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
     const combinedSchedule = `${scheduleDate}T${scheduleTime}`;
     const maxLeads = clamp(limit, 1, 500);
     const staggerMinutes = clamp(staggerMin, 1, 60);
+    const followupEnabled = schedPhase !== "send";
 
     window.localStorage.setItem(K_SCHEDULE_TIME, combinedSchedule);
     window.localStorage.setItem(K_SCHED_LIMIT, String(maxLeads));
     window.localStorage.setItem(K_SCHED_STAGGER, String(staggerMinutes));
+    window.localStorage.setItem(K_SCHED_PHASE, schedPhase);
 
     try {
       const response = await sendRuntimeMessage({
@@ -102,7 +110,8 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
           delayMinMs: SCHED_COMPOSE_DELAY_MS,
           delayMaxMs: SCHED_COMPOSE_DELAY_MS,
           limit: maxLeads,
-          followupEnabled: false,
+          startPhase: schedPhase,
+          followupEnabled,
           windowEnabled: false,
           scheduleSendTime: combinedSchedule,
           scheduleStaggerMs: staggerMinutes * 60 * 1000,
@@ -232,6 +241,26 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
               />
             </label>
 
+            {/* Phase picker */}
+            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-1 py-1 shadow-sm">
+              <span className="text-[11px] text-gray-500 font-medium pl-1.5 pr-2 whitespace-nowrap">Phase:</span>
+              {(["send", "both", "followup", "followup1", "followup2"] as const).map((p) => (
+                <button
+                  key={p}
+                  type="button"
+                  onClick={() => setSchedPhase(p)}
+                  disabled={isActive}
+                  className={`h-6 px-2.5 text-[11px] rounded-md font-medium transition-colors whitespace-nowrap ${
+                    schedPhase === p
+                      ? "bg-amber-500 text-white shadow-sm"
+                      : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+                  }`}
+                >
+                  {p === "send" ? "New only" : p === "both" ? "New + Follow-ups" : p === "followup" ? "All Follow-ups" : p === "followup1" ? "Follow-up 1" : "Follow-up 2"}
+                </button>
+              ))}
+            </div>
+
             <div className="w-px h-6 bg-amber-200 mx-1" />
 
             <div className="flex items-center gap-1.5">
@@ -256,6 +285,11 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
 
           <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1">
             <span className="text-[11px] text-gray-500">Phase: <span className="font-medium text-gray-700">{state.phase || "send"}</span></span>
+            {state.startPhase && state.startPhase !== "send" && (
+              <span className="text-[11px] text-amber-600 font-medium">
+                ({state.startPhase === "both" ? "new + follow-ups" : state.startPhase === "followup1" ? "follow-up 1 only" : state.startPhase === "followup2" ? "follow-up 2 only" : "all follow-ups"})
+              </span>
+            )}
             {progressText && <span className="text-[11px] text-gray-500">{progressText}</span>}
             {error && <span className="text-[11px] text-red-600 font-medium">{error}</span>}
           </div>
