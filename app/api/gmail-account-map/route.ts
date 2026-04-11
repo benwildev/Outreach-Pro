@@ -55,7 +55,14 @@ export async function DELETE(request: Request) {
     if (!email || !email.includes("@")) {
       return NextResponse.json({ success: false, error: "email query param required" }, { status: 400 });
     }
-    await prisma.gmailAccountMap.delete({ where: { email } });
+    try {
+      await prisma.gmailAccountMap.delete({ where: { email } });
+    } catch (err: any) {
+      if (err?.code === "P2025") {
+        return NextResponse.json({ success: true, note: "not found" }, { status: 200 });
+      }
+      throw err;
+    }
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("DELETE /api/gmail-account-map error:", error);
