@@ -957,6 +957,7 @@
           threadId: threadId,
           recipientEmail: recipientEmail,
           campaignGmailAuthUser: data.sentGmailAuthUser || data.campaignGmailAuthUser || "",
+          campaignGmailAccountIndex: data.campaignGmailAccountIndex || "",
         },
       });
 
@@ -1143,6 +1144,7 @@
                   body: body,
                   threadId: data.gmailThreadId || null,
                   campaignGmailAuthUser: data.sentGmailAuthUser || data.campaignGmailAuthUser || "",
+                  campaignGmailAccountIndex: data.campaignGmailAccountIndex || "",
                 },
               });
             } catch (err) {

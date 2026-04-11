@@ -1266,6 +1266,7 @@ function toBulkQueueItem(item, workflowType) {
     campaignName: source.campaignName ? String(source.campaignName).trim() : "",
     campaignChatId: source.campaignChatId ? String(source.campaignChatId).trim() : "",
     campaignGmailAuthUser: source.campaignGmailAuthUser ? String(source.campaignGmailAuthUser).trim() : "",
+    campaignGmailAccountIndex: source.campaignGmailAccountIndex != null ? String(source.campaignGmailAccountIndex).trim() : "",
     gmailThreadId: source.gmailThreadId ? String(source.gmailThreadId).trim() : "",
     recipientName: source.recipientName ? String(source.recipientName).trim() : "",
     recipientEmail: source.recipientEmail ? String(source.recipientEmail).trim() : "",
@@ -2153,14 +2154,17 @@ async function runDailyReplySweep(trigger) {
       return { success: true, checked: 0, marked: 0 };
     }
 
-    // Group leads by Gmail auth user so we open ONE tab per account and
+    // Group leads by effective Gmail account so we open ONE tab per account and
     // navigate it between threads — instead of opening a new tab per lead.
+    // If a campaign sets campaignGmailAccountIndex, that takes priority over auth-user detection.
     var accountGroups = {};
     for (var qi = 0; qi < queue.length; qi++) {
       var qLead = queue[qi] || {};
-      var acct = qLead.campaignGmailAuthUser ? String(qLead.campaignGmailAuthUser).trim() : "";
-      if (!accountGroups[acct]) accountGroups[acct] = [];
-      accountGroups[acct].push(qLead);
+      var acctIdx = qLead.campaignGmailAccountIndex != null ? String(qLead.campaignGmailAccountIndex).trim() : "";
+      var acctAuth = qLead.campaignGmailAuthUser ? String(qLead.campaignGmailAuthUser).trim() : "";
+      var groupKey = /^\d+$/.test(acctIdx) ? "__idx__" + acctIdx : acctAuth;
+      if (!accountGroups[groupKey]) accountGroups[groupKey] = { authUser: acctAuth, accountIndex: acctIdx, leads: [] };
+      accountGroups[groupKey].leads.push(qLead);
     }
 
     var accountKeys = Object.keys(accountGroups);
@@ -2168,12 +2172,13 @@ async function runDailyReplySweep(trigger) {
       if (replySweepStopped) break;
 
       var acctKey = accountKeys[ai];
-      var acctLeads = accountGroups[acctKey];
+      var acctGroup = accountGroups[acctKey];
+      var acctLeads = acctGroup.leads;
       var sharedTabId = null;
 
       // Resolve the Gmail account index once per account group (not per lead) to avoid
       // repeated tab-scanning for the same auth user across all leads in this group.
-      var resolvedSweepAuthUserForGroup = await resolveGmailAuthUser(acctKey);
+      var resolvedSweepAuthUserForGroup = await resolveGmailIndex(acctGroup.authUser, acctGroup.accountIndex);
 
       for (var li = 0; li < acctLeads.length; li++) {
         if (replySweepStopped) break;

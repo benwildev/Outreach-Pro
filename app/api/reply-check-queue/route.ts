@@ -34,6 +34,7 @@ export async function GET(request: Request) {
       recipientEmail: lead.recipientEmail,
       gmailThreadId: lead.gmailThreadId,
       campaignGmailAuthUser: lead.sentGmailAuthUser || (lead.campaign?.gmailAuthUser ?? "").split(",")[0].trim() || "",
+      campaignGmailAccountIndex: lead.campaign?.gmailAccountIndex != null ? String(lead.campaign.gmailAccountIndex) : "",
     }));
 
     return NextResponse.json({
