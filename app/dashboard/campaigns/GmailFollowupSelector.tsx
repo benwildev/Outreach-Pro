@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
-import { Mail, Plus, Trash2, Loader2, CheckCircle2, AlertCircle, RefreshCw, Check } from "lucide-react";
+import { Mail, Plus, Loader2, CheckCircle2, AlertCircle, RefreshCw, Check } from "lucide-react";
 
 interface GmailAccountRow {
   id: string;
@@ -26,7 +26,6 @@ export default function GmailFollowupSelector({ initialFollowupEmail, initialAcc
   const [saving, startSaving] = useTransition();
   const [refreshing, setRefreshing] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
-  const [deletingEmail, setDeletingEmail] = useState<string | null>(null);
 
   function showToast(msg: string, ok = true) {
     setToast({ msg, ok });
@@ -111,24 +110,6 @@ export default function GmailFollowupSelector({ initialFollowupEmail, initialAcc
     });
   }
 
-  async function handleDelete(email: string) {
-    setDeletingEmail(email);
-    try {
-      const res = await fetch(`/api/gmail-account-map?email=${encodeURIComponent(email)}`, { method: "DELETE" });
-      if (res.ok) {
-        setAccounts((prev) => prev.filter((a) => a.email !== email));
-        if (selected === email) setSelected("");
-        showToast(`Removed ${email}`);
-      } else {
-        showToast("Failed to remove", false);
-      }
-    } catch {
-      showToast("Network error", false);
-    } finally {
-      setDeletingEmail(null);
-    }
-  }
-
   const selectedAccount = accounts.find((a) => a.email === selected);
   const isManualSelected = selected && !selectedAccount;
 
@@ -182,7 +163,6 @@ export default function GmailFollowupSelector({ initialFollowupEmail, initialAcc
                 <th className="text-left text-[10px] font-bold text-gray-500 uppercase tracking-wide px-3 py-2">Email</th>
                 <th className="text-center text-[10px] font-bold text-gray-500 uppercase tracking-wide px-3 py-2">/u/N/</th>
                 <th className="text-center text-[10px] font-bold text-gray-500 uppercase tracking-wide px-3 py-2">Source</th>
-                <th className="w-10 px-3 py-2" />
               </tr>
             </thead>
             <tbody>
@@ -209,16 +189,6 @@ export default function GmailFollowupSelector({ initialFollowupEmail, initialAcc
                       <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${row.source === "auto" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-600 border-gray-200"}`}>
                         {row.source === "auto" ? "auto" : "manual"}
                       </span>
-                    </td>
-                    <td className="px-3 py-2.5" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(row.email)}
-                        disabled={deletingEmail === row.email}
-                        className="inline-flex items-center gap-1 text-[11px] font-medium text-red-500 hover:text-red-700 border border-red-100 hover:border-red-300 bg-red-50 hover:bg-red-100 rounded-md px-1.5 py-1 transition-colors"
-                      >
-                        {deletingEmail === row.email ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                      </button>
                     </td>
                   </tr>
                 );

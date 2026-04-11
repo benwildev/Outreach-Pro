@@ -3,24 +3,6 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-async function resolveGmailAccountIndex(
-  gmailFollowupEmail: string | null,
-  gmailAccountIndex: number | null
-): Promise<string> {
-  if (gmailFollowupEmail) {
-    const mapRow = await prisma.gmailAccountMap.findUnique({
-      where: { email: gmailFollowupEmail.toLowerCase() },
-    });
-    if (mapRow != null) {
-      return String(mapRow.accountIndex);
-    }
-  }
-  if (gmailAccountIndex != null) {
-    return String(gmailAccountIndex);
-  }
-  return "";
-}
-
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
@@ -50,26 +32,38 @@ export async function GET(request: Request) {
       take: limit,
     });
 
-    const normalizedLeads = await Promise.all(
-      leads.map(async (lead) => {
-        const campaignGmailAccountIndex = await resolveGmailAccountIndex(
-          lead.campaign?.gmailFollowupEmail ?? null,
-          lead.campaign?.gmailAccountIndex ?? null
-        );
-        const campaignGmailAuthUser =
-          lead.campaign?.gmailFollowupEmail ||
-          lead.sentGmailAuthUser ||
-          (lead.campaign?.gmailAuthUser ?? "").split(",")[0].trim() ||
-          "";
-        return {
-          id: lead.id,
-          recipientEmail: lead.recipientEmail,
-          gmailThreadId: lead.gmailThreadId,
-          campaignGmailAuthUser,
-          campaignGmailAccountIndex,
-        };
-      })
+    const followupEmails = Array.from(
+      new Set(leads.map((l) => l.campaign?.gmailFollowupEmail).filter((e): e is string => !!e))
     );
+    const accountMapRows = followupEmails.length > 0
+      ? await prisma.gmailAccountMap.findMany({ where: { email: { in: followupEmails } } })
+      : [];
+    const accountIndexByEmail = new Map(accountMapRows.map((r) => [r.email, r.accountIndex]));
+
+    const normalizedLeads = leads.map((lead) => {
+      const followupEmail = lead.campaign?.gmailFollowupEmail ?? null;
+      let campaignGmailAccountIndex = "";
+      if (followupEmail) {
+        const mapped = accountIndexByEmail.get(followupEmail);
+        campaignGmailAccountIndex = mapped != null ? String(mapped) : "";
+      } else if (lead.campaign?.gmailAccountIndex != null) {
+        campaignGmailAccountIndex = String(lead.campaign.gmailAccountIndex);
+      }
+
+      const campaignGmailAuthUser =
+        followupEmail ||
+        lead.sentGmailAuthUser ||
+        (lead.campaign?.gmailAuthUser ?? "").split(",")[0].trim() ||
+        "";
+
+      return {
+        id: lead.id,
+        recipientEmail: lead.recipientEmail,
+        gmailThreadId: lead.gmailThreadId,
+        campaignGmailAuthUser,
+        campaignGmailAccountIndex,
+      };
+    });
 
     return NextResponse.json({
       success: true,
