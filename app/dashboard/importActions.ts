@@ -274,28 +274,45 @@ export async function importLeadsFromGSheets(formData: FormData): Promise<Import
   }
 
   const { spreadsheetId, gid } = parsed;
-  const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`;
 
-  let csvText: string;
-  try {
-    const res = await fetch(exportUrl, { redirect: "follow" });
-    if (!res.ok) {
-      if (res.status === 401 || res.status === 403) {
-        return { success: false, error: "Access denied. Make sure the sheet is shared as 'Anyone with the link can view'." };
+  const fetchHeaders = {
+    "User-Agent": "Mozilla/5.0 (compatible; outreach-bot/1.0)",
+    "Accept": "text/csv,text/plain,*/*",
+  };
+
+  const urlsToTry = [
+    `https://docs.google.com/spreadsheets/d/${spreadsheetId}/gviz/tq?tqx=out:csv&gid=${gid}`,
+    `https://docs.google.com/spreadsheets/d/${spreadsheetId}/pub?gid=${gid}&single=true&output=csv`,
+    `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`,
+  ];
+
+  let csvText: string = "";
+  let lastError = "";
+  for (const exportUrl of urlsToTry) {
+    try {
+      const res = await fetch(exportUrl, { redirect: "follow", headers: fetchHeaders });
+      if (!res.ok) {
+        lastError = `HTTP ${res.status}`;
+        continue;
       }
-      return { success: false, error: `Could not fetch sheet (HTTP ${res.status}). Check that the URL is correct and the sheet is publicly viewable.` };
+      const contentType = res.headers.get("content-type") || "";
+      if (contentType.includes("text/html")) {
+        lastError = "received HTML instead of CSV";
+        continue;
+      }
+      csvText = await res.text();
+      if (csvText.trim()) break;
+      lastError = "empty response";
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err);
     }
-    const contentType = res.headers.get("content-type") || "";
-    if (contentType.includes("text/html")) {
-      return { success: false, error: "Could not access this sheet. Make sure it is shared as 'Anyone with the link can view'." };
-    }
-    csvText = await res.text();
-  } catch (err) {
-    return { success: false, error: `Failed to fetch Google Sheet: ${err instanceof Error ? err.message : String(err)}` };
   }
 
   if (!csvText.trim()) {
-    return { success: false, error: "The sheet appears to be empty." };
+    return {
+      success: false,
+      error: `Could not fetch sheet (${lastError}). Make sure the sheet is shared as "Anyone with the link can view".`,
+    };
   }
 
   let workbook: XLSX.WorkBook;
