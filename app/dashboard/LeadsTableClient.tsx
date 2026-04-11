@@ -284,6 +284,7 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                     data-campaign-id={lead.campaign.id}
                                     data-campaign-chat-id={lead.campaign.chatGptChatId ?? ""}
                                     data-campaign-gmail-auth-user={lead.campaign.gmailAuthUser ?? ""}
+                                    data-campaign-gmail-account-index={lead.campaign.gmailAccountIndex != null ? String(lead.campaign.gmailAccountIndex) : ""}
                                     data-campaign-body={lead.campaign.body ?? ""}
                                     data-campaign-subject={lead.campaign.subject ?? ""}
                                     data-followup1={lead.campaign.followup1 ?? ""}

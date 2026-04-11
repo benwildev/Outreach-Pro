@@ -22,8 +22,9 @@ model Campaign {
   delay2Days    Int         @default(5)
   provider      String      @default("gmail")
   createdAt     DateTime    @default(now())
-  webhookUrl    String?
-  googleSheetId String?
+  webhookUrl         String?
+  googleSheetId      String?
+  gmailAccountIndex  Int?
   importLogs    ImportLog[]
   leads         Lead[]
 

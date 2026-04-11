@@ -873,6 +873,7 @@
     const campaignId = (row.getAttribute("data-campaign-id") || "").trim();
     const campaignChatId = (row.getAttribute("data-campaign-chat-id") || "").trim();
     const campaignGmailAuthUser = (row.getAttribute("data-campaign-gmail-auth-user") || "").trim();
+    const campaignGmailAccountIndex = (row.getAttribute("data-campaign-gmail-account-index") || "").trim();
     const sentGmailAuthUser = (row.getAttribute("data-sent-gmail-auth-user") || "").trim();
     const recipientName = getCellText(row, "td:nth-child(3)");
     const recipientEmail = getCellText(row, "td:nth-child(4)");
@@ -891,6 +892,7 @@
       campaignId,
       campaignChatId,
       campaignGmailAuthUser,
+      campaignGmailAccountIndex,
       sentGmailAuthUser,
       gmailThreadId,
       campaignName,

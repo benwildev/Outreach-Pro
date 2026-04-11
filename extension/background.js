@@ -905,6 +905,14 @@ async function resolveGmailAuthUser(authUserValue) {
   return resolved !== null ? resolved : "0";
 }
 
+async function resolveGmailIndex(authUser, accountIndex) {
+  const idxStr = String(accountIndex ?? "").trim();
+  if (/^\d+$/.test(idxStr)) {
+    return idxStr;
+  }
+  return resolveGmailAuthUser(authUser || "");
+}
+
 function normalizeGmailAuthUser(value) {
   const raw = String(value || "").trim();
   if (!raw) return "0";
@@ -1617,6 +1625,7 @@ async function runSingleBulkWorkflow(item) {
       body: followupBody,
       threadId: current.gmailThreadId || null,
       campaignGmailAuthUser: current.campaignGmailAuthUser || "",
+      campaignGmailAccountIndex: current.campaignGmailAccountIndex || "",
     };
     const completionPromise = waitForBulkWorkflowCompletion(leadId, BULK_WORKFLOW_TIMEOUT_MS);
     await handleStartFollowupWorkflow(payload);
@@ -2022,9 +2031,9 @@ async function openGmailFromFallback(data, chatTabId) {
 }
 
 async function handleStartFollowupWorkflow(data) {
-  const { to, subject, body, leadId, threadId, campaignGmailAuthUser } = data;
+  const { to, subject, body, leadId, threadId, campaignGmailAuthUser, campaignGmailAccountIndex } = data;
   const customSignature = await getCustomSignatureSetting();
-  const resolvedAuthUserFU = await resolveGmailAuthUser(campaignGmailAuthUser || "");
+  const resolvedAuthUserFU = await resolveGmailIndex(campaignGmailAuthUser, campaignGmailAccountIndex);
   const gmailBaseUrl = getGmailBaseUrl(resolvedAuthUserFU);
   let gmailUrl;
   let openReply = false;
@@ -2259,12 +2268,13 @@ async function handleCheckReplyByThread(data) {
   const threadId = data && data.threadId ? String(data.threadId).trim().replace(/^#+/, "") : "";
   const recipientEmail = data && data.recipientEmail ? String(data.recipientEmail).trim().toLowerCase() : "";
   const campaignGmailAuthUser = data && data.campaignGmailAuthUser ? String(data.campaignGmailAuthUser).trim() : "";
+  const campaignGmailAccountIndex = data && data.campaignGmailAccountIndex != null ? String(data.campaignGmailAccountIndex).trim() : "";
 
   if (!threadId || !recipientEmail) {
     return { success: false, error: "threadId and recipientEmail are required" };
   }
 
-  const resolvedAuthUserCheck = await resolveGmailAuthUser(campaignGmailAuthUser);
+  const resolvedAuthUserCheck = await resolveGmailIndex(campaignGmailAuthUser, campaignGmailAccountIndex);
   const gmailBaseUrl = getGmailBaseUrl(resolvedAuthUserCheck);
   const gmailUrl = gmailBaseUrl + "#all/" + encodeURIComponent(threadId);
   const tab = await chrome.tabs.create({ url: gmailUrl, active: !RUN_TABS_IN_BACKGROUND });

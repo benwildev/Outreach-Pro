@@ -91,6 +91,7 @@ export async function createCampaign(formData: FormData) {
   const googleSheetId = trim(formData.get("googleSheetId") as string | null) || null;
   const delay1Days = (() => { const d = parseInt(String(formData.get("delay1Days") ?? "3"), 10); return Number.isNaN(d) || d < 0 ? 3 : d; })();
   const delay2Days = (() => { const d = parseInt(String(formData.get("delay2Days") ?? "5"), 10); return Number.isNaN(d) || d < 0 ? 5 : d; })();
+  const gmailAccountIndex = (() => { const v = parseInt(String(formData.get("gmailAccountIndex") ?? ""), 10); return Number.isNaN(v) || v < 0 ? null : v; })();
 
   if (!name || !subject || !body) {
     throw new Error("Name, subject, and body are required.");
@@ -111,6 +112,7 @@ export async function createCampaign(formData: FormData) {
       googleSheetId: googleSheetId || undefined,
       delay1Days,
       delay2Days,
+      gmailAccountIndex,
     },
   });
 
@@ -132,6 +134,7 @@ export async function updateCampaign(id: string, formData: FormData) {
   const googleSheetId = trim(formData.get("googleSheetId") as string | null) || null;
   const delay1Days = (() => { const d = parseInt(String(formData.get("delay1Days") ?? "3"), 10); return Number.isNaN(d) || d < 0 ? 3 : d; })();
   const delay2Days = (() => { const d = parseInt(String(formData.get("delay2Days") ?? "5"), 10); return Number.isNaN(d) || d < 0 ? 5 : d; })();
+  const gmailAccountIndex = (() => { const v = parseInt(String(formData.get("gmailAccountIndex") ?? ""), 10); return Number.isNaN(v) || v < 0 ? null : v; })();
 
   if (!name || !subject || !body) {
     throw new Error("Name, subject, and body are required.");
@@ -153,6 +156,7 @@ export async function updateCampaign(id: string, formData: FormData) {
       googleSheetId: googleSheetId || null,
       delay1Days,
       delay2Days,
+      gmailAccountIndex,
     },
   });
 
