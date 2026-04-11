@@ -25,6 +25,7 @@ model Campaign {
   webhookUrl         String?
   googleSheetId      String?
   gmailAccountIndex  Int?
+  gmailFollowupEmail String?
   importLogs    ImportLog[]
   leads         Lead[]
 

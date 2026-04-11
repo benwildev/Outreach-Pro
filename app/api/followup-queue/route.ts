@@ -19,12 +19,28 @@ function resolveFollowupBody(
   if (step === 1) {
     const legacy = String(followup1 ?? "").trim();
     if (legacy) return legacy;
-    // If templates array has entries, return the first one so the lead passes the
-    // non-empty filter. The extension will override with a random pick at send time.
     return followup1Templates.length > 0 ? followup1Templates[0] : "";
   }
   if (step === 2) {
     return String(followup2 ?? "").trim();
+  }
+  return "";
+}
+
+async function resolveGmailAccountIndex(
+  gmailFollowupEmail: string | null,
+  gmailAccountIndex: number | null
+): Promise<string> {
+  if (gmailFollowupEmail) {
+    const mapRow = await prisma.gmailAccountMap.findUnique({
+      where: { email: gmailFollowupEmail.toLowerCase() },
+    });
+    if (mapRow != null) {
+      return String(mapRow.accountIndex);
+    }
+  }
+  if (gmailAccountIndex != null) {
+    return String(gmailAccountIndex);
   }
   return "";
 }
@@ -66,13 +82,14 @@ export async function GET(request: Request) {
             chatGptChatId: true,
             gmailAuthUser: true,
             gmailAccountIndex: true,
+            gmailFollowupEmail: true,
           },
         },
       },
     });
 
-    const queue = leads
-      .map((lead) => {
+    const queue = await Promise.all(
+      leads.map(async (lead) => {
         let followup1Templates: string[] = [];
         try {
           const parsed = JSON.parse(lead.campaign.followup1Templates ?? "[]");
@@ -83,13 +100,22 @@ export async function GET(request: Request) {
           followup1Templates = [];
         }
         const followupBody = resolveFollowupBody(lead.step, lead.campaign.followup1, lead.campaign.followup2, followup1Templates);
+        const campaignGmailAccountIndex = await resolveGmailAccountIndex(
+          lead.campaign.gmailFollowupEmail,
+          lead.campaign.gmailAccountIndex
+        );
+        const campaignGmailAuthUser =
+          lead.campaign.gmailFollowupEmail ||
+          lead.sentGmailAuthUser ||
+          (lead.campaign.gmailAuthUser ?? "").split(",")[0].trim() ||
+          "";
         return {
           leadId: lead.id,
           campaignId: lead.campaignId,
           campaignName: lead.campaign.name,
           campaignChatId: lead.campaign.chatGptChatId ?? "",
-          campaignGmailAuthUser: lead.sentGmailAuthUser || (lead.campaign.gmailAuthUser ?? "").split(",")[0].trim() || "",
-          campaignGmailAccountIndex: lead.campaign.gmailAccountIndex != null ? String(lead.campaign.gmailAccountIndex) : "",
+          campaignGmailAuthUser,
+          campaignGmailAccountIndex,
           gmailThreadId: lead.gmailThreadId ?? "",
           recipientName: lead.recipientName,
           recipientEmail: lead.recipientEmail,
@@ -106,12 +132,14 @@ export async function GET(request: Request) {
           followupBody,
         };
       })
-      .filter((item) => item.followupBody !== "");
+    );
+
+    const filtered = queue.filter((item) => item.followupBody !== "");
 
     return NextResponse.json({
       success: true,
-      count: queue.length,
-      leads: queue,
+      count: filtered.length,
+      leads: filtered,
     });
   } catch (error) {
     console.error("Error building followup queue:", error);

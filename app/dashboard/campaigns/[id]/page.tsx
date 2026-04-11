@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { updateCampaign } from "../actions";
 import { Zap, ArrowLeft, Download, Sheet, AlertTriangle } from "lucide-react";
 import Followup1TemplatesEditor from "../Followup1TemplatesEditor";
+import GmailFollowupSelector from "../GmailFollowupSelector";
 import Image from "next/image";
 
 export const dynamic = "force-dynamic";
@@ -145,9 +146,11 @@ export default async function CampaignEditorPage({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="gmailAccountIndex" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Gmail Account Index (for follow-ups &amp; reply check)</Label>
-              <Input id="gmailAccountIndex" name="gmailAccountIndex" type="number" min={0} max={9} defaultValue={campaign.gmailAccountIndex ?? ""} placeholder="Leave blank for auto-detect" className="max-w-[160px]" />
-              <p className="text-xs text-gray-400">Override the Gmail /u/N/ slot used when checking replies and sending follow-ups. 0 = first account, 1 = second, etc. Leave blank to auto-detect.</p>
+              <Label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Gmail Account (for follow-ups &amp; reply check)</Label>
+              <GmailFollowupSelector
+                initialFollowupEmail={campaign.gmailFollowupEmail}
+                initialAccountIndex={campaign.gmailAccountIndex}
+              />
             </div>
 
             <div className="space-y-1.5">

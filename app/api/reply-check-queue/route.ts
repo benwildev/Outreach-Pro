@@ -3,6 +3,24 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
+async function resolveGmailAccountIndex(
+  gmailFollowupEmail: string | null,
+  gmailAccountIndex: number | null
+): Promise<string> {
+  if (gmailFollowupEmail) {
+    const mapRow = await prisma.gmailAccountMap.findUnique({
+      where: { email: gmailFollowupEmail.toLowerCase() },
+    });
+    if (mapRow != null) {
+      return String(mapRow.accountIndex);
+    }
+  }
+  if (gmailAccountIndex != null) {
+    return String(gmailAccountIndex);
+  }
+  return "";
+}
+
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
@@ -13,7 +31,6 @@ export async function GET(request: Request) {
       where: {
         status: "sent",
         replied: false,
-        // Only check leads whose email has already been delivered (sentAt <= now).
         sentAt: { lte: new Date() },
         AND: [
           { gmailThreadId: { not: null } },
@@ -21,21 +38,38 @@ export async function GET(request: Request) {
         ],
       },
       include: {
-        campaign: true,
+        campaign: {
+          select: {
+            gmailAuthUser: true,
+            gmailAccountIndex: true,
+            gmailFollowupEmail: true,
+          },
+        },
       },
-      // Leads never checked come first (null → least recent), then the
-      // least-recently-checked so we rotate fairly across all 500-1000 leads.
       orderBy: [{ lastReplyCheckedAt: "asc" }, { sentAt: "asc" }],
       take: limit,
     });
 
-    const normalizedLeads = leads.map((lead) => ({
-      id: lead.id,
-      recipientEmail: lead.recipientEmail,
-      gmailThreadId: lead.gmailThreadId,
-      campaignGmailAuthUser: lead.sentGmailAuthUser || (lead.campaign?.gmailAuthUser ?? "").split(",")[0].trim() || "",
-      campaignGmailAccountIndex: lead.campaign?.gmailAccountIndex != null ? String(lead.campaign.gmailAccountIndex) : "",
-    }));
+    const normalizedLeads = await Promise.all(
+      leads.map(async (lead) => {
+        const campaignGmailAccountIndex = await resolveGmailAccountIndex(
+          lead.campaign?.gmailFollowupEmail ?? null,
+          lead.campaign?.gmailAccountIndex ?? null
+        );
+        const campaignGmailAuthUser =
+          lead.campaign?.gmailFollowupEmail ||
+          lead.sentGmailAuthUser ||
+          (lead.campaign?.gmailAuthUser ?? "").split(",")[0].trim() ||
+          "";
+        return {
+          id: lead.id,
+          recipientEmail: lead.recipientEmail,
+          gmailThreadId: lead.gmailThreadId,
+          campaignGmailAuthUser,
+          campaignGmailAccountIndex,
+        };
+      })
+    );
 
     return NextResponse.json({
       success: true,
