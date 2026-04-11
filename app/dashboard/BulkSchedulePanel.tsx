@@ -256,7 +256,7 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
                       : "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
                   }`}
                 >
-                  {p === "send" ? "New only" : p === "both" ? "New + Follow-ups" : p === "followup" ? "All Follow-ups" : p === "followup1" ? "Follow-up 1" : "Follow-up 2"}
+                  {p === "send" ? "New only" : p === "both" ? "New + Follow-ups" : p === "followup" ? "Follow-ups only" : p === "followup1" ? "Follow-up 1 only" : "Follow-up 2 only"}
                 </button>
               ))}
             </div>
