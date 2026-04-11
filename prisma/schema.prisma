@@ -62,6 +62,16 @@ model AppSetting {
   @@map("app_setting")
 }
 
+model GmailAccountMap {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  accountIndex Int
+  source       String?  @default("auto")
+  updatedAt    DateTime @updatedAt
+
+  @@map("gmail_account_map")
+}
+
 model Lead {
   id                 String    @id @default(cuid())
   campaignId         String

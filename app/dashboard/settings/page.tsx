@@ -4,13 +4,15 @@ import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { ArrowLeft, Shield } from "lucide-react";
 import { IpAllowlistCard } from "./IpAllowlistCard";
+import { GmailAccountsCard } from "./GmailAccountsCard";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const [allowedIps, setting] = await Promise.all([
+  const [allowedIps, setting, gmailAccounts] = await Promise.all([
     prisma.allowedIp.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.appSetting.findUnique({ where: { key: "ip_restriction_enabled" } }),
+    prisma.gmailAccountMap.findMany({ orderBy: { accountIndex: "asc" } }),
   ]);
 
   const restrictionEnabled = setting ? setting.value === "true" : false;
@@ -61,6 +63,13 @@ export default async function SettingsPage() {
           }))}
           initialRestrictionEnabled={restrictionEnabled}
           currentVisitorIp={currentVisitorIp}
+        />
+        <GmailAccountsCard
+          initialAccounts={gmailAccounts.map((r) => ({
+            ...r,
+            source: r.source ?? "auto",
+            updatedAt: r.updatedAt.toISOString(),
+          }))}
         />
       </main>
     </div>

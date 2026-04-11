@@ -408,6 +408,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           await chrome.storage.local.set({ gmailAccountIndexCache: cache });
           console.log("[Leads Extension] Gmail index cache updated:", email, "→", index);
         }
+        // Fire-and-forget: persist to server DB so all computers share the mapping.
+        getApiBaseUrl().then(function(base) {
+          fetch(base + "/api/gmail-account-map", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email: email, accountIndex: parseInt(index, 10), source: "auto" }),
+          }).catch(function() {});
+        }).catch(function() {});
         sendResponse({ success: true });
       } catch (err) {
         sendResponse({ success: false, error: String(err.message) });
@@ -729,6 +737,27 @@ async function resolveGmailAccountIndex(emailAddress) {
         return cachedIndex;
       }
       console.warn("[Leads Extension] Gmail index cache value invalid for", targetEmail, "— ignoring:", cachedIndex);
+    }
+  } catch (_) {}
+
+  // 1.5. Check server-side DB — shared across all computers running the extension.
+  try {
+    const base = await getApiBaseUrl();
+    const dbResp = await fetch(base + "/api/gmail-account-map?email=" + encodeURIComponent(targetEmail));
+    if (dbResp.ok) {
+      const dbData = await dbResp.json();
+      if (dbData.found && /^\d+$/.test(String(dbData.accountIndex))) {
+        const serverIndex = String(dbData.accountIndex);
+        console.log("[Leads Extension] Gmail index server DB HIT for", targetEmail, "→", serverIndex);
+        // Seed local cache so next lookup is instant
+        try {
+          const stored = await chrome.storage.local.get("gmailAccountIndexCache");
+          const cache = stored.gmailAccountIndexCache || {};
+          cache[targetEmail] = serverIndex;
+          await chrome.storage.local.set({ gmailAccountIndexCache: cache });
+        } catch (_) {}
+        return serverIndex;
+      }
     }
   } catch (_) {}
 
