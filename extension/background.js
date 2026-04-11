@@ -740,6 +740,19 @@ async function resolveGmailAccountIndex(emailAddress) {
     }
   } catch (_) {}
 
+  // Helper: fire-and-forget upsert of a single email→index pair to the server DB.
+  // Written as a closure here so it shares the outer scope's getApiBaseUrl reference.
+  async function _persistToServer(em, idx, src) {
+    try {
+      const base = await getApiBaseUrl();
+      fetch(base + "/api/gmail-account-map", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: em, accountIndex: parseInt(idx, 10), source: src || "auto" }),
+      }).catch(function() {});
+    } catch (_) {}
+  }
+
   // 1.5. Check server-side DB — shared across all computers running the extension.
   try {
     const base = await getApiBaseUrl();
@@ -779,6 +792,10 @@ async function resolveGmailAccountIndex(emailAddress) {
         await chrome.storage.local.set({ gmailAccountIndexCache: cache });
         console.log("[Leads Extension] ListAccounts: cached", Object.keys(validMap).length, "account(s)");
       } catch (_) {}
+      // Upsert ALL discovered mappings to server so other computers benefit.
+      for (const [em, idx] of Object.entries(validMap)) {
+        _persistToServer(em, idx, "auto");
+      }
       if (validMap[targetEmail] !== undefined) {
         console.log("[Leads Extension] ListAccounts resolved index for target email →", validMap[targetEmail]);
         return validMap[targetEmail];
@@ -844,6 +861,8 @@ async function resolveGmailAccountIndex(emailAddress) {
               cache2[targetEmail] = index;
               await chrome.storage.local.set({ gmailAccountIndexCache: cache2 });
             } catch (_) {}
+            // Upsert to server so other computers benefit.
+            _persistToServer(targetEmail, index, "auto");
             return index;
           }
         }
@@ -906,6 +925,8 @@ async function resolveGmailAccountIndex(emailAddress) {
           c[probeEmail] = String(probeIndex);
           await chrome.storage.local.set({ gmailAccountIndexCache: c });
         } catch (_) {}
+        // Upsert every discovered probe mapping to server so other computers benefit.
+        _persistToServer(probeEmail, String(probeIndex), "auto");
         if (probeEmail === targetEmail) {
           console.log("[Leads Extension] Probe found index for", targetEmail, "→", probeIndex);
           return String(probeIndex);
