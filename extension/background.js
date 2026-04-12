@@ -1389,6 +1389,21 @@ function getFollowupBodyFromItem(item) {
   return baseBody;
 }
 
+// Substitute {Recipient} in a follow-up body with the lead's first name.
+// If no name is available, strips "Hi {Recipient}" → "Hi" so the greeting stays clean.
+function applyFollowupRecipientVar(body, item) {
+  const rawName = (item && item.recipientName ? String(item.recipientName) : "").trim();
+  const firstName = rawName.split(/\s+/)[0] || "";
+  if (firstName) {
+    return body.replace(/\{Recipient\}/gi, firstName);
+  }
+  // No name: "Hi {Recipient}" → "Hi", "Hi {Recipient}," → "Hi,"
+  return body
+    .replace(/\bHi\s+\{Recipient\}\s*,/gi, "Hi,")
+    .replace(/\bHi\s+\{Recipient\}/gi, "Hi")
+    .replace(/\{Recipient\}/gi, "");
+}
+
 function getBulkWaiterKey(leadId) {
   const key = String(leadId || "").trim();
   return key ? "lead:" + key : "";
@@ -1663,11 +1678,12 @@ async function runSingleBulkWorkflow(item) {
     }
   }
   if (workflowType === "followup") {
-    const followupBody = getFollowupBodyFromItem(current);
-    if (!followupBody) {
+    const rawFollowupBody = getFollowupBodyFromItem(current);
+    if (!rawFollowupBody) {
       bulkAutomationState.skipped += 1;
       return;
     }
+    const followupBody = applyFollowupRecipientVar(rawFollowupBody, current);
 
     // Compute staggered schedule time for this follow-up (same logic as initial sends).
     const fuBaseScheduleTime = current.scheduleSendTime || bulkAutomationState.scheduleSendTime || "";
@@ -2105,7 +2121,8 @@ async function openGmailFromFallback(data, chatTabId) {
 }
 
 async function handleStartFollowupWorkflow(data) {
-  const { to, subject, body, leadId, threadId, campaignGmailAuthUser, campaignGmailAccountIndex, scheduleSendTime } = data;
+  const { to, subject, leadId, threadId, campaignGmailAuthUser, campaignGmailAccountIndex, scheduleSendTime } = data;
+  const body = applyFollowupRecipientVar(String(data.body || ""), data);
   const customSignature = await getCustomSignatureSetting();
   const resolvedAuthUserFU = await resolveGmailIndex(campaignGmailAuthUser, campaignGmailAccountIndex);
   const gmailBaseUrl = getGmailBaseUrl(resolvedAuthUserFU);
