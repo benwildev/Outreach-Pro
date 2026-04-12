@@ -1607,11 +1607,6 @@
       }
     }
 
-    if (!moreOptionsBtn) {
-      logError("More send options button not found.");
-      return { success: false, error: "Dropdown not found" };
-    }
-
     // Use full mouse event sequence — Gmail uses jsaction which requires mousedown+up+click
     function syntheticClick(el) {
       el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, view: window }));
@@ -1619,53 +1614,87 @@
       el.dispatchEvent(new MouseEvent('click',     { bubbles: true, cancelable: true, view: window }));
     }
 
-    syntheticClick(moreOptionsBtn);
-    log("(v27) Clicked more send options, waiting for menu...");
-    await delay(1500);
+    // Helper: find the "Schedule send" menu item using all known selectors.
+    function findScheduleSendItem() {
+      // Most reliable: Gmail marks this item with selector="scheduledSend"
+      const byAttr = document.querySelector('[selector="scheduledSend"]');
+      if (byAttr) return byAttr;
 
-    // 2. Find "Schedule send" — search specifically inside visible [role="menu"] popups first,
-    //    then fall back to broader search. Use exact text match to avoid static labels.
-    let menuClicked = false;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      let scheduleItem = null;
-
-      // Primary: find "Schedule send" inside a visible popup menu
+      // Visible role=menu/listbox first
       const visibleMenus = Array.from(document.querySelectorAll('[role="menu"], [role="listbox"]')).filter(isVisible);
       for (const menu of visibleMenus) {
         const items = Array.from(menu.querySelectorAll('[role="menuitem"], [role="option"], div, li'));
-        scheduleItem = items.find(el => {
+        const found = items.find(el => {
           const txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
           return txt === "schedule send" || (txt.includes("schedule send") && el.children.length <= 3);
         });
-        if (scheduleItem) { log("(v27) Found in visible menu"); break; }
+        if (found) return found;
       }
 
-      // Secondary: any visible [role="menuitem"] whose text contains "schedule send"
-      if (!scheduleItem) {
-        const allItems = Array.from(document.querySelectorAll('[role="menuitem"], [role="option"]'));
-        scheduleItem = allItems.find(el => {
-          if (!isVisible(el)) return false;
-          const txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
-          return txt.includes("schedule send");
-        });
-        if (scheduleItem) log("(v27) Found via menuitem role");
-      }
+      // Fallback: any visible [role="menuitem"] containing "schedule send"
+      const allItems = Array.from(document.querySelectorAll('[role="menuitem"], [role="option"]'));
+      return allItems.find(el => {
+        if (!isVisible(el)) return false;
+        const txt = (el.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+        return txt.includes("schedule send");
+      }) || null;
+    }
 
-      if (scheduleItem) {
-        log("(v27) Clicking Schedule send item:", (scheduleItem.textContent || "").trim().slice(0, 30));
-        syntheticClick(scheduleItem);
-        menuClicked = true;
-        break;
-      }
+    let menuClicked = false;
 
-      log("(v27) Schedule send not found, retrying... (attempt " + (attempt + 1) + ")");
-      await delay(800);
+    if (moreOptionsBtn) {
+      // Normal path: click the dropdown trigger, wait for menu, then click "Schedule send".
+      syntheticClick(moreOptionsBtn);
+      log("(v27) Clicked more send options, waiting for menu...");
+      await delay(1500);
+
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const scheduleItem = findScheduleSendItem();
+        if (scheduleItem) {
+          log("(v27) Clicking Schedule send item:", (scheduleItem.textContent || "").trim().slice(0, 30));
+          syntheticClick(scheduleItem);
+          menuClicked = true;
+          break;
+        }
+        log("(v27) Schedule send not found, retrying... (attempt " + (attempt + 1) + ")");
+        await delay(800);
+      }
+    }
+
+    // Direct fallback: if the trigger button was not found (reply compose) or clicking it
+    // didn't open the menu, locate the item by selector="scheduledSend" and expose it directly.
+    if (!menuClicked) {
+      log("(v28) Trying direct selector='scheduledSend' approach...");
+      for (let attempt = 0; attempt < 6; attempt++) {
+        const scheduleItem = document.querySelector('[selector="scheduledSend"]');
+        if (scheduleItem) {
+          // Make sure the parent menu is visible so Gmail's jsaction fires
+          const parentMenu = scheduleItem.closest('[role="menu"], .J-M');
+          if (parentMenu) {
+            const prevDisplay = parentMenu.style.display;
+            const prevVisibility = parentMenu.style.visibility;
+            parentMenu.style.display = "block";
+            parentMenu.style.visibility = "visible";
+            syntheticClick(scheduleItem);
+            // Restore original styles after a tick so Gmail can take over
+            await delay(100);
+            parentMenu.style.display = prevDisplay;
+            parentMenu.style.visibility = prevVisibility;
+          } else {
+            syntheticClick(scheduleItem);
+          }
+          log("(v28) Clicked Schedule send via direct selector.");
+          menuClicked = true;
+          break;
+        }
+        log("(v28) Direct item not found yet, retrying... (attempt " + (attempt + 1) + ")");
+        await delay(600);
+      }
     }
 
     if (!menuClicked) {
-      logError("(v27) Schedule send menu item not found.");
-      document.body.click();
-      return { success: false, error: "Menu item not found" };
+      logError("(v28) Schedule send item not found by any method.");
+      return { success: false, error: "Dropdown not found" };
     }
 
     await delay(2500); // Wait for schedule submenu popup
