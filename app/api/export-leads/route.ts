@@ -20,6 +20,9 @@ export async function GET(req: NextRequest) {
   const dateFrom = searchParams.get("dateFrom");
   const dateTo = searchParams.get("dateTo");
 
+  const stepParam = searchParams.get("step");
+  const stepFilter = stepParam ? parseInt(stepParam, 10) : null;
+
   const VALID_STATUSES = ["pending", "sent", "replied", "bounced"];
   const isFollowUpDueFilter = filter === "followup-due";
   const where: Prisma.LeadWhereInput = {};
@@ -31,6 +34,10 @@ export async function GET(req: NextRequest) {
     where.nextFollowup = { lte: new Date() };
   } else if (status && VALID_STATUSES.includes(status)) {
     where.status = status;
+  }
+
+  if (stepFilter !== null && !Number.isNaN(stepFilter)) {
+    where.step = stepFilter;
   }
 
   if (emailSearch) {
@@ -76,7 +83,8 @@ export async function GET(req: NextRequest) {
   );
 
   const csv = [header, ...rows].join("\n");
-  const filename = `leads-export-${new Date().toISOString().slice(0, 10)}.csv`;
+  const stepSuffix = stepFilter === 1 ? "-followup1" : stepFilter === 2 ? "-followup2" : "";
+  const filename = `leads-export${stepSuffix}-${new Date().toISOString().slice(0, 10)}.csv`;
 
   return new NextResponse(csv, {
     status: 200,
