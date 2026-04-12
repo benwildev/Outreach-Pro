@@ -2157,7 +2157,7 @@ async function handleStartFollowupWorkflow(data) {
       openReply: openReply,
       threadIdForUrl: threadId ? String(threadId).trim().replace(/^#+/, "") : "",
       scheduleSendTime: resolvedScheduleTime,
-      autoSend: !resolvedScheduleTime,
+      autoSend: true,
     },
   }, 7, 900);
   if (!sentToGmail) {
