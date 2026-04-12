@@ -289,30 +289,52 @@ export async function importLeadsFromGSheets(formData: FormData): Promise<Import
   let csvText: string = "";
   let lastError = "";
   for (const exportUrl of urlsToTry) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
     try {
-      const res = await fetch(exportUrl, { redirect: "follow", headers: fetchHeaders });
+      const res = await fetch(exportUrl, {
+        redirect: "follow",
+        headers: fetchHeaders,
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
       if (!res.ok) {
         lastError = `HTTP ${res.status}`;
         continue;
       }
       const contentType = res.headers.get("content-type") || "";
       if (contentType.includes("text/html")) {
-        lastError = "received HTML instead of CSV";
+        lastError = "sheet not publicly accessible (received login page)";
         continue;
       }
       csvText = await res.text();
       if (csvText.trim()) break;
       lastError = "empty response";
     } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err);
+      clearTimeout(timeoutId);
+      const msg = err instanceof Error ? err.message : String(err);
+      lastError = msg.includes("abort") ? "request timed out" : msg;
     }
   }
 
   if (!csvText.trim()) {
-    return {
-      success: false,
-      error: `Could not fetch sheet (${lastError}). Make sure the sheet is shared as "Anyone with the link can view".`,
-    };
+    const isTimeout = lastError.includes("timed out");
+    const isAuth = lastError.includes("not publicly accessible") || lastError.includes("403") || lastError.includes("401");
+    let friendlyError: string;
+    if (isTimeout) {
+      friendlyError =
+        "Google Sheets could not be reached from this server (connection timed out). " +
+        "Please download your sheet as .xlsx or .csv (File → Download) and use the \"Upload File\" tab instead.";
+    } else if (isAuth) {
+      friendlyError =
+        "This sheet is not publicly accessible. Open the sheet → Share → change to \"Anyone with the link can view\", then try again. " +
+        "Or download it as .xlsx and use the \"Upload File\" tab.";
+    } else {
+      friendlyError =
+        `Could not fetch sheet (${lastError}). ` +
+        "If the problem persists, download the sheet as .xlsx and use the \"Upload File\" tab.";
+    }
+    return { success: false, error: friendlyError };
   }
 
   let workbook: XLSX.WorkBook;
