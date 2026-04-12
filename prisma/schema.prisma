@@ -24,8 +24,9 @@ model Campaign {
   createdAt     DateTime    @default(now())
   webhookUrl         String?
   googleSheetId      String?
-  gmailAccountIndex  Int?
-  gmailFollowupEmail String?
+  gmailAccountIndex   Int?
+  gmailFollowupEmail  String?
+  gmailFollowup2Email String?
   importLogs    ImportLog[]
   leads         Lead[]
 

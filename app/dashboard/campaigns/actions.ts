@@ -93,6 +93,7 @@ export async function createCampaign(formData: FormData) {
   const delay2Days = (() => { const d = parseInt(String(formData.get("delay2Days") ?? "5"), 10); return Number.isNaN(d) || d < 0 ? 5 : d; })();
   const gmailAccountIndex = (() => { const v = parseInt(String(formData.get("gmailAccountIndex") ?? ""), 10); return Number.isNaN(v) || v < 0 ? null : v; })();
   const gmailFollowupEmail = trim(formData.get("gmailFollowupEmail") as string | null).toLowerCase() || null;
+  const gmailFollowup2Email = trim(formData.get("gmailFollowup2Email") as string | null).toLowerCase() || null;
 
   if (!name || !subject || !body) {
     throw new Error("Name, subject, and body are required.");
@@ -115,6 +116,7 @@ export async function createCampaign(formData: FormData) {
       delay2Days,
       gmailAccountIndex,
       gmailFollowupEmail: gmailFollowupEmail || undefined,
+      gmailFollowup2Email: gmailFollowup2Email || undefined,
     },
   });
 
@@ -138,6 +140,7 @@ export async function updateCampaign(id: string, formData: FormData) {
   const delay2Days = (() => { const d = parseInt(String(formData.get("delay2Days") ?? "5"), 10); return Number.isNaN(d) || d < 0 ? 5 : d; })();
   const gmailAccountIndex = (() => { const v = parseInt(String(formData.get("gmailAccountIndex") ?? ""), 10); return Number.isNaN(v) || v < 0 ? null : v; })();
   const gmailFollowupEmail = trim(formData.get("gmailFollowupEmail") as string | null).toLowerCase() || null;
+  const gmailFollowup2Email = trim(formData.get("gmailFollowup2Email") as string | null).toLowerCase() || null;
 
   if (!name || !subject || !body) {
     throw new Error("Name, subject, and body are required.");
@@ -161,6 +164,7 @@ export async function updateCampaign(id: string, formData: FormData) {
       delay2Days,
       gmailAccountIndex,
       gmailFollowupEmail: gmailFollowupEmail,
+      gmailFollowup2Email: gmailFollowup2Email,
     },
   });
 

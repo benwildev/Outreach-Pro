@@ -14,9 +14,18 @@ interface GmailAccountRow {
 interface Props {
   initialFollowupEmail?: string | null;
   initialAccountIndex?: number | null;
+  emailFieldName?: string;
+  indexFieldName?: string;
+  stepLabel?: string;
 }
 
-export default function GmailFollowupSelector({ initialFollowupEmail, initialAccountIndex }: Props) {
+export default function GmailFollowupSelector({
+  initialFollowupEmail,
+  initialAccountIndex,
+  emailFieldName = "gmailFollowupEmail",
+  indexFieldName = "gmailAccountIndex",
+  stepLabel,
+}: Props) {
   const [accounts, setAccounts] = useState<GmailAccountRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string>(initialFollowupEmail ?? "");
@@ -112,11 +121,12 @@ export default function GmailFollowupSelector({ initialFollowupEmail, initialAcc
 
   const selectedAccount = accounts.find((a) => a.email === selected);
   const isManualSelected = selected && !selectedAccount;
+  const fallbackLabel = stepLabel ?? "Follow-ups & reply checks";
 
   return (
     <div className="space-y-2">
-      <input type="hidden" name="gmailFollowupEmail" value={selected} />
-      <input type="hidden" name="gmailAccountIndex" value={selectedAccount ? String(selectedAccount.accountIndex) : (manualIndex !== "" && isManualSelected ? manualIndex : "")} />
+      <input type="hidden" name={emailFieldName} value={selected} />
+      <input type="hidden" name={indexFieldName} value={selectedAccount ? String(selectedAccount.accountIndex) : (manualIndex !== "" && isManualSelected ? manualIndex : "")} />
 
       <div className="border border-gray-200 rounded-xl overflow-hidden">
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-blue-50/50">
@@ -255,8 +265,8 @@ export default function GmailFollowupSelector({ initialFollowupEmail, initialAcc
         <div className="flex items-center justify-between">
           <p className="text-xs text-gray-400">
             {selectedAccount
-              ? `Follow-ups & reply checks will use /u/${selectedAccount.accountIndex}/ (${selected})`
-              : `Follow-ups & reply checks will use ${selected} (index auto-detected)`}
+              ? `${fallbackLabel} will use /u/${selectedAccount.accountIndex}/ (${selected})`
+              : `${fallbackLabel} will use ${selected} (index auto-detected)`}
           </p>
           <button
             type="button"

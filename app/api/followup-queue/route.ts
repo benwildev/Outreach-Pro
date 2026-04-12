@@ -65,16 +65,23 @@ export async function GET(request: Request) {
             gmailAuthUser: true,
             gmailAccountIndex: true,
             gmailFollowupEmail: true,
+            gmailFollowup2Email: true,
           },
         },
       },
     });
 
-    const followupEmails = Array.from(
-      new Set(leads.map((l) => l.campaign.gmailFollowupEmail).filter((e): e is string => !!e))
+    // Batch-load account map for all distinct follow-up emails (FU1 + FU2) in one query.
+    const allFollowupEmails = Array.from(
+      new Set(
+        leads.flatMap((l) => [
+          l.campaign.gmailFollowupEmail,
+          l.campaign.gmailFollowup2Email,
+        ]).filter((e): e is string => !!e)
+      )
     );
-    const accountMapRows = followupEmails.length > 0
-      ? await prisma.gmailAccountMap.findMany({ where: { email: { in: followupEmails } } })
+    const accountMapRows = allFollowupEmails.length > 0
+      ? await prisma.gmailAccountMap.findMany({ where: { email: { in: allFollowupEmails } } })
       : [];
     const accountIndexByEmail = new Map(accountMapRows.map((r) => [r.email, r.accountIndex]));
 
@@ -92,7 +99,13 @@ export async function GET(request: Request) {
 
         const followupBody = resolveFollowupBody(lead.step, lead.campaign.followup1, lead.campaign.followup2, followup1Templates);
 
-        const followupEmail = lead.campaign.gmailFollowupEmail ?? null;
+        // For step 2, prefer gmailFollowup2Email; fall back to gmailFollowupEmail.
+        const stepEmail =
+          lead.step === 2
+            ? (lead.campaign.gmailFollowup2Email || lead.campaign.gmailFollowupEmail)
+            : lead.campaign.gmailFollowupEmail;
+
+        const followupEmail = stepEmail ?? null;
         let campaignGmailAccountIndex = "";
         if (followupEmail) {
           const mapped = accountIndexByEmail.get(followupEmail);
