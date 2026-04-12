@@ -1564,23 +1564,45 @@
     const parsed = parseScheduleDateTime(scheduleTime);
     log("(v21) clickScheduleSendButton start:", scheduleTime, "→ date:", parsed.gmailDate, "time:", parsed.gmailTime);
 
-    // 1. Find and click "More send options"
-    let moreOptionsBtn = composeRoot.querySelector('div[aria-label*="More send options" i], div[data-tooltip*="More send options" i], div[aria-haspopup="true"][role="button"]');
+    // 1. Find and click "More send options" / schedule dropdown arrow
+    // Works for both new-compose (div[role="button"]) and reply-compose (<button>) layouts.
+    const SEND_BTN_SELECTOR = [
+      '[aria-label*="More send options" i]',
+      '[data-tooltip*="More send options" i]',
+      '[aria-label*="schedule" i][role="button"]',
+      '[aria-label*="schedule" i]',
+      'div[aria-haspopup="true"][role="button"]',
+      'button[aria-haspopup="true"]',
+    ].join(", ");
+    let moreOptionsBtn = composeRoot.querySelector(SEND_BTN_SELECTOR);
+
     if (!moreOptionsBtn) {
-      const allBtns = Array.from(composeRoot.querySelectorAll('div[role="button"]'));
+      // Gather ALL clickable elements — divs and native buttons
+      const allBtns = Array.from(composeRoot.querySelectorAll('div[role="button"], button'));
       moreOptionsBtn = allBtns.find(el => {
         const label = (el.getAttribute("aria-label") || "").toLowerCase();
-        return label.includes("more send options") || label.includes("send options") || (el.innerText || "").includes("▼");
+        const tooltip = (el.getAttribute("data-tooltip") || "").toLowerCase();
+        const text = (el.innerText || "").trim();
+        return label.includes("more send options") || label.includes("send options") ||
+               tooltip.includes("more send options") || tooltip.includes("send options") ||
+               text === "▼" || text === "▲";
       });
-      if (!moreOptionsBtn) {
-        // Find the button immediately following the Send button
-        const sendBtnIdx = allBtns.findIndex(el => {
-          const lbl = (el.getAttribute("aria-label") || "").toLowerCase();
-          return lbl.startsWith("send") && !lbl.includes("options");
-        });
-        if (sendBtnIdx !== -1 && allBtns[sendBtnIdx + 1]) {
-          moreOptionsBtn = allBtns[sendBtnIdx + 1];
-          log("Found more options button by siblingship to Send.");
+    }
+
+    if (!moreOptionsBtn) {
+      // Fallback: find the small arrow/caret button that sits next to the Send button
+      const allBtns = Array.from(composeRoot.querySelectorAll('div[role="button"], button'));
+      const sendBtnIdx = allBtns.findIndex(el => {
+        const lbl = (el.getAttribute("aria-label") || "").toLowerCase();
+        const txt = (el.textContent || "").trim().toLowerCase();
+        return (lbl.startsWith("send") && !lbl.includes("options")) || txt === "send";
+      });
+      if (sendBtnIdx !== -1) {
+        // The schedule-dropdown button is typically the very next sibling button
+        const candidate = allBtns[sendBtnIdx + 1];
+        if (candidate) {
+          moreOptionsBtn = candidate;
+          log("Found schedule-dropdown button by siblingship to Send.");
         }
       }
     }
