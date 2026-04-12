@@ -62,21 +62,21 @@ export default function NewCampaignPage() {
               </div>
             </div>
 
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Follow-up 1 Gmail Account</Label>
                 <GmailFollowupSelector
                   emailFieldName="gmailFollowupEmail"
                   indexFieldName="gmailAccountIndex"
-                  stepLabel="Follow-up 1 & reply checks"
+                  label="Follow-up 1 & reply checks"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Follow-up 2 Gmail Account <span className="text-gray-400 normal-case font-normal">(optional — falls back to FU1 account)</span></Label>
+                <Label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Follow-up 2 Gmail Account <span className="text-gray-400 normal-case font-normal">(optional — falls back to FU1)</span></Label>
                 <GmailFollowupSelector
                   emailFieldName="gmailFollowup2Email"
                   indexFieldName="gmailFollowup2AccountIndex"
-                  stepLabel="Follow-up 2"
+                  label="Follow-up 2"
                 />
               </div>
             </div>

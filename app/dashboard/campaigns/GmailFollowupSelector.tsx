@@ -16,7 +16,7 @@ interface Props {
   initialAccountIndex?: number | null;
   emailFieldName?: string;
   indexFieldName?: string;
-  stepLabel?: string;
+  label?: string;
 }
 
 export default function GmailFollowupSelector({
@@ -24,7 +24,7 @@ export default function GmailFollowupSelector({
   initialAccountIndex,
   emailFieldName = "gmailFollowupEmail",
   indexFieldName = "gmailAccountIndex",
-  stepLabel,
+  label,
 }: Props) {
   const [accounts, setAccounts] = useState<GmailAccountRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,7 +121,7 @@ export default function GmailFollowupSelector({
 
   const selectedAccount = accounts.find((a) => a.email === selected);
   const isManualSelected = selected && !selectedAccount;
-  const fallbackLabel = stepLabel ?? "Follow-ups & reply checks";
+  const fallbackLabel = label ?? "Follow-ups & reply checks";
 
   return (
     <div className="space-y-2">
