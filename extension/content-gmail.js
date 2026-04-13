@@ -2822,15 +2822,13 @@
       return null;
     }
 
-    const normalizedSubject = normalizeSubjectForSearch(subject);
+    // Do NOT filter by subject — replies often have "Re: " or modified subjects.
+    // Rely on to:email + date range; Gmail's thread grouping handles the rest.
     const queryParts = [
       "in:sent",
       "to:" + toEmail,
       "newer_than:2d"
     ];
-    if (normalizedSubject) {
-      queryParts.push('subject:"' + normalizedSubject + '"');
-    }
     const query = queryParts.join(" ");
     const targetHash = "#search/" + encodeURIComponent(query);
 
@@ -2852,7 +2850,8 @@
         return threadId;
       }
 
-      const matchedRow = findBestVisibleMessageRow(toEmail, normalizedSubject);
+      // Do NOT filter by subject — rely on to:email matching only.
+      const matchedRow = findBestVisibleMessageRow(toEmail);
       if (matchedRow) {
         const fromRow = extractThreadIdFromRow(matchedRow);
         if (fromRow) {
@@ -2881,16 +2880,15 @@
 
   async function forceOpenScheduledAndExtractThreadId(to, subject, maxWait) {
     const toEmail = String(to || "").trim();
-    const normalizedSubject = normalizeSubjectForSearch(subject);
     const timeout = maxWait || 40000;
     const start = Date.now();
 
     log("Force-open scheduled: search → click → read URL for thread ID");
 
-    // Navigate to a targeted search for this scheduled email.
+    // Do NOT filter by subject — replies often have "Re: " or modified subjects.
+    // Rely on to:email + date range; Gmail's thread grouping handles the rest.
     const parts = ["in:scheduled", "newer_than:7d"];
     if (toEmail) parts.push("to:" + toEmail);
-    if (normalizedSubject) parts.push('subject:"' + normalizedSubject + '"');
     window.location.hash = "#search/" + encodeURIComponent(parts.join(" "));
     await delay(3000);
 
@@ -2911,10 +2909,9 @@
 
       if (!clickedRow) {
         // 2. Find the best matching email row in the search results and click it.
-        //    Clicking navigates Gmail to #scheduled/THREAD_ID — a real URL
-        //    that the content script can read immediately after navigation.
+        //    Do NOT filter by subject — rely on to:email matching only.
         const bestRow =
-          findBestVisibleMessageRow(toEmail, normalizedSubject) ||
+          findBestVisibleMessageRow(toEmail) ||
           findFirstVisibleMessageRow();
 
         if (bestRow) {
@@ -2958,7 +2955,6 @@
 
   async function forceOpenSentAndExtractThreadId(to, subject, maxWait) {
     const toEmail = String(to || "").trim();
-    const normalizedSubject = normalizeSubjectForSearch(subject);
     const timeout = maxWait || 60000;
     const start = Date.now();
     let openedRow = false;
@@ -2982,7 +2978,8 @@
         return directId;
       }
 
-      const bestRow = findBestVisibleMessageRow(toEmail, normalizedSubject) || findFirstVisibleMessageRow();
+      // Do NOT filter by subject — rely on to:email matching only.
+      const bestRow = findBestVisibleMessageRow(toEmail) || findFirstVisibleMessageRow();
       if (bestRow) {
         const fromRow = extractThreadIdFromRow(bestRow);
         if (fromRow) {
@@ -3006,11 +3003,9 @@
           }
         }
       } else {
+        // Do NOT filter by subject — rely on to:email matching only.
         if (toEmail) {
           const parts = ["in:sent", "to:" + toEmail, "newer_than:7d"];
-          if (normalizedSubject) {
-            parts.push('subject:"' + normalizedSubject + '"');
-          }
           window.location.hash = "#search/" + encodeURIComponent(parts.join(" "));
           await delay(2200);
         } else {
