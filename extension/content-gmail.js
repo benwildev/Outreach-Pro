@@ -1818,10 +1818,7 @@
     }
 
     // 4. Fill date and time inputs in Gmail's "Pick date & time" dialog
-    function fillInput(input, value) {
-      // Use native setter so the value goes to THIS element regardless of document focus.
-      // document.execCommand("insertText") operates on the currently focused element and
-      // can accidentally write to the compose body if Gmail shifts focus during the call.
+    function nativeSetValue(input, value) {
       try {
         const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value");
         if (nativeSetter && typeof nativeSetter.set === "function") {
@@ -1832,6 +1829,16 @@
       } catch (e) {
         input.value = value;
       }
+    }
+    // Soft fill: only dispatches 'input' (not 'change'). Used for the Date field so
+    // Gmail's change handler doesn't close/transition the dialog before the Time is filled.
+    function fillInputSoft(input, value) {
+      nativeSetValue(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    // Hard fill: dispatches both 'input' and 'change'. Used for the Time field (last fill).
+    function fillInput(input, value) {
+      nativeSetValue(input, value);
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.dispatchEvent(new Event("change", { bubbles: true }));
     }
@@ -1946,17 +1953,17 @@
         const dateStr = (parsed.year != null)
           ? adaptDateToInputFormat(dateInput.value, parsed.year, parsed.month, parsed.day, dateInput.type)
           : parsed.gmailDate;
-        fillInput(dateInput, dateStr);
-        log("(v27) Filled date:", dateStr, "| existing was:", dateInput.value, "| type:", dateInput.type, "| aria-label:", dateInput.getAttribute('aria-label'));
-        await delay(600);
+        fillInputSoft(dateInput, dateStr);
+        log("(v27) Filled date (soft):", dateStr, "| existing was:", dateInput.value, "| type:", dateInput.type, "| aria-label:", dateInput.getAttribute('aria-label'));
+        await delay(300);
       } else {
         logError("(v26) Date input not found — inputs seen:", dialogInputs.length);
       }
     }
 
-    // Fill the TIME field
+    // Fill the TIME field — use the same datePickerRoot (still open since we used soft fill)
     let timeInputFilled = false;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    for (let attempt = 0; attempt < 5; attempt++) {
       const root = getDatePickerRoot();
       if (!root) { logError("(v26) Date picker closed unexpectedly."); break; }
       const inputs = visibleInputsIn(root);
@@ -3108,7 +3115,7 @@
     // will return the correct index (e.g. "8"). Email-based /u/ URLs always 404 in Gmail.
     const gmailBaseUrl = getGmailBaseUrl(getCurrentAuthUser() || expectedGmailAuthUser || "0");
     const autoSend = data.autoSend !== false;
-    const requireThreadReply = isFollowup && openReply;
+    let requireThreadReply = isFollowup && openReply;
 
     log("Starting fill and send", isFollowup ? "(follow-up)" : "", openReply ? "(reply in thread)" : "");
 
@@ -3218,13 +3225,20 @@
     }
 
     if (openReply) {
-      if (hasConversationNoLongerExistsError()) {
-        log("Thread not found (conversation no longer exists); opening new compose");
+      // Helper: open a fresh compose as fallback when the thread can't be loaded.
+      // Sets requireThreadReply = false so the rest of the flow treats it as a new email.
+      async function fallbackToFreshCompose(reason) {
+        log("Thread not found (" + reason + "); falling back to fresh compose");
+        requireThreadReply = false;
         const composeUrl = gmailBaseUrl + "#inbox?compose=new" +
           "&to=" + encodeURIComponent(to || "") +
           "&su=" + encodeURIComponent(subject || "");
         window.location.href = composeUrl;
         await delay(4000);
+      }
+
+      if (hasConversationNoLongerExistsError()) {
+        await fallbackToFreshCompose("immediate error on page load");
       } else if (threadIdForUrl) {
         const currentHash = (window.location.hash || "").replace(/^#+/, "");
         const threadInHash = currentHash.indexOf(threadIdForUrl) !== -1;
@@ -3233,33 +3247,27 @@
           window.location.hash = "#all/" + threadIdForUrl;
           await delay(3500);
           if (hasConversationNoLongerExistsError()) {
-            log("Thread not found after navigation; opening new compose");
-            const composeUrl = gmailBaseUrl + "/#inbox?compose=new" +
-              "&to=" + encodeURIComponent(to || "") +
-              "&su=" + encodeURIComponent(subject || "");
-            window.location.href = composeUrl;
-            await delay(4000);
+            await fallbackToFreshCompose("error after navigation");
           }
         }
-        const clicked = await clickReplyAndWaitForCompose();
-        if (!clicked) {
-          log("Could not open Reply compose");
-          if (requireThreadReply) {
-            logError("Aborting follow-up: reply composer not available for thread");
-            return;
+        // Only try to click Reply if we're still expecting a thread reply
+        if (requireThreadReply) {
+          const clicked = await clickReplyAndWaitForCompose();
+          if (!clicked) {
+            log("Could not open Reply compose — falling back to fresh compose");
+            await fallbackToFreshCompose("reply button not found");
+          } else {
+            await delay(2000);
           }
         }
-        await delay(2000);
       } else {
         const clicked = await clickReplyAndWaitForCompose();
         if (!clicked) {
-          log("Could not open Reply compose");
-          if (requireThreadReply) {
-            logError("Aborting follow-up: reply composer not available for thread");
-            return;
-          }
+          log("Could not open Reply compose — falling back to fresh compose");
+          await fallbackToFreshCompose("reply button not found (no thread ID)");
+        } else {
+          await delay(2000);
         }
-        await delay(2000);
       }
     }
 

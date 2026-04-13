@@ -126,16 +126,6 @@ export async function GET(request: Request) {
           (lead.campaign.gmailAuthUser ?? "").split(",")[0].trim() ||
           "";
 
-        // If the sending account differs from who originally sent the email, the existing
-        // thread does NOT exist in the sender's inbox — opening it would cause
-        // "conversation not found". Clear the thread ID so the extension sends a fresh
-        // compose from the override account instead of failing with a thread reply.
-        const originalSender = (lead.sentGmailAuthUser || "").toLowerCase().trim();
-        const effectiveSender = campaignGmailAuthUser.toLowerCase().trim();
-        const senderMatchesOriginal =
-          !effectiveSender || !originalSender || effectiveSender === originalSender;
-        const effectiveThreadId = senderMatchesOriginal ? (lead.gmailThreadId ?? "") : "";
-
         return {
           leadId: lead.id,
           campaignId: lead.campaignId,
@@ -143,7 +133,7 @@ export async function GET(request: Request) {
           campaignChatId: lead.campaign.chatGptChatId ?? "",
           campaignGmailAuthUser,
           campaignGmailAccountIndex,
-          gmailThreadId: effectiveThreadId,
+          gmailThreadId: lead.gmailThreadId ?? "",
           recipientName: lead.recipientName,
           recipientEmail: lead.recipientEmail,
           websiteUrl: lead.websiteUrl ?? "",
