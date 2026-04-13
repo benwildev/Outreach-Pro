@@ -47,16 +47,14 @@ function isFollowUpDue(lead: {
     status: string;
     step: number;
     nextFollowup: Date | null;
-    campaign: { followup1: string | null; followup2: string | null };
+    campaign?: { followup1: string | null; followup2: string | null };
 }): boolean {
     const now = new Date();
     return (
         lead.status === "sent" &&
         lead.step < 3 &&
         lead.nextFollowup != null &&
-        lead.nextFollowup <= now &&
-        ((lead.step === 1 && (lead.campaign.followup1 ?? "").trim() !== "") ||
-            (lead.step === 2 && (lead.campaign.followup2 ?? "").trim() !== ""))
+        new Date(lead.nextFollowup) <= now
     );
 }
 
