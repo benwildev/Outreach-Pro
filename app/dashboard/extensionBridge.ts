@@ -13,6 +13,7 @@ export const K_SCHED_LIMIT = "leadsExtensionSchedLimit";
 export const K_SCHED_STAGGER = "leadsExtensionSchedStaggerMin";
 export const K_SCHED_PHASE = "leadsExtensionSchedPhase";
 export const K_DOMAIN_THROTTLE = "leadsExtensionDomainThrottle";
+export const K_FU1_OVERRIDE = "leadsExtensionFu1GmailOverride";
 
 export const BRIDGE_REQUEST_TYPE = "LEADS_EXTENSION_BRIDGE_REQUEST";
 export const BRIDGE_RESPONSE_TYPE = "LEADS_EXTENSION_BRIDGE_RESPONSE";

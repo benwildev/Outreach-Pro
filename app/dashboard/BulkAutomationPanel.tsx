@@ -21,6 +21,7 @@ import {
   K_WINDOW_START,
   K_WINDOW_END,
   K_DOMAIN_THROTTLE,
+  K_FU1_OVERRIDE,
 } from "./extensionBridge";
 import { Play, Pause, RotateCcw, Square, Zap, ChevronDown, ChevronUp, RefreshCw, Unlock } from "lucide-react";
 
@@ -33,6 +34,8 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
   const [windowStart, setWindowStart] = useState("09:00");
   const [windowEnd, setWindowEnd] = useState("18:00");
   const [domainThrottle, setDomainThrottle] = useState(0);
+  const [fu1GmailOverride, setFu1GmailOverride] = useState("");
+  const [gmailAccounts, setGmailAccounts] = useState<{ email: string; accountIndex: number }[]>([]);
   const [state, setState] = useState<BulkState>({});
   const [error, setError] = useState("");
   const [hasRuntime, setHasRuntime] = useState(false);
@@ -49,7 +52,12 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
       setWindowStart(normalizeTime(window.localStorage.getItem(K_WINDOW_START) ?? "", "09:00"));
       setWindowEnd(normalizeTime(window.localStorage.getItem(K_WINDOW_END) ?? "", "18:00"));
       setDomainThrottle(Math.max(0, readStorageInt(K_DOMAIN_THROTTLE, 0)));
+      setFu1GmailOverride(window.localStorage.getItem(K_FU1_OVERRIDE) ?? "");
     }
+    fetch("/api/gmail-accounts")
+      .then((r) => r.json())
+      .then((d) => { if (d.success && Array.isArray(d.accounts)) setGmailAccounts(d.accounts); })
+      .catch(() => {});
   }, []);
 
   async function refreshState(customError = "") {
@@ -140,6 +148,8 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
         window.localStorage.setItem(K_WINDOW_END, end);
         const throttle = Math.max(0, domainThrottle);
         window.localStorage.setItem(K_DOMAIN_THROTTLE, String(throttle));
+        const showFu1Override = startPhase === "both" || startPhase === "followup" || startPhase === "followup1";
+        window.localStorage.setItem(K_FU1_OVERRIDE, fu1GmailOverride);
 
         const response = await sendRuntimeMessage({
           action: "startBulkAutomation",
@@ -153,6 +163,7 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
             sendWindowStart: start,
             sendWindowEnd: end,
             domainThrottle: throttle,
+            ...(showFu1Override && fu1GmailOverride ? { fu1GmailOverride } : {}),
           },
         });
         if (!response?.success) {
@@ -272,6 +283,24 @@ export function BulkAutomationPanel({ currentCampaignId }: { currentCampaignId: 
                 </button>
               ))}
             </div>
+            {/* FU1 account override — shown when phase includes FU1 */}
+            {(startPhase === "both" || startPhase === "followup" || startPhase === "followup1") && gmailAccounts.length > 0 && (
+              <div className="flex items-center gap-2 bg-white border border-indigo-200 rounded-lg px-3 py-1.5 shadow-sm">
+                <span className="text-[11px] font-semibold text-gray-600 whitespace-nowrap">Send FU1 from</span>
+                <select
+                  value={fu1GmailOverride}
+                  onChange={(e) => setFu1GmailOverride(e.target.value)}
+                  disabled={isActive}
+                  className="h-7 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:border-transparent shadow-sm disabled:opacity-50"
+                >
+                  <option value="">Campaign default</option>
+                  {gmailAccounts.map((a) => (
+                    <option key={a.email} value={a.email}>{a.email}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <label className="flex items-center gap-2 bg-white border border-gray-200 rounded-lg px-3 py-1.5 shadow-sm cursor-pointer hover:border-indigo-300 transition-colors">
               <input type="checkbox" checked={windowEnabled} onChange={(e) => setWindowEnabled(e.target.checked)} className="rounded text-indigo-600 w-3 h-3" />
               <span className="text-[11px] text-gray-600 font-medium whitespace-nowrap">Send window</span>

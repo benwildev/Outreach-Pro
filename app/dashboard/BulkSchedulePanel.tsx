@@ -19,11 +19,11 @@ import {
   K_SCHED_LIMIT,
   K_SCHED_STAGGER,
   K_SCHED_PHASE,
+  K_FU1_OVERRIDE,
 } from "./extensionBridge";
 import { Play, Square, CalendarClock, ChevronDown, ChevronUp, Unlock } from "lucide-react";
 
 const SCHED_COMPOSE_DELAY_MS = 10000;
-const K_FU1_OVERRIDE = "leadsExtensionFu1GmailOverride";
 
 type SchedPhase = "send" | "followup" | "both" | "followup1" | "followup2";
 

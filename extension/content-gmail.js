@@ -3123,9 +3123,10 @@
     // NOTE: Gmail does NOT support /u/email@.../  URLs — only numeric indices (/u/0/, /u/1/, etc.).
     //       background.js resolves the campaign email to a numeric index before opening this tab,
     //       so the current URL should already be a numeric-indexed Gmail URL.
-    // 1. If we are at a non-zero numeric index (u/1, u/2, etc.) -> PROCEED (background resolved correctly).
-    // 2. If we are at u/0 -> We only redirect if we have NOT already tried redirecting in this session.
-    // 3. If we are at a u/email@... URL (unexpected) -> trigger redirect with index resolution.
+    // 1. If the UI-visible account email mismatches expectedGmailAuthUser -> redirect, at ANY index.
+    //    The anti-loop guard (redirectKey in sessionStorage) prevents infinite redirect loops.
+    // 2. If we are at u/0 but expected a different account -> also redirect.
+    // 3. Redirect resolves the email to the correct numeric index via background.js.
 
     const urlIsEmail = currentAuthUser.includes("@");
     const urlIsZero = (currentAuthUser === "0");
@@ -3139,13 +3140,12 @@
       redirectReason = "At u/0 but expected specific account";
     }
 
-    // If we have UI email, and it SPECIFICALLY mismatches (double check)
+    // If we know the real account email and it mismatches the expected one, redirect regardless
+    // of whether the URL is /u/0/, /u/1/, /u/2/ etc.  The anti-loop guard below prevents
+    // infinite redirects if resolution fails.
     if (currentAccountEmail && !isExpectedAuthUser(currentAccountEmail, expectedGmailAuthUser)) {
-       // Only redirect if we are at u/0 or if we are at a DIFFERENT email URL
-       if (urlIsZero || urlIsEmail) {
-         shouldRedirect = true;
-         redirectReason = "UI Email mismatch (" + currentAccountEmail + " vs " + expectedGmailAuthUser + ")";
-       }
+      shouldRedirect = true;
+      redirectReason = "UI Email mismatch (" + currentAccountEmail + " vs " + expectedGmailAuthUser + ")";
     }
 
     // ANTI-LOOP CHECK: Have we already tried to redirect this specific lead in this tab session?
