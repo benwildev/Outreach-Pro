@@ -72,13 +72,14 @@ export async function GET(request: Request) {
       },
     });
 
-    // Batch-load account map for all distinct follow-up emails (FU1 + FU2 + override) in one query.
+    // Batch-load account map for all distinct follow-up emails (FU1 + FU2 + override + sentGmailAuthUser) in one query.
     const allFollowupEmails = Array.from(
       new Set(
         [
           ...leads.flatMap((l) => [
             l.campaign.gmailFollowupEmail,
             l.campaign.gmailFollowup2Email,
+            l.sentGmailAuthUser,
           ]),
           fu1GmailOverride || null,
         ].filter((e): e is string => !!e)
@@ -103,11 +104,17 @@ export async function GET(request: Request) {
 
         const followupBody = resolveFollowupBody(lead.step, lead.campaign.followup1, lead.campaign.followup2, followup1Templates);
 
-        // For step-1 leads: apply fu1GmailOverride if provided, else use campaign gmailFollowupEmail.
-        // For step-2 leads: prefer gmailFollowup2Email; fall back to gmailFollowupEmail.
+        // For step-1 leads: apply fu1GmailOverride if provided, UNLESS the lead already has a
+        // gmailThreadId — in that case the reply MUST come from the original sending account
+        // (sentGmailAuthUser) because the thread only exists in that Gmail inbox.
+        // Applying the override to a threaded lead would cause "conversation not found" errors.
         const isStep1Lead = lead.step === 1;
+        const hasThread = !!lead.gmailThreadId;
+        const effectiveFu1Email = isStep1Lead && fu1GmailOverride
+          ? (hasThread && lead.sentGmailAuthUser ? lead.sentGmailAuthUser : fu1GmailOverride)
+          : null;
         const stepEmail = isStep1Lead
-          ? (fu1GmailOverride || lead.campaign.gmailFollowupEmail)
+          ? (effectiveFu1Email || lead.campaign.gmailFollowupEmail)
           : (lead.campaign.gmailFollowup2Email || lead.campaign.gmailFollowupEmail);
 
         const followupEmail = stepEmail ?? null;
