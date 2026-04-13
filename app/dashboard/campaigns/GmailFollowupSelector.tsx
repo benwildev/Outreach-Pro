@@ -166,16 +166,17 @@ export default function GmailFollowupSelector({
             </span>
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50/60">
-                <th className="w-8 px-3 py-2" />
-                <th className="text-left text-[10px] font-bold text-gray-500 uppercase tracking-wide px-3 py-2">Email</th>
-                <th className="text-center text-[10px] font-bold text-gray-500 uppercase tracking-wide px-3 py-2">/u/N/</th>
-                <th className="text-center text-[10px] font-bold text-gray-500 uppercase tracking-wide px-3 py-2">Source</th>
-              </tr>
-            </thead>
-            <tbody>
+          <div className="max-h-[280px] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 z-10">
+                <tr className="border-b border-gray-100 bg-gray-50/60">
+                  <th className="w-8 px-3 py-2" />
+                  <th className="text-left text-[10px] font-bold text-gray-500 uppercase tracking-wide px-3 py-2">Email</th>
+                  <th className="text-center text-[10px] font-bold text-gray-500 uppercase tracking-wide px-3 py-2">/u/N/</th>
+                  <th className="text-center text-[10px] font-bold text-gray-500 uppercase tracking-wide px-3 py-2">Source</th>
+                </tr>
+              </thead>
+              <tbody>
               {accounts.map((row) => {
                 const isSelected = selected === row.email;
                 return (
@@ -205,6 +206,7 @@ export default function GmailFollowupSelector({
               })}
             </tbody>
           </table>
+          </div>
         )}
 
         <div className="px-4 py-3 border-t border-gray-100 bg-gray-50/40">

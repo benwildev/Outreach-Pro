@@ -80,7 +80,6 @@ export default function DailyReportCard() {
       "",
       ...data.senders.map((s) => `${s.email}- ${s.count}`),
       "",
-      "*Email Outreach Schedule Rechk manually",
     ];
     navigator.clipboard.writeText(lines.join("\n")).then(() => {
       setCopied(true);
@@ -95,7 +94,6 @@ export default function DailyReportCard() {
           <Calendar className="w-4 h-4 text-indigo-500" />
           Daily Report
         </h2>
-        <span className="text-xs text-gray-400">Boss-ready summary</span>
       </div>
 
       <div className="flex items-center gap-3 mb-5">
@@ -211,7 +209,7 @@ export default function DailyReportCard() {
 
           {data.senders.length > 0 && (
             <div className="bg-gray-50 rounded-xl p-4 font-mono text-xs text-gray-500 whitespace-pre-wrap leading-relaxed border border-gray-100">
-              {`*Email Outreach Schedule (${formatDateLabel(data.date)})= ${data.total}\n\n${data.senders.map((s) => `${s.email}- ${s.count}`).join("\n")}\n\n*Email Outreach Schedule Rechk manually`}
+              {`*Email Outreach Schedule (${formatDateLabel(data.date)})= ${data.total}\n\n${data.senders.map((s) => `${s.email}- ${s.count}`).join("\n")}`}
             </div>
           )}
         </div>
