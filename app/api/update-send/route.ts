@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { leadId, email, subject, body: emailBody, threadId, recipientEmail, sentGmailAuthUser, status, scheduledSendAt } = body;
+    const { leadId, email, subject, body: emailBody, threadId, recipientEmail, sentGmailAuthUser, status, scheduledSendAt, isFollowup } = body;
 
     let targetLeadId = leadId;
     if (!targetLeadId && email) {
@@ -59,13 +59,26 @@ export async function POST(request: Request) {
     }
 
     // Calculate next followup delay (using calendar days at midnight from effective send time)
+    // Initial email → use delay1Days; FU1 sent (step=1 going to 2) → use delay2Days
     const delay1Days = lead.campaign?.delay1Days ?? 3;
+    const delay2Days = lead.campaign?.delay2Days ?? 3;
+    const delayDays = (isFollowup && lead.step === 1) ? delay2Days : delay1Days;
     const nextFollowupDate = new Date(effectiveSentAt);
-    nextFollowupDate.setDate(nextFollowupDate.getDate() + delay1Days);
+    nextFollowupDate.setDate(nextFollowupDate.getDate() + delayDays);
     nextFollowupDate.setHours(0, 0, 0, 0);
 
     const targetStatus = status || "sent";
     const isDelivered = targetStatus === "sent" || targetStatus === "scheduled";
+    const followup = !!isFollowup;
+
+    // Determine the new step:
+    // - Initial email (isFollowup=false): always step 1
+    // - Follow-up (isFollowup=true): increment from current step, capped at 3
+    const newStep = isDelivered
+      ? followup
+        ? Math.min(lead.step + 1, 3)
+        : 1
+      : lead.step;
 
     // Update the lead with thread ID, subject, body, AND mark as sent/scheduled/failed.
     // Always clear claimedAt so the lead is no longer locked — it has reached a
@@ -74,7 +87,7 @@ export async function POST(request: Request) {
       where: { id: targetLeadId },
       data: {
         status: targetStatus,
-        step: isDelivered ? 1 : lead.step,
+        step: newStep,
         claimedAt: null,
         ...(isDelivered ? {
           sentAt: effectiveSentAt,

@@ -3025,7 +3025,7 @@
     return null;
   }
 
-  async function updateLead(leadId, to, subject, body, threadId, sentGmailAuthUser, scheduledSendAt) {
+  async function updateLead(leadId, to, subject, body, threadId, sentGmailAuthUser, scheduledSendAt, isFollowup) {
     try {
       log("=== UPDATING LEAD ===");
       log("LeadId:", leadId);
@@ -3033,6 +3033,7 @@
       log("Subject:", subject ? subject.substring(0, 50) : "none");
       log("Body length:", body ? body.length : 0);
       log("Thread ID extracted:", threadId);
+      log("Is follow-up:", !!isFollowup);
       if (scheduledSendAt) log("Scheduled send at:", scheduledSendAt);
 
       if (!leadId) {
@@ -3046,7 +3047,8 @@
         subject: subject || "",
         body: body || "",
         sentGmailAuthUser: sentGmailAuthUser || "",
-        status: scheduledSendAt ? "scheduled" : "sent"
+        status: scheduledSendAt ? "scheduled" : "sent",
+        isFollowup: !!isFollowup,
       };
       if (threadId) {
         payload.threadId = threadId;
@@ -3494,7 +3496,7 @@
         // Use getSenderIdentityForStorage (same as immediate-send) to resolve the real Gmail address.
         // Pass effectiveScheduleTime so the server stores the ACTUAL delivery time as sentAt
         // (not "now"), keeping nextFollowup and reply-check timing correct.
-        await updateLead(leadId, to, subject, body, scheduledThreadId, getSenderIdentityForStorage(expectedGmailAuthUser), effectiveScheduleTime || "");
+        await updateLead(leadId, to, subject, body, scheduledThreadId, getSenderIdentityForStorage(expectedGmailAuthUser), effectiveScheduleTime || "", isFollowup);
         log("Lead updated after schedule send");
         await closeCurrentAutomationTab();
         return;
@@ -3588,7 +3590,7 @@
     }
 
     if (leadId) {
-      await updateLead(leadId, to, subject, body, threadId, getSenderIdentityForStorage(expectedGmailAuthUser));
+      await updateLead(leadId, to, subject, body, threadId, getSenderIdentityForStorage(expectedGmailAuthUser), "", isFollowup);
     }
 
     log("Manual send flow completed");

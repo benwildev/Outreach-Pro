@@ -36,7 +36,11 @@ function getStepLabel(lead: { status: string; step: number; replied?: boolean })
     if (lead.status === "bounced") return "Bounced";
     if (lead.status === "pending") return "Pending";
     if (lead.status === "failed") return "Failed";
-    if (lead.status === "scheduled") return "Scheduled";
+    if (lead.status === "scheduled") {
+        if (lead.step === 2) return "FU1 Scheduled";
+        if (lead.step === 3) return "FU2 Scheduled";
+        return "Scheduled";
+    }
     if (lead.step === 1) return "Sent";
     if (lead.step === 2) return "Follow up 1";
     if (lead.step === 3) return "Follow up 2";

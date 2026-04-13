@@ -1344,8 +1344,20 @@ function toBulkQueueItem(item, workflowType) {
   };
 }
 
-function buildFollowupSubject(subject) {
-  const value = String(subject || "").trim();
+function buildFollowupSubject(subject, item) {
+  let value = String(subject || "").trim();
+  if (item) {
+    const websiteUrl = (item.websiteUrl || item.website || "").trim() || "N/A";
+    const rawName = (item.recipientName ? String(item.recipientName) : "").trim();
+    const firstName = rawName.split(/\s+/)[0] || "";
+    value = value
+      .replace(/\{\{WebsiteName\}\}/gi, websiteUrl)
+      .replace(/\{WebsiteName\}/gi, websiteUrl)
+      .replace(/\{\{websiteUrl\}\}/gi, websiteUrl)
+      .replace(/\{websiteUrl\}/gi, websiteUrl)
+      .replace(/\{\{Recipient\}\}/gi, firstName)
+      .replace(/\{Recipient\}/gi, firstName);
+  }
   if (!value) return "Re: Quick note";
   if (/^re:/i.test(value)) return value;
   return "Re: " + value;
@@ -1710,7 +1722,7 @@ async function runSingleBulkWorkflow(item) {
     const payload = {
       leadId: leadId,
       to: recipientEmail,
-      subject: buildFollowupSubject(current.campaignSubject || ""),
+      subject: buildFollowupSubject(current.campaignSubject || "", current),
       body: followupBody,
       threadId: current.gmailThreadId || null,
       campaignGmailAuthUser: current.campaignGmailAuthUser || "",
