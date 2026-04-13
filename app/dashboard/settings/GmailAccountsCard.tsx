@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Mail, Plus, Trash2, Loader2, AlertCircle, CheckCircle2, RefreshCw, ScanLine, Wifi, WifiOff } from "lucide-react";
+import { Mail, Plus, Trash2, Loader2, AlertCircle, CheckCircle2, RefreshCw, ScanLine, Wifi, WifiOff, Pencil, X } from "lucide-react";
 import { sendRuntimeMessage } from "@/app/dashboard/extensionBridge";
 
 interface GmailAccountRow {
@@ -37,6 +37,10 @@ export function GmailAccountsCard({ initialAccounts }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanNote, setScanNote] = useState<string | null>(null);
+  const [editingEmail, setEditingEmail] = useState<string | null>(null);
+  const [editNewEmail, setEditNewEmail] = useState("");
+  const [editNewIndex, setEditNewIndex] = useState("");
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
   function showToast(msg: string, ok = true) {
@@ -147,6 +151,60 @@ export function GmailAccountsCard({ initialAccounts }: Props) {
       showToast("Network error", false);
     } finally {
       setDeletingEmail(null);
+    }
+  }
+
+  function startEdit(row: GmailAccountRow) {
+    setEditingEmail(row.email);
+    setEditNewEmail(row.email);
+    setEditNewIndex(String(row.accountIndex));
+  }
+
+  function cancelEdit() {
+    setEditingEmail(null);
+    setEditNewEmail("");
+    setEditNewIndex("");
+  }
+
+  async function saveEdit(originalEmail: string) {
+    const email = editNewEmail.trim().toLowerCase();
+    const idx = parseInt(editNewIndex.trim(), 10);
+    if (!email.includes("@")) {
+      showToast("Enter a valid email address", false);
+      return;
+    }
+    if (Number.isNaN(idx) || idx < 0 || idx > 9) {
+      showToast("Index must be 0–9", false);
+      return;
+    }
+    setSaving(true);
+    try {
+      // If the email changed, delete the old entry first
+      if (email !== originalEmail) {
+        await fetch(`/api/gmail-account-map?email=${encodeURIComponent(originalEmail)}`, { method: "DELETE" });
+      }
+      const res = await fetch("/api/gmail-account-map", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, accountIndex: idx, source: "manual" }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const updated = data.account as GmailAccountRow;
+        setAccounts((prev) => {
+          const without = prev.filter((a) => a.email !== originalEmail && a.email !== updated.email);
+          return [...without, updated].sort((a, b) => a.accountIndex - b.accountIndex);
+        });
+        cancelEdit();
+        showToast(`Updated → ${email} /u/${idx}/`);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast((err as { error?: string }).error ?? "Failed to save", false);
+      }
+    } catch {
+      showToast("Network error", false);
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -261,49 +319,110 @@ export function GmailAccountsCard({ initialAccounts }: Props) {
                   <th className="text-center text-[11px] font-bold text-gray-600 uppercase tracking-wide px-4 py-3">/u/N/</th>
                   <th className="text-center text-[11px] font-bold text-gray-600 uppercase tracking-wide px-4 py-3">Source</th>
                   <th className="text-left text-[11px] font-bold text-gray-600 uppercase tracking-wide px-4 py-3">Last Updated</th>
-                  <th className="w-[60px] px-4 py-3" />
+                  <th className="w-[120px] px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
-                {accounts.map((row, idx) => (
-                  <tr
-                    key={row.id}
-                    className={`border-b border-gray-100 transition-colors hover:bg-slate-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}
-                  >
-                    <td className="px-5 py-3 font-mono text-sm text-gray-800">{row.email}</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-sm font-bold">
-                        {row.accountIndex}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
-                          row.source === "auto"
-                            ? "bg-blue-50 text-blue-700 border-blue-200"
-                            : "bg-gray-100 text-gray-600 border-gray-200"
-                        }`}
-                      >
-                        {row.source === "auto" ? <Wifi className="w-2.5 h-2.5" /> : null}
-                        {row.source === "auto" ? "auto" : "manual"}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-gray-400">{relativeTime(row.updatedAt)}</td>
-                    <td className="px-4 py-3">
-                      <button
-                        onClick={() => handleDelete(row.email)}
-                        disabled={deletingEmail === row.email || deletingAll}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-800 border border-red-200 hover:border-red-400 bg-red-50 hover:bg-red-100 rounded-lg px-2.5 py-1.5 transition-colors"
-                      >
-                        {deletingEmail === row.email ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-3 h-3" />
-                        )}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {accounts.map((row, idx) => {
+                  const isEditing = editingEmail === row.email;
+                  return (
+                    <tr
+                      key={row.id}
+                      className={`border-b border-gray-100 transition-colors ${isEditing ? "bg-indigo-50/60" : `hover:bg-slate-50 ${idx % 2 === 0 ? "bg-white" : "bg-gray-50/50"}`}`}
+                    >
+                      {isEditing ? (
+                        <>
+                          <td className="px-4 py-2.5">
+                            <input
+                              type="email"
+                              value={editNewEmail}
+                              onChange={(e) => setEditNewEmail(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") saveEdit(row.email); if (e.key === "Escape") cancelEdit(); }}
+                              autoFocus
+                              className="w-full text-xs rounded-lg border border-indigo-300 px-2.5 py-1.5 font-mono focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            />
+                          </td>
+                          <td className="px-4 py-2.5 text-center">
+                            <input
+                              type="number"
+                              min={0}
+                              max={9}
+                              value={editNewIndex}
+                              onChange={(e) => setEditNewIndex(e.target.value)}
+                              onKeyDown={(e) => { if (e.key === "Enter") saveEdit(row.email); if (e.key === "Escape") cancelEdit(); }}
+                              className="w-16 text-xs rounded-lg border border-indigo-300 px-2 py-1.5 text-center focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            />
+                          </td>
+                          <td className="px-4 py-2.5" colSpan={2} />
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => saveEdit(row.email)}
+                                disabled={saving}
+                                className="inline-flex items-center gap-1 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 border border-indigo-500 rounded-lg px-2.5 py-1.5 transition-colors"
+                              >
+                                {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                                Save
+                              </button>
+                              <button
+                                onClick={cancelEdit}
+                                disabled={saving}
+                                className="inline-flex items-center justify-center w-7 h-7 text-gray-400 hover:text-gray-600 border border-gray-200 hover:bg-gray-100 rounded-lg transition-colors"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-5 py-3 font-mono text-sm text-gray-800">{row.email}</td>
+                          <td className="px-4 py-3 text-center">
+                            <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-sm font-bold">
+                              {row.accountIndex}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span
+                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${
+                                row.source === "auto"
+                                  ? "bg-blue-50 text-blue-700 border-blue-200"
+                                  : "bg-gray-100 text-gray-600 border-gray-200"
+                              }`}
+                            >
+                              {row.source === "auto" ? <Wifi className="w-2.5 h-2.5" /> : null}
+                              {row.source === "auto" ? "auto" : "manual"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-xs text-gray-400">{relativeTime(row.updatedAt)}</td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                onClick={() => startEdit(row)}
+                                disabled={!!editingEmail || deletingAll}
+                                className="inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:text-indigo-800 border border-indigo-200 hover:border-indigo-400 bg-indigo-50 hover:bg-indigo-100 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-40"
+                              >
+                                <Pencil className="w-3 h-3" />
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => handleDelete(row.email)}
+                                disabled={deletingEmail === row.email || deletingAll || !!editingEmail}
+                                className="inline-flex items-center gap-1 text-xs font-medium text-red-600 hover:text-red-800 border border-red-200 hover:border-red-400 bg-red-50 hover:bg-red-100 rounded-lg px-2.5 py-1.5 transition-colors disabled:opacity-40"
+                              >
+                                {deletingEmail === row.email ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-3 h-3" />
+                                )}
+                              </button>
+                            </div>
+                          </td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
 
