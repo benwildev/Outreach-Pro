@@ -24,6 +24,7 @@ interface AdvancedFiltersProps {
   currentEmail: string | null;
   currentDateFrom: string | null;
   currentDateTo: string | null;
+  currentSearchMode: "email" | "thread";
 }
 
 export function AdvancedFilters({
@@ -34,6 +35,7 @@ export function AdvancedFilters({
   currentEmail,
   currentDateFrom,
   currentDateTo,
+  currentSearchMode,
 }: AdvancedFiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -54,6 +56,7 @@ export function AdvancedFilters({
       params.delete("email");
       params.delete("dateFrom");
       params.delete("dateTo");
+      params.delete("searchMode");
       Object.entries(updates).forEach(([k, v]) => {
         if (v) params.set(k, v);
       });
@@ -64,6 +67,21 @@ export function AdvancedFilters({
     [router, searchParams]
   );
 
+  function getBaseUpdates() {
+    return {
+      campaign: currentCampaignId ?? "",
+      email: currentEmail ?? "",
+      dateFrom: currentDateFrom ?? "",
+      dateTo: currentDateTo ?? "",
+      searchMode: currentSearchMode === "thread" ? "thread" : "",
+      ...(statusValue === "followup-due"
+        ? { filter: "followup-due" }
+        : statusValue
+        ? { status: statusValue }
+        : {}),
+    };
+  }
+
   function handleStatusChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const val = e.target.value;
     const updates: Record<string, string> = {
@@ -71,6 +89,7 @@ export function AdvancedFilters({
       email: currentEmail ?? "",
       dateFrom: currentDateFrom ?? "",
       dateTo: currentDateTo ?? "",
+      searchMode: currentSearchMode === "thread" ? "thread" : "",
     };
     if (val === "followup-due") updates.filter = "followup-due";
     else if (val) updates.status = val;
@@ -78,52 +97,24 @@ export function AdvancedFilters({
   }
 
   function handleCampaignChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const updates: Record<string, string> = {
-      campaign: e.target.value,
-      email: currentEmail ?? "",
-      dateFrom: currentDateFrom ?? "",
-      dateTo: currentDateTo ?? "",
-    };
-    if (statusValue === "followup-due") updates.filter = "followup-due";
-    else if (statusValue) updates.status = statusValue;
-    pushParams(updates);
+    pushParams({ ...getBaseUpdates(), campaign: e.target.value });
   }
 
   function handleEmailChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const val = e.target.value;
-    const updates: Record<string, string> = {
-      campaign: currentCampaignId ?? "",
-      email: val,
-      dateFrom: currentDateFrom ?? "",
-      dateTo: currentDateTo ?? "",
-    };
-    if (statusValue === "followup-due") updates.filter = "followup-due";
-    else if (statusValue) updates.status = statusValue;
-    pushParams(updates);
+    pushParams({ ...getBaseUpdates(), email: e.target.value });
   }
 
   function handleDateFromChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const updates: Record<string, string> = {
-      campaign: currentCampaignId ?? "",
-      email: currentEmail ?? "",
-      dateFrom: e.target.value,
-      dateTo: currentDateTo ?? "",
-    };
-    if (statusValue === "followup-due") updates.filter = "followup-due";
-    else if (statusValue) updates.status = statusValue;
-    pushParams(updates);
+    pushParams({ ...getBaseUpdates(), dateFrom: e.target.value });
   }
 
   function handleDateToChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const updates: Record<string, string> = {
-      campaign: currentCampaignId ?? "",
-      email: currentEmail ?? "",
-      dateFrom: currentDateFrom ?? "",
-      dateTo: e.target.value,
-    };
-    if (statusValue === "followup-due") updates.filter = "followup-due";
-    else if (statusValue) updates.status = statusValue;
-    pushParams(updates);
+    pushParams({ ...getBaseUpdates(), dateTo: e.target.value });
+  }
+
+  function handleSearchModeToggle() {
+    const nextMode = currentSearchMode === "thread" ? "" : "thread";
+    pushParams({ ...getBaseUpdates(), email: "", searchMode: nextMode });
   }
 
   function handleClear() {
@@ -131,6 +122,8 @@ export function AdvancedFilters({
       router.push("/dashboard");
     });
   }
+
+  const isThreadMode = currentSearchMode === "thread";
 
   const selectClass =
     "h-9 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs text-gray-700 ring-offset-background focus:outline-none focus:ring-2 focus:ring-indigo-400 shadow-sm transition-colors hover:border-gray-300 cursor-pointer";
@@ -140,21 +133,34 @@ export function AdvancedFilters({
   return (
     <div className={`px-4 py-3 border-b border-gray-100 transition-colors ${isPending ? "opacity-60" : ""}`}>
       <div className="flex flex-wrap items-center gap-2">
-        {/* Search icon label */}
+        {/* Filter label */}
         <div className="flex items-center gap-1.5 text-[11px] text-gray-400 font-medium mr-1">
           <Filter className="w-3.5 h-3.5" />
           <span>Filter</span>
         </div>
 
-        {/* Email search */}
-        <div className="relative flex-1 min-w-[180px] max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+        {/* Search box with mode toggle */}
+        <div className="relative flex-1 min-w-[200px] max-w-xs flex items-center">
+          {/* Mode toggle button — sits inside the left side */}
+          <button
+            type="button"
+            onClick={handleSearchModeToggle}
+            title={isThreadMode ? "Switch to email search" : "Switch to thread ID search"}
+            className={`absolute left-1.5 z-10 flex items-center justify-center h-6 px-1.5 rounded text-[10px] font-bold transition-all border ${
+              isThreadMode
+                ? "bg-indigo-600 text-white border-indigo-500"
+                : "bg-gray-100 text-gray-500 border-gray-200 hover:bg-gray-200"
+            }`}
+          >
+            {isThreadMode ? "#" : "@"}
+          </button>
+          <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
           <input
             type="text"
-            placeholder="Search by email..."
+            placeholder={isThreadMode ? "Search by thread ID..." : "Search by email..."}
             value={currentEmail ?? ""}
             onChange={handleEmailChange}
-            className={selectClass + " pl-8 w-full"}
+            className={selectClass + " pl-10 pr-8 w-full"}
           />
         </div>
 
@@ -208,7 +214,12 @@ export function AdvancedFilters({
             </span>
           )}
           {currentEmail && (
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-medium border border-emerald-100">
+            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-medium border ${
+              isThreadMode
+                ? "bg-indigo-50 text-indigo-700 border-indigo-100"
+                : "bg-emerald-50 text-emerald-700 border-emerald-100"
+            }`}>
+              <span className="font-bold">{isThreadMode ? "#" : "@"}</span>
               {currentEmail}
             </span>
           )}

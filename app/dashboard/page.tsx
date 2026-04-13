@@ -37,6 +37,7 @@ interface DashboardPageProps {
     dateFrom?: string;
     dateTo?: string;
     page?: string;
+    searchMode?: string;
   };
 }
 
@@ -51,6 +52,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const filter = searchParams.filter ?? null;
   const campaignId = searchParams.campaign ?? null;
   const emailSearch = searchParams.email?.trim() ?? null;
+  const searchMode = searchParams.searchMode === "thread" ? "thread" : "email";
   const dateFrom = searchParams.dateFrom ?? null;
   const dateTo = searchParams.dateTo ?? null;
   const currentPage = Math.max(1, parseInt(searchParams.page ?? "1", 10) || 1);
@@ -84,7 +86,11 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   }
 
   if (emailSearch) {
-    where.recipientEmail = { contains: emailSearch, mode: "insensitive" };
+    if (searchMode === "thread") {
+      where.gmailThreadId = { contains: emailSearch, mode: "insensitive" };
+    } else {
+      where.recipientEmail = { contains: emailSearch, mode: "insensitive" };
+    }
   }
 
   const skip = (currentPage - 1) * PAGE_SIZE;
@@ -280,6 +286,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             currentEmail={emailSearch}
             currentDateFrom={dateFrom}
             currentDateTo={dateTo}
+            currentSearchMode={searchMode}
           />
 
           {/* Automation panels */}
