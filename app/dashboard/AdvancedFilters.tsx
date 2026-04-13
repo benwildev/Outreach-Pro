@@ -18,6 +18,7 @@ const STATUS_OPTIONS = [
 
 interface AdvancedFiltersProps {
   campaigns: Campaign[];
+  gmailAccounts: string[];
   currentStatus: string | null;
   currentFilter: string | null;
   currentCampaignId: string | null;
@@ -25,10 +26,12 @@ interface AdvancedFiltersProps {
   currentDateFrom: string | null;
   currentDateTo: string | null;
   currentSearchMode: "email" | "thread";
+  currentGmailAcct: string | null;
 }
 
 export function AdvancedFilters({
   campaigns,
+  gmailAccounts,
   currentStatus,
   currentFilter,
   currentCampaignId,
@@ -36,6 +39,7 @@ export function AdvancedFilters({
   currentDateFrom,
   currentDateTo,
   currentSearchMode,
+  currentGmailAcct,
 }: AdvancedFiltersProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -45,7 +49,7 @@ export function AdvancedFilters({
     currentFilter === "followup-due" ? "followup-due" : (currentStatus ?? "");
 
   const hasActiveFilters =
-    !!statusValue || !!currentCampaignId || !!currentEmail || !!currentDateFrom || !!currentDateTo;
+    !!statusValue || !!currentCampaignId || !!currentEmail || !!currentDateFrom || !!currentDateTo || !!currentGmailAcct;
 
   const pushParams = useCallback(
     (updates: Record<string, string>) => {
@@ -57,6 +61,7 @@ export function AdvancedFilters({
       params.delete("dateFrom");
       params.delete("dateTo");
       params.delete("searchMode");
+      params.delete("gmailAcct");
       Object.entries(updates).forEach(([k, v]) => {
         if (v) params.set(k, v);
       });
@@ -74,6 +79,7 @@ export function AdvancedFilters({
       dateFrom: currentDateFrom ?? "",
       dateTo: currentDateTo ?? "",
       searchMode: currentSearchMode === "thread" ? "thread" : "",
+      gmailAcct: currentGmailAcct ?? "",
       ...(statusValue === "followup-due"
         ? { filter: "followup-due" }
         : statusValue
@@ -90,6 +96,7 @@ export function AdvancedFilters({
       dateFrom: currentDateFrom ?? "",
       dateTo: currentDateTo ?? "",
       searchMode: currentSearchMode === "thread" ? "thread" : "",
+      gmailAcct: currentGmailAcct ?? "",
     };
     if (val === "followup-due") updates.filter = "followup-due";
     else if (val) updates.status = val;
@@ -117,6 +124,10 @@ export function AdvancedFilters({
     pushParams({ ...getBaseUpdates(), email: "", searchMode: nextMode });
   }
 
+  function handleGmailAcctChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    pushParams({ ...getBaseUpdates(), gmailAcct: e.target.value });
+  }
+
   function handleClear() {
     startTransition(() => {
       router.push("/dashboard");
@@ -141,7 +152,6 @@ export function AdvancedFilters({
 
         {/* Search box with mode toggle */}
         <div className="relative flex-1 min-w-[200px] max-w-xs flex items-center">
-          {/* Mode toggle button — sits inside the left side */}
           <button
             type="button"
             onClick={handleSearchModeToggle}
@@ -178,6 +188,23 @@ export function AdvancedFilters({
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
+
+        {/* Gmail Acct */}
+        {gmailAccounts.length > 0 && (
+          <select
+            value={currentGmailAcct ?? ""}
+            onChange={handleGmailAcctChange}
+            className={selectClass}
+            title="Filter by sending Gmail account"
+          >
+            <option value="">All Gmail accounts</option>
+            {gmailAccounts.map((acct) => (
+              <option key={acct} value={acct}>
+                {acct}
+              </option>
+            ))}
+          </select>
+        )}
 
         {/* Date range */}
         <div className="flex items-center gap-1.5 bg-white border border-gray-200 rounded-lg px-3 py-1 shadow-sm">
@@ -221,6 +248,12 @@ export function AdvancedFilters({
             }`}>
               <span className="font-bold">{isThreadMode ? "#" : "@"}</span>
               {currentEmail}
+            </span>
+          )}
+          {currentGmailAcct && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 text-[11px] font-medium border border-orange-100">
+              <span className="font-bold">✉</span>
+              {currentGmailAcct}
             </span>
           )}
           {(currentDateFrom || currentDateTo) && (

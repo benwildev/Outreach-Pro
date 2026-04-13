@@ -38,6 +38,7 @@ interface DashboardPageProps {
     dateTo?: string;
     page?: string;
     searchMode?: string;
+    gmailAcct?: string;
   };
 }
 
@@ -55,6 +56,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   const searchMode = searchParams.searchMode === "thread" ? "thread" : "email";
   const dateFrom = searchParams.dateFrom ?? null;
   const dateTo = searchParams.dateTo ?? null;
+  const gmailAcct = searchParams.gmailAcct?.trim() ?? null;
   const currentPage = Math.max(1, parseInt(searchParams.page ?? "1", 10) || 1);
 
   const campaigns = await prisma.campaign.findMany({
@@ -62,11 +64,25 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     select: { id: true, name: true },
   });
 
+  // Distinct Gmail accounts used as senders — for the Gmail Acct filter dropdown.
+  const gmailAcctRows = await prisma.lead.findMany({
+    where: { sentGmailAuthUser: { not: null } },
+    select: { sentGmailAuthUser: true },
+    distinct: ["sentGmailAuthUser"],
+    orderBy: { sentGmailAuthUser: "asc" },
+  });
+  const gmailAccounts = gmailAcctRows
+    .map((r) => r.sentGmailAuthUser!)
+    .filter(Boolean)
+    .sort();
+
   const isFollowUpDueFilter = filter === "followup-due" || filter === "followup1-due" || filter === "followup2-due";
   const followupDueStep = filter === "followup1-due" ? 1 : filter === "followup2-due" ? 2 : null;
   const baseWhere: Prisma.LeadWhereInput = {};
 
   if (campaignId) baseWhere.campaignId = campaignId;
+
+  if (gmailAcct) baseWhere.sentGmailAuthUser = { contains: gmailAcct, mode: "insensitive" };
 
   if (dateFrom || dateTo) {
     const sentAtFilter: Prisma.DateTimeNullableFilter = {};
@@ -172,6 +188,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
       ...(emailSearch ? { email: emailSearch } : {}),
       ...(dateFrom ? { dateFrom } : {}),
       ...(dateTo ? { dateTo } : {}),
+      ...(gmailAcct ? { gmailAcct } : {}),
       ...(page > 1 ? { page: String(page) } : {}),
     });
     const qs = params.toString();
@@ -280,6 +297,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
           {/* Filters */}
           <AdvancedFilters
             campaigns={campaigns}
+            gmailAccounts={gmailAccounts}
             currentStatus={status}
             currentFilter={filter}
             currentCampaignId={campaignId}
@@ -287,6 +305,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
             currentDateFrom={dateFrom}
             currentDateTo={dateTo}
             currentSearchMode={searchMode}
+            currentGmailAcct={gmailAcct}
           />
 
           {/* Automation panels */}
