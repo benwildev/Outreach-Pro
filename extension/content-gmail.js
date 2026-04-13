@@ -3116,6 +3116,7 @@
     const gmailBaseUrl = getGmailBaseUrl(getCurrentAuthUser() || expectedGmailAuthUser || "0");
     const autoSend = data.autoSend !== false;
     let requireThreadReply = isFollowup && openReply;
+    let workflowAborted = false;
 
     log("Starting fill and send", isFollowup ? "(follow-up)" : "", openReply ? "(reply in thread)" : "");
 
@@ -3225,20 +3226,24 @@
     }
 
     if (openReply) {
-      // Helper: open a fresh compose as fallback when the thread can't be loaded.
-      // Sets requireThreadReply = false so the rest of the flow treats it as a new email.
-      async function fallbackToFreshCompose(reason) {
-        log("Thread not found (" + reason + "); falling back to fresh compose");
-        requireThreadReply = false;
-        const composeUrl = gmailBaseUrl + "#inbox?compose=new" +
-          "&to=" + encodeURIComponent(to || "") +
-          "&su=" + encodeURIComponent(subject || "");
-        window.location.href = composeUrl;
-        await delay(4000);
+      // When the thread can't be loaded (e.g. cross-account FU1 override), do NOT open a
+      // fresh compose. Instead report the failure immediately and abort the workflow so the
+      // dashboard shows the lead as Failed.
+      async function failThreadWorkflow(reason) {
+        log("Thread not found (" + reason + ") — aborting workflow, marking lead as failed");
+        workflowAborted = true;
+        try {
+          await chrome.runtime.sendMessage({
+            action: "gmailWorkflowFailed",
+            data: { leadId: String(leadId), email: to, error: "Thread not in this Gmail account: " + reason },
+          });
+        } catch (e) {
+          log("Could not notify background of thread failure:", e && e.message);
+        }
       }
 
       if (hasConversationNoLongerExistsError()) {
-        await fallbackToFreshCompose("immediate error on page load");
+        await failThreadWorkflow("immediate error on page load");
       } else if (threadIdForUrl) {
         const currentHash = (window.location.hash || "").replace(/^#+/, "");
         const threadInHash = currentHash.indexOf(threadIdForUrl) !== -1;
@@ -3247,15 +3252,14 @@
           window.location.hash = "#all/" + threadIdForUrl;
           await delay(3500);
           if (hasConversationNoLongerExistsError()) {
-            await fallbackToFreshCompose("error after navigation");
+            await failThreadWorkflow("error after navigation");
           }
         }
-        // Only try to click Reply if we're still expecting a thread reply
-        if (requireThreadReply) {
+        if (!workflowAborted) {
           const clicked = await clickReplyAndWaitForCompose();
           if (!clicked) {
-            log("Could not open Reply compose — falling back to fresh compose");
-            await fallbackToFreshCompose("reply button not found");
+            log("Could not open Reply compose — marking lead as failed");
+            await failThreadWorkflow("reply button not found");
           } else {
             await delay(2000);
           }
@@ -3263,13 +3267,16 @@
       } else {
         const clicked = await clickReplyAndWaitForCompose();
         if (!clicked) {
-          log("Could not open Reply compose — falling back to fresh compose");
-          await fallbackToFreshCompose("reply button not found (no thread ID)");
+          log("Could not open Reply compose (no thread ID) — marking lead as failed");
+          await failThreadWorkflow("reply button not found (no thread ID)");
         } else {
           await delay(2000);
         }
       }
     }
+
+    // Thread not found in this Gmail account — lead already marked as failed, stop here.
+    if (workflowAborted) return;
 
     if (!to || !subject) {
       const hash = window.location.hash || "";

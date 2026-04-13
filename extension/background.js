@@ -369,6 +369,36 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // Thread not found in the override account — mark lead failed in DB and immediately
+  // reject the bulk completion promise (no timeout wait, dashboard updates right away).
+  if (message.action === "gmailWorkflowFailed") {
+    const d = message.data || {};
+    const leadId = d.leadId ? String(d.leadId).trim() : "";
+    const email = d.email ? String(d.email).trim() : "";
+    const error = d.error ? String(d.error) : "Thread not found in this Gmail account";
+    // Update DB: mark lead as failed
+    getApiBaseUrl().then(function(base) {
+      const payload = { status: "failed" };
+      if (leadId) payload.leadId = leadId;
+      if (email) payload.email = email;
+      return fetch(base + "/api/update-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }).catch(function() {});
+    // Reject the completion promise — the bulk loop's catch block will increment failed count.
+    if (leadId) {
+      rejectBulkWorkflowCompletion(leadId, error);
+    } else if (bulkAutomationState.status === "running") {
+      bulkAutomationState.failed = (bulkAutomationState.failed || 0) + 1;
+      bulkAutomationState.lastError = error;
+    }
+    console.log("[Leads Extension Background] gmailWorkflowFailed:", error, "leadId:", leadId);
+    sendResponse({ success: true });
+    return false;
+  }
+
   if (message.action === "getPopupState") {
     handleGetPopupState()
       .then(sendResponse)
@@ -1580,6 +1610,21 @@ function resolveBulkWorkflowCompletion(leadId, payload) {
   } catch (_) {
     // Ignore.
   }
+  return true;
+}
+
+// Immediately rejects the bulk completion promise so the loop's catch block fires
+// (incrementing failed count) without waiting for the full timeout.
+function rejectBulkWorkflowCompletion(leadId, errorMsg) {
+  const key = getBulkWaiterKey(leadId);
+  if (!key) return false;
+  const waiter = bulkWorkflowWaiters.get(key);
+  if (!waiter) return false;
+  bulkWorkflowWaiters.delete(key);
+  if (waiter.timeoutId) clearTimeout(waiter.timeoutId);
+  try {
+    waiter.reject(new Error(errorMsg || "Workflow failed"));
+  } catch (_) {}
   return true;
 }
 
