@@ -2133,7 +2133,8 @@ async function openGmailFromFallback(data, chatTabId) {
 }
 
 async function handleStartFollowupWorkflow(data) {
-  const { to, subject, leadId, threadId, campaignGmailAuthUser, campaignGmailAccountIndex, scheduleSendTime } = data;
+  const { to, subject, leadId, campaignGmailAuthUser, campaignGmailAccountIndex, scheduleSendTime } = data;
+  const threadId = data.threadId || data.gmailThreadId;
   const body = applyFollowupRecipientVar(String(data.body || ""), data);
   const customSignature = await getCustomSignatureSetting();
   const resolvedAuthUserFU = await resolveGmailIndex(campaignGmailAuthUser, campaignGmailAccountIndex);
