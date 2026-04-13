@@ -93,6 +93,7 @@ export async function POST(request: Request) {
           sentAt: effectiveSentAt,
           nextFollowup: nextFollowupDate
         } : {}),
+        ...(targetStatus === "scheduled" ? { scheduledAt: now } : {}),
         ...(threadId ? { gmailThreadId: threadId } : {}),
         ...(sentGmailAuthUser !== undefined && sentGmailAuthUser !== null ? { sentGmailAuthUser: String(sentGmailAuthUser).trim() } : {}),
         ...(subject ? { sentSubject: subject } : {}),

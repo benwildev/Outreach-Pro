@@ -23,8 +23,11 @@ import {
 import { Play, Square, CalendarClock, ChevronDown, ChevronUp, Unlock } from "lucide-react";
 
 const SCHED_COMPOSE_DELAY_MS = 10000;
+const K_FU1_OVERRIDE = "leadsExtensionFu1GmailOverride";
 
 type SchedPhase = "send" | "followup" | "both" | "followup1" | "followup2";
+
+interface GmailAccount { email: string; accountIndex: number; }
 
 export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: string | null }) {
   const [scheduleDate, setScheduleDate] = useState(getTomorrowDate);
@@ -36,6 +39,8 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
   const [error, setError] = useState("");
   const [hasRuntime, setHasRuntime] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [fu1GmailOverride, setFu1GmailOverride] = useState("");
+  const [gmailAccounts, setGmailAccounts] = useState<GmailAccount[]>([]);
 
   useEffect(() => {
     const schedLimitRaw = typeof window !== "undefined" ? window.localStorage.getItem(K_SCHED_LIMIT) : null;
@@ -52,7 +57,13 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
       }
       const savedPhase = window.localStorage.getItem(K_SCHED_PHASE) ?? "send";
       setSchedPhase((["send", "both", "followup", "followup1", "followup2"].includes(savedPhase) ? savedPhase : "send") as SchedPhase);
+      const savedOverride = window.localStorage.getItem(K_FU1_OVERRIDE) ?? "";
+      setFu1GmailOverride(savedOverride);
     }
+    fetch("/api/gmail-accounts")
+      .then((r) => r.json())
+      .then((d) => { if (d.success && Array.isArray(d.accounts)) setGmailAccounts(d.accounts); })
+      .catch(() => {});
   }, []);
 
   async function refreshState(customError = "") {
@@ -101,6 +112,9 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
     window.localStorage.setItem(K_SCHED_LIMIT, String(maxLeads));
     window.localStorage.setItem(K_SCHED_STAGGER, String(staggerMinutes));
     window.localStorage.setItem(K_SCHED_PHASE, schedPhase);
+    window.localStorage.setItem(K_FU1_OVERRIDE, fu1GmailOverride);
+
+    const showFu1Override = schedPhase === "both" || schedPhase === "followup" || schedPhase === "followup1";
 
     try {
       const response = await sendRuntimeMessage({
@@ -115,6 +129,7 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
           windowEnabled: false,
           scheduleSendTime: combinedSchedule,
           scheduleStaggerMs: staggerMinutes * 60 * 1000,
+          ...(showFu1Override && fu1GmailOverride ? { fu1GmailOverride } : {}),
         },
       });
       if (!response?.success) {
@@ -260,6 +275,24 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
                 </button>
               ))}
             </div>
+
+            {/* FU1 account override — shown when phase includes FU1 */}
+            {(schedPhase === "both" || schedPhase === "followup" || schedPhase === "followup1") && gmailAccounts.length > 0 && (
+              <div className="flex items-center gap-2 bg-white border border-amber-200 rounded-lg px-3 py-1.5 shadow-sm">
+                <span className="text-[11px] font-semibold text-gray-600 whitespace-nowrap">Send FU1 from</span>
+                <select
+                  value={fu1GmailOverride}
+                  onChange={(e) => setFu1GmailOverride(e.target.value)}
+                  disabled={isActive}
+                  className="h-7 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent shadow-sm"
+                >
+                  <option value="">Campaign default</option>
+                  {gmailAccounts.map((a) => (
+                    <option key={a.email} value={a.email}>{a.email}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div className="w-px h-6 bg-amber-200 mx-1" />
 

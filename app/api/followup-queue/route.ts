@@ -34,6 +34,7 @@ export async function GET(request: Request) {
     const campaignId = (url.searchParams.get("campaignId") ?? "").trim();
     const stepParam = url.searchParams.get("step");
     const step = stepParam ? parseInt(stepParam, 10) : null;
+    const fu1GmailOverride = (url.searchParams.get("fu1GmailOverride") ?? "").trim();
 
     const where: Prisma.LeadWhereInput = {
       status: "sent",
@@ -71,13 +72,16 @@ export async function GET(request: Request) {
       },
     });
 
-    // Batch-load account map for all distinct follow-up emails (FU1 + FU2) in one query.
+    // Batch-load account map for all distinct follow-up emails (FU1 + FU2 + override) in one query.
     const allFollowupEmails = Array.from(
       new Set(
-        leads.flatMap((l) => [
-          l.campaign.gmailFollowupEmail,
-          l.campaign.gmailFollowup2Email,
-        ]).filter((e): e is string => !!e)
+        [
+          ...leads.flatMap((l) => [
+            l.campaign.gmailFollowupEmail,
+            l.campaign.gmailFollowup2Email,
+          ]),
+          fu1GmailOverride || null,
+        ].filter((e): e is string => !!e)
       )
     );
     const accountMapRows = allFollowupEmails.length > 0
@@ -99,11 +103,12 @@ export async function GET(request: Request) {
 
         const followupBody = resolveFollowupBody(lead.step, lead.campaign.followup1, lead.campaign.followup2, followup1Templates);
 
-        // For step 2, prefer gmailFollowup2Email; fall back to gmailFollowupEmail.
-        const stepEmail =
-          lead.step === 2
-            ? (lead.campaign.gmailFollowup2Email || lead.campaign.gmailFollowupEmail)
-            : lead.campaign.gmailFollowupEmail;
+        // For step-1 leads: apply fu1GmailOverride if provided, else use campaign gmailFollowupEmail.
+        // For step-2 leads: prefer gmailFollowup2Email; fall back to gmailFollowupEmail.
+        const isStep1Lead = lead.step === 1;
+        const stepEmail = isStep1Lead
+          ? (fu1GmailOverride || lead.campaign.gmailFollowupEmail)
+          : (lead.campaign.gmailFollowup2Email || lead.campaign.gmailFollowupEmail);
 
         const followupEmail = stepEmail ?? null;
         let campaignGmailAccountIndex = "";

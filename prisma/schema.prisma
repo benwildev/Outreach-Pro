@@ -103,6 +103,7 @@ model Lead {
   unsubscribed       Boolean   @default(false)
   bouncedEmail       String?
   claimedAt          DateTime?
+  scheduledAt        DateTime?
   campaign           Campaign  @relation(fields: [campaignId], references: [id])
 
   @@map("lead")

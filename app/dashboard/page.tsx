@@ -8,6 +8,7 @@ import { AddLeadDialog } from "./AddLeadDialog";
 import { ImportLeadsDialog } from "./ImportLeadsDialog";
 import { StatsCards } from "./StatsCards";
 import { DailySendTracker } from "./DailySendTracker";
+import { FU1ScheduledTracker } from "./FU1ScheduledTracker";
 import { BulkAutomationPanel } from "./BulkAutomationPanel";
 import { BulkSchedulePanel } from "./BulkSchedulePanel";
 import { BulkActionsRow } from "./BulkActionsRow";
@@ -120,19 +121,39 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
-  const todaySentLeads = await prisma.lead.findMany({
-    where: {
-      sentAt: { gte: todayStart },
-      sentGmailAuthUser: { not: null },
-    },
-    select: { sentGmailAuthUser: true },
-  });
+  const [todaySentLeads, fu1ScheduledLeads] = await Promise.all([
+    prisma.lead.findMany({
+      where: {
+        sentAt: { gte: todayStart },
+        sentGmailAuthUser: { not: null },
+      },
+      select: { sentGmailAuthUser: true },
+    }),
+    prisma.lead.findMany({
+      where: {
+        status: "scheduled",
+        step: 2,
+        scheduledAt: { gte: todayStart },
+        sentGmailAuthUser: { not: null },
+      },
+      select: { sentGmailAuthUser: true },
+    }),
+  ]);
   const accountCountMap: Record<string, number> = {};
   for (const l of todaySentLeads) {
     const acct = l.sentGmailAuthUser ?? "unknown";
     accountCountMap[acct] = (accountCountMap[acct] ?? 0) + 1;
   }
   const dailyAccountStats = Object.entries(accountCountMap).map(([account, count]) => ({
+    account,
+    count,
+  }));
+  const fu1AccountCountMap: Record<string, number> = {};
+  for (const l of fu1ScheduledLeads) {
+    const acct = l.sentGmailAuthUser ?? "unknown";
+    fu1AccountCountMap[acct] = (fu1AccountCountMap[acct] ?? 0) + 1;
+  }
+  const fu1ScheduledAccountStats = Object.entries(fu1AccountCountMap).map(([account, count]) => ({
     account,
     count,
   }));
@@ -232,6 +253,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
         {/* Daily send tracker */}
         <DailySendTracker accountStats={dailyAccountStats} />
+
+        {/* FU1 scheduled today tracker */}
+        <FU1ScheduledTracker accountStats={fu1ScheduledAccountStats} />
 
         {/* Main content card */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 overflow-hidden">
