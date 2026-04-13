@@ -767,22 +767,7 @@ async function resolveGmailAccountIndex(emailAddress) {
   if (!emailAddress || !String(emailAddress).includes("@")) return null;
   const targetEmail = String(emailAddress).toLowerCase().trim();
 
-  // 1. Check persistent cache first — survives service worker restarts and browser sessions.
-  try {
-    const stored = await chrome.storage.local.get("gmailAccountIndexCache");
-    const cache = stored.gmailAccountIndexCache || {};
-    if (cache[targetEmail] !== undefined) {
-      const cachedIndex = String(cache[targetEmail]);
-      if (/^\d+$/.test(cachedIndex)) {
-        console.log("[Leads Extension] Gmail index cache HIT for", targetEmail, "→", cachedIndex);
-        return cachedIndex;
-      }
-      console.warn("[Leads Extension] Gmail index cache value invalid for", targetEmail, "— ignoring:", cachedIndex);
-    }
-  } catch (_) {}
-
   // Helper: fire-and-forget upsert of a single email→index pair to the server DB.
-  // Written as a closure here so it shares the outer scope's getApiBaseUrl reference.
   async function _persistToServer(em, idx, src) {
     try {
       const base = await getApiBaseUrl();
@@ -794,7 +779,51 @@ async function resolveGmailAccountIndex(emailAddress) {
     } catch (_) {}
   }
 
-  // 1.5. Check server-side DB — shared across all computers running the extension.
+  // 1. ALWAYS try the live Google ListAccounts API first — it returns the current signed-in
+  //    account → index mapping directly from Google, so it is NEVER stale.
+  //    If the cache or server DB have a wrong/outdated index for this email, this step
+  //    corrects it before any tabs are opened.
+  try {
+    const accountMap = await fetchGmailAccountMap();
+    if (Object.keys(accountMap).length > 0) {
+      const validMap = {};
+      for (const [em, idx] of Object.entries(accountMap)) {
+        if (/^\d+$/.test(idx)) validMap[em] = idx;
+      }
+      // Update the local cache and server DB with the fresh data.
+      try {
+        const stored = await chrome.storage.local.get("gmailAccountIndexCache");
+        const cache = stored.gmailAccountIndexCache || {};
+        Object.assign(cache, validMap);
+        await chrome.storage.local.set({ gmailAccountIndexCache: cache });
+      } catch (_) {}
+      for (const [em, idx] of Object.entries(validMap)) {
+        _persistToServer(em, idx, "auto");
+      }
+      if (validMap[targetEmail] !== undefined) {
+        console.log("[Leads Extension] ListAccounts resolved index for", targetEmail, "→", validMap[targetEmail]);
+        return validMap[targetEmail];
+      }
+      console.log("[Leads Extension] ListAccounts: target email not found in signed-in accounts");
+    }
+  } catch (listErr) {
+    console.warn("[Leads Extension] ListAccounts fetch failed — falling back to cache:", listErr && listErr.message ? listErr.message : String(listErr));
+  }
+
+  // 2. Fall back to the persistent local cache (survives service worker restarts).
+  try {
+    const stored = await chrome.storage.local.get("gmailAccountIndexCache");
+    const cache = stored.gmailAccountIndexCache || {};
+    if (cache[targetEmail] !== undefined) {
+      const cachedIndex = String(cache[targetEmail]);
+      if (/^\d+$/.test(cachedIndex)) {
+        console.log("[Leads Extension] Gmail index cache HIT for", targetEmail, "→", cachedIndex);
+        return cachedIndex;
+      }
+    }
+  } catch (_) {}
+
+  // 3. Check server-side DB — shared across all computers running the extension.
   try {
     const base = await getApiBaseUrl();
     const dbResp = await fetch(base + "/api/gmail-account-map?email=" + encodeURIComponent(targetEmail));
@@ -803,7 +832,6 @@ async function resolveGmailAccountIndex(emailAddress) {
       if (dbData.found && /^\d+$/.test(String(dbData.accountIndex))) {
         const serverIndex = String(dbData.accountIndex);
         console.log("[Leads Extension] Gmail index server DB HIT for", targetEmail, "→", serverIndex);
-        // Seed local cache so next lookup is instant
         try {
           const stored = await chrome.storage.local.get("gmailAccountIndexCache");
           const cache = stored.gmailAccountIndexCache || {};
@@ -815,39 +843,7 @@ async function resolveGmailAccountIndex(emailAddress) {
     }
   } catch (_) {}
 
-  // 2. Fetch the browser's full Google account list from ListAccounts API.
-  //    This returns all signed-in accounts in /u/N/ order — instant and requires no tabs.
-  try {
-    const accountMap = await fetchGmailAccountMap();
-    if (Object.keys(accountMap).length > 0) {
-      // Persist ALL discovered email→index pairs to the cache in one shot.
-      // Only cache entries where the index is a valid numeric string.
-      const validMap = {};
-      for (const [em, idx] of Object.entries(accountMap)) {
-        if (/^\d+$/.test(idx)) validMap[em] = idx;
-      }
-      try {
-        const stored = await chrome.storage.local.get("gmailAccountIndexCache");
-        const cache = stored.gmailAccountIndexCache || {};
-        Object.assign(cache, validMap);
-        await chrome.storage.local.set({ gmailAccountIndexCache: cache });
-        console.log("[Leads Extension] ListAccounts: cached", Object.keys(validMap).length, "account(s)");
-      } catch (_) {}
-      // Upsert ALL discovered mappings to server so other computers benefit.
-      for (const [em, idx] of Object.entries(validMap)) {
-        _persistToServer(em, idx, "auto");
-      }
-      if (validMap[targetEmail] !== undefined) {
-        console.log("[Leads Extension] ListAccounts resolved index for target email →", validMap[targetEmail]);
-        return validMap[targetEmail];
-      }
-      console.log("[Leads Extension] ListAccounts: target email not found in signed-in accounts");
-    }
-  } catch (listErr) {
-    console.warn("[Leads Extension] ListAccounts fetch failed — falling back to tab scan:", listErr && listErr.message ? listErr.message : String(listErr));
-  }
-
-  // 3. Fall back to scanning currently open Gmail tabs.
+  // 4. Fall back to scanning currently open Gmail tabs.
   try {
     const tabs = await chrome.tabs.query({ url: "https://mail.google.com/*" });
     for (const tab of tabs) {
@@ -913,7 +909,7 @@ async function resolveGmailAccountIndex(emailAddress) {
     }
   } catch (_) {}
 
-  // 4. Last resort: probe /u/0/ through /u/4/ by opening hidden background tabs.
+  // 5. Last resort: probe /u/0/ through /u/4/ by opening hidden background tabs.
   //    Each tab is opened, checked, then immediately closed — clean and minimal.
   const READ_EMAIL_FROM_PAGE = () => {
     const ariaNodes = document.querySelectorAll(
