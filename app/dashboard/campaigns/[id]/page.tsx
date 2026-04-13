@@ -37,13 +37,17 @@ export default async function CampaignEditorPage({
     if (l.sentGmailAuthUser) allAccounts.add(l.sentGmailAuthUser);
   }
   const bounceCounts: Record<string, number> = {};
-  Array.from(allAccounts).forEach((acct) => { bounceCounts[acct] = 0; });
+  Array.from(allAccounts).forEach((acct) => {
+    bounceCounts[acct] = 0;
+  });
   for (const l of bouncedLeads) {
     const acct = l.sentGmailAuthUser ?? "unknown";
     allAccounts.add(acct);
     bounceCounts[acct] = (bounceCounts[acct] ?? 0) + 1;
   }
-  const bounceEntries = Object.entries(bounceCounts).sort((a, b) => b[1] - a[1]);
+  const bounceEntries = Object.entries(bounceCounts).sort(
+    (a, b) => b[1] - a[1],
+  );
   const showBounceCard = bounceEntries.length > 0;
 
   return (
@@ -52,10 +56,20 @@ export default async function CampaignEditorPage({
         <div className="mx-auto px-6 py-5">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <Image src="/logo.png" alt="Benwill Outreach" width={40} height={40} className="w-10 h-10 rounded-full object-contain bg-white/10 p-0.5" />
+              <Image
+                src="/logo.png"
+                alt="Benwill Outreach"
+                width={40}
+                height={40}
+                className="w-10 h-10 rounded-full object-contain bg-white/10 p-0.5"
+              />
               <div>
-                <h1 className="text-2xl font-bold text-white tracking-tight">Edit Campaign</h1>
-                <p className="text-indigo-300 text-xs mt-0.5 font-medium">{campaign.name}</p>
+                <h1 className="text-2xl font-bold text-white tracking-tight">
+                  Edit Campaign
+                </h1>
+                <p className="text-indigo-300 text-xs mt-0.5 font-medium">
+                  {campaign.name}
+                </p>
               </div>
             </div>
             <Link
@@ -74,17 +88,32 @@ export default async function CampaignEditorPage({
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-green-50 to-emerald-50/50 flex items-center gap-2">
             <Sheet className="w-4 h-4 text-green-600" />
-            <h2 className="text-sm font-semibold text-gray-800">Google Sheets Sync</h2>
+            <h2 className="text-sm font-semibold text-gray-800">
+              Google Sheets Sync
+            </h2>
           </div>
           <div className="px-6 py-5 space-y-4">
             <p className="text-sm text-gray-600">
-              Download the Apps Script file and paste it into your Google Sheet to sync lead status, sent dates, reply info, and Gmail thread links back into your sheet.
+              Download the Apps Script file and paste it into your Google Sheet
+              to sync lead status, sent dates, reply info, and Gmail thread
+              links back into your sheet.
             </p>
             <ol className="text-sm text-gray-600 space-y-1 list-decimal list-inside">
-              <li>Save the Google Sheet URL in the field below, then click <strong>Save Changes</strong></li>
+              <li>
+                Save the Google Sheet URL in the field below, then click{" "}
+                <strong>Save Changes</strong>
+              </li>
               <li>Download the Apps Script below</li>
-              <li>Open your Google Sheet → <strong>Extensions → Apps Script</strong></li>
-              <li>Paste the code, click Save, then run <code className="bg-gray-100 px-1 rounded font-mono text-xs">syncBenwillData()</code></li>
+              <li>
+                Open your Google Sheet →{" "}
+                <strong>Extensions → Apps Script</strong>
+              </li>
+              <li>
+                Paste the code, click Save, then run{" "}
+                <code className="bg-gray-100 px-1 rounded font-mono text-xs">
+                  syncBenwillData()
+                </code>
+              </li>
             </ol>
             <a
               href={`/api/sheets-script/${campaign.id}`}
@@ -101,15 +130,29 @@ export default async function CampaignEditorPage({
           <div className="bg-white rounded-2xl shadow-sm border border-orange-200/80 overflow-hidden">
             <div className="px-6 py-4 border-b border-orange-100 bg-gradient-to-r from-orange-50 to-amber-50/50 flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-orange-500" />
-              <h2 className="text-sm font-semibold text-gray-800">Bounce Summary by Account</h2>
-              <span className="ml-auto text-xs text-orange-600 font-medium">{bouncedLeads.length} total bounced</span>
+              <h2 className="text-sm font-semibold text-gray-800">
+                Bounce Summary by Account
+              </h2>
+              <span className="ml-auto text-xs text-orange-600 font-medium">
+                {bouncedLeads.length} total bounced
+              </span>
             </div>
             <div className="px-6 py-4 space-y-2">
-              <p className="text-xs text-gray-500 mb-3">Bounce counts per Gmail sending account for this campaign. Accounts with 0 bounces are shown for reference.</p>
+              <p className="text-xs text-gray-500 mb-3">
+                Bounce counts per Gmail sending account for this campaign.
+                Accounts with 0 bounces are shown for reference.
+              </p>
               {bounceEntries.map(([acct, count]) => (
-                <div key={acct} className="flex items-center justify-between text-sm">
-                  <span className="font-mono text-gray-700 text-xs">{acct}</span>
-                  <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${count > 0 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-500"}`}>
+                <div
+                  key={acct}
+                  className="flex items-center justify-between text-sm"
+                >
+                  <span className="font-mono text-gray-700 text-xs">
+                    {acct}
+                  </span>
+                  <span
+                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${count > 0 ? "bg-orange-100 text-orange-700" : "bg-gray-100 text-gray-500"}`}
+                  >
                     {count} bounce{count !== 1 ? "s" : ""}
                   </span>
                 </div>
@@ -120,34 +163,83 @@ export default async function CampaignEditorPage({
 
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200/80 overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-slate-50 to-indigo-50/50">
-            <h2 className="text-sm font-semibold text-gray-800">Campaign Details</h2>
+            <h2 className="text-sm font-semibold text-gray-800">
+              Campaign Details
+            </h2>
           </div>
-          <form action={updateCampaign.bind(null, id)} className="p-6 space-y-5">
+          <form
+            action={updateCampaign.bind(null, id)}
+            className="p-6 space-y-5"
+          >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div className="space-y-1.5">
-                <Label htmlFor="name" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Campaign Name *</Label>
-                <Input id="name" name="name" defaultValue={campaign.name} required placeholder="Campaign name" />
+                <Label
+                  htmlFor="name"
+                  className="text-xs font-semibold text-gray-600 uppercase tracking-wide"
+                >
+                  Campaign Name *
+                </Label>
+                <Input
+                  id="name"
+                  name="name"
+                  defaultValue={campaign.name}
+                  required
+                  placeholder="Campaign name"
+                />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="subject" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Subject Line *</Label>
-                <Input id="subject" name="subject" defaultValue={campaign.subject} required placeholder="Email subject" />
+                <Label
+                  htmlFor="subject"
+                  className="text-xs font-semibold text-gray-600 uppercase tracking-wide"
+                >
+                  Subject Line *
+                </Label>
+                <Input
+                  id="subject"
+                  name="subject"
+                  defaultValue={campaign.subject}
+                  required
+                  placeholder="Email subject"
+                />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
               <div className="space-y-1.5">
-                <Label htmlFor="chatGptChatId" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">ChatGPT Chat ID / URL</Label>
-                <Input id="chatGptChatId" name="chatGptChatId" defaultValue={campaign.chatGptChatId ?? ""} placeholder="e.g. c69a83496..." />
+                <Label
+                  htmlFor="chatGptChatId"
+                  className="text-xs font-semibold text-gray-600 uppercase tracking-wide"
+                >
+                  ChatGPT Chat ID / URL
+                </Label>
+                <Input
+                  id="chatGptChatId"
+                  name="chatGptChatId"
+                  defaultValue={campaign.chatGptChatId ?? ""}
+                  placeholder="e.g. c69a83496..."
+                />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="gmailAuthUser" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Gmail Auth User</Label>
-                <Input id="gmailAuthUser" name="gmailAuthUser" defaultValue={campaign.gmailAuthUser ?? ""} placeholder="e.g. nick@gmail.com" />
+                <Label
+                  htmlFor="gmailAuthUser"
+                  className="text-xs font-semibold text-gray-600 uppercase tracking-wide"
+                >
+                  Gmail Auth User
+                </Label>
+                <Input
+                  id="gmailAuthUser"
+                  name="gmailAuthUser"
+                  defaultValue={campaign.gmailAuthUser ?? ""}
+                  placeholder="e.g. nick@gmail.com"
+                />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4">
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Follow-up 1 Gmail Account</Label>
+                <Label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                  Follow-up 1 Gmail Account
+                </Label>
                 <GmailFollowupSelector
                   initialFollowupEmail={campaign.gmailFollowupEmail}
                   initialAccountIndex={campaign.gmailAccountIndex}
@@ -157,7 +249,12 @@ export default async function CampaignEditorPage({
                 />
               </div>
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Follow-up 2 Gmail Account <span className="text-gray-400 normal-case font-normal">(optional — falls back to FU1)</span></Label>
+                <Label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                  Follow-up 2 Gmail Account{" "}
+                  <span className="text-gray-400 normal-case font-normal">
+                    (optional — falls back to FU1)
+                  </span>
+                </Label>
                 <GmailFollowupSelector
                   initialFollowupEmail={campaign.gmailFollowup2Email}
                   emailFieldName="gmailFollowup2Email"
@@ -168,14 +265,29 @@ export default async function CampaignEditorPage({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="body" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Email Body *</Label>
-              <Textarea id="body" name="body" defaultValue={campaign.body} required rows={6} placeholder="Your outreach email template..." className="resize-none" />
+              <Label
+                htmlFor="body"
+                className="text-xs font-semibold text-gray-600 uppercase tracking-wide"
+              >
+                Email Body *
+              </Label>
+              <Textarea
+                id="body"
+                name="body"
+                defaultValue={campaign.body}
+                required
+                rows={6}
+                placeholder="Your outreach email template..."
+                className="resize-none"
+              />
             </div>
 
             <Followup1TemplatesEditor
               initialTemplates={(() => {
                 try {
-                  const parsed = JSON.parse(campaign.followup1Templates ?? "[]");
+                  const parsed = JSON.parse(
+                    campaign.followup1Templates ?? "[]",
+                  );
                   return Array.isArray(parsed) ? parsed.map(String) : [];
                 } catch {
                   return [];
@@ -185,34 +297,105 @@ export default async function CampaignEditorPage({
             />
 
             <div className="space-y-1.5">
-              <Label htmlFor="followup2" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Follow-up 2 Body</Label>
-              <Textarea id="followup2" name="followup2" defaultValue={campaign.followup2 ?? ""} rows={4} placeholder="Second follow-up message" className="resize-none" />
+              <Label
+                htmlFor="followup2"
+                className="text-xs font-semibold text-gray-600 uppercase tracking-wide"
+              >
+                Follow-up 2 Body
+              </Label>
+              <Textarea
+                id="followup2"
+                name="followup2"
+                defaultValue={campaign.followup2 ?? ""}
+                rows={4}
+                placeholder="Second follow-up message"
+                className="resize-none"
+              />
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="signature" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Signature</Label>
-              <Textarea id="signature" name="signature" defaultValue={campaign.signature ?? ""} rows={3} placeholder="Signature appended to every email" className="resize-none" />
+              <Label
+                htmlFor="signature"
+                className="text-xs font-semibold text-gray-600 uppercase tracking-wide"
+              >
+                Signature
+              </Label>
+              <Textarea
+                id="signature"
+                name="signature"
+                defaultValue={campaign.signature ?? ""}
+                rows={3}
+                placeholder="Signature appended to every email"
+                className="resize-none"
+              />
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="webhookUrl" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Webhook URL</Label>
-              <Input id="webhookUrl" name="webhookUrl" defaultValue={campaign.webhookUrl ?? ""} placeholder="Google Apps Script or Make.com webhook" />
+              <Label
+                htmlFor="webhookUrl"
+                className="text-xs font-semibold text-gray-600 uppercase tracking-wide"
+              >
+                Webhook URL
+              </Label>
+              <Input
+                id="webhookUrl"
+                name="webhookUrl"
+                defaultValue={campaign.webhookUrl ?? ""}
+                placeholder="Google Apps Script or Make.com webhook"
+              />
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="googleSheetId" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Google Sheet URL (for Sync)</Label>
-              <Input id="googleSheetId" name="googleSheetId" defaultValue={campaign.googleSheetId ?? ""} placeholder="Paste your Google Sheet URL here" />
-              <p className="text-xs text-gray-400">Paste the full URL of your Google Sheet. Used by the &quot;Sync to Sheet&quot; button to match rows by email.</p>
+              <Label
+                htmlFor="googleSheetId"
+                className="text-xs font-semibold text-gray-600 uppercase tracking-wide"
+              >
+                Google Sheet URL (for Sync)
+              </Label>
+              <Input
+                id="googleSheetId"
+                name="googleSheetId"
+                defaultValue={campaign.googleSheetId ?? ""}
+                placeholder="Paste your Google Sheet URL here"
+              />
+              <p className="text-xs text-gray-400">
+                Paste the full URL of your Google Sheet. Used by the &quot;Sync
+                to Sheet&quot; button to match rows by email.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-5">
               <div className="space-y-1.5">
-                <Label htmlFor="delay1Days" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Follow-up 1 Delay (days)</Label>
-                <Input id="delay1Days" name="delay1Days" type="number" min={0} defaultValue={campaign.delay1Days} required />
+                <Label
+                  htmlFor="delay1Days"
+                  className="text-xs font-semibold text-gray-600 uppercase tracking-wide"
+                >
+                  Follow-up 1 Delay (days)
+                </Label>
+                <Input
+                  id="delay1Days"
+                  name="delay1Days"
+                  type="number"
+                  min={0}
+                  defaultValue={campaign.delay1Days}
+                  required
+                />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="delay2Days" className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Follow-up 2 Delay (days)</Label>
-                <Input id="delay2Days" name="delay2Days" type="number" min={0} defaultValue={campaign.delay2Days} required />
+                <Label
+                  htmlFor="delay2Days"
+                  className="text-xs font-semibold text-gray-600 uppercase tracking-wide"
+                >
+                  Follow-up 2 Delay (days)
+                </Label>
+                <Input
+                  id="delay2Days"
+                  name="delay2Days"
+                  type="number"
+                  min={0}
+                  defaultValue={campaign.delay2Days}
+                  required
+                />
               </div>
             </div>
 

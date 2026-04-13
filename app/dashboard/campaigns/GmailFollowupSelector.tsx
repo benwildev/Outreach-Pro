@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
-import { Mail, Plus, Loader2, CheckCircle2, AlertCircle, RefreshCw, Check } from "lucide-react";
+import { Mail, Plus, Loader2, CheckCircle2, AlertCircle, RefreshCw, Check, Trash2 } from "lucide-react";
 
 interface GmailAccountRow {
   id: string;
@@ -34,6 +34,7 @@ export default function GmailFollowupSelector({
   const [showManual, setShowManual] = useState(false);
   const [saving, startSaving] = useTransition();
   const [refreshing, setRefreshing] = useState(false);
+  const [deletingEmail, setDeletingEmail] = useState<string | null>(null);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
 
   function showToast(msg: string, ok = true) {
@@ -68,6 +69,24 @@ export default function GmailFollowupSelector({
     setRefreshing(true);
     await fetchAccounts();
     setRefreshing(false);
+  }
+
+  async function handleDelete(email: string) {
+    setDeletingEmail(email);
+    try {
+      const res = await fetch(`/api/gmail-account-map?email=${encodeURIComponent(email)}`, { method: "DELETE" });
+      if (res.ok) {
+        setAccounts((prev) => prev.filter((a) => a.email !== email));
+        if (selected === email) setSelected("");
+        showToast(`Removed ${email}`);
+      } else {
+        showToast("Failed to remove", false);
+      }
+    } catch {
+      showToast("Network error", false);
+    } finally {
+      setDeletingEmail(null);
+    }
   }
 
   function handleSelect(email: string) {
@@ -174,6 +193,7 @@ export default function GmailFollowupSelector({
                   <th className="text-left text-[10px] font-bold text-gray-500 uppercase tracking-wide px-3 py-2">Email</th>
                   <th className="text-center text-[10px] font-bold text-gray-500 uppercase tracking-wide px-3 py-2">/u/N/</th>
                   <th className="text-center text-[10px] font-bold text-gray-500 uppercase tracking-wide px-3 py-2">Source</th>
+                  <th className="w-8 px-2 py-2" />
                 </tr>
               </thead>
               <tbody>
@@ -182,24 +202,36 @@ export default function GmailFollowupSelector({
                 return (
                   <tr
                     key={row.id}
-                    onClick={() => handleSelect(row.email)}
-                    className={`border-b border-gray-100 cursor-pointer transition-colors ${isSelected ? "bg-indigo-50 hover:bg-indigo-50/80" : "hover:bg-slate-50"}`}
+                    className={`border-b border-gray-100 transition-colors ${isSelected ? "bg-indigo-50" : "hover:bg-slate-50"}`}
                   >
-                    <td className="px-3 py-2.5 text-center">
+                    <td className="px-3 py-2.5 text-center cursor-pointer" onClick={() => handleSelect(row.email)}>
                       <span className={`inline-flex items-center justify-center w-4 h-4 rounded-full border-2 transition-colors ${isSelected ? "border-indigo-600 bg-indigo-600" : "border-gray-300 bg-white"}`}>
                         {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 font-mono text-xs text-gray-800">{row.email}</td>
-                    <td className="px-3 py-2.5 text-center">
+                    <td className="px-3 py-2.5 font-mono text-xs text-gray-800 cursor-pointer" onClick={() => handleSelect(row.email)}>{row.email}</td>
+                    <td className="px-3 py-2.5 text-center cursor-pointer" onClick={() => handleSelect(row.email)}>
                       <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-xs font-bold">
                         {row.accountIndex}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-center">
+                    <td className="px-3 py-2.5 text-center cursor-pointer" onClick={() => handleSelect(row.email)}>
                       <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${row.source === "auto" ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-gray-100 text-gray-600 border-gray-200"}`}>
                         {row.source === "auto" ? "auto" : "manual"}
                       </span>
+                    </td>
+                    <td className="px-2 py-2.5 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(row.email)}
+                        disabled={deletingEmail === row.email}
+                        title={`Remove ${row.email}`}
+                        className="inline-flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+                      >
+                        {deletingEmail === row.email
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <Trash2 className="w-3 h-3" />}
+                      </button>
                     </td>
                   </tr>
                 );

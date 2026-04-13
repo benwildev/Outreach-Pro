@@ -423,6 +423,47 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     })();
     return true;
   }
+
+  // Scan all Gmail accounts on this computer and push them to the server DB.
+  if (message.action === "scanGmailAccounts") {
+    (async () => {
+      try {
+        const accountMap = await fetchGmailAccountMap();
+        const entries = Object.entries(accountMap);
+        if (entries.length === 0) {
+          sendResponse({ success: true, accounts: [], note: "No Gmail accounts found — make sure you are signed in to Gmail in this browser." });
+          return;
+        }
+        // Persist all discovered accounts to the local cache and server DB.
+        const stored = await chrome.storage.local.get("gmailAccountIndexCache");
+        const cache = stored.gmailAccountIndexCache || {};
+        const base = await getApiBaseUrl();
+        const pushed = [];
+        for (const [email, index] of entries) {
+          if (!/^\d+$/.test(index)) continue;
+          cache[email] = index;
+          try {
+            const res = await fetch(base + "/api/gmail-account-map", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ email, accountIndex: parseInt(index, 10), source: "auto" }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              pushed.push(data.account);
+            }
+          } catch (_) {}
+        }
+        await chrome.storage.local.set({ gmailAccountIndexCache: cache });
+        console.log("[Leads Extension] scanGmailAccounts: pushed", pushed.length, "account(s) to server");
+        sendResponse({ success: true, accounts: pushed });
+      } catch (err) {
+        console.error("[Leads Extension] scanGmailAccounts error:", err);
+        sendResponse({ success: false, error: String(err.message) });
+      }
+    })();
+    return true;
+  }
 });
 
 async function handleStartWorkflow(data) {
