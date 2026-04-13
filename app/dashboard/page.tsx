@@ -59,7 +59,8 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     select: { id: true, name: true },
   });
 
-  const isFollowUpDueFilter = filter === "followup-due";
+  const isFollowUpDueFilter = filter === "followup-due" || filter === "followup1-due" || filter === "followup2-due";
+  const followupDueStep = filter === "followup1-due" ? 1 : filter === "followup2-due" ? 2 : null;
   const baseWhere: Prisma.LeadWhereInput = {};
 
   if (campaignId) baseWhere.campaignId = campaignId;
@@ -76,6 +77,7 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
   if (isFollowUpDueFilter) {
     where.status = "sent";
     where.nextFollowup = { lte: new Date() };
+    if (followupDueStep !== null) where.step = followupDueStep;
   } else if (status) {
     where.status = status;
   }

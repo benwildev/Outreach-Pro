@@ -114,7 +114,7 @@ export function StatsCards({
       accent: followupDueCount1 > 0 ? "border-l-orange-500" : "border-l-gray-300",
       iconBg: followupDueCount1 > 0 ? "bg-orange-500" : "bg-gray-400",
       valueColor: followupDueCount1 > 0 ? "text-orange-700" : "text-gray-500",
-      href: "/dashboard?filter=followup-due",
+      href: "/dashboard?filter=followup1-due",
     },
     {
       label: "Follow-up 2 Due",
@@ -125,7 +125,7 @@ export function StatsCards({
       accent: followupDueCount2 > 0 ? "border-l-orange-400" : "border-l-gray-300",
       iconBg: followupDueCount2 > 0 ? "bg-orange-400" : "bg-gray-400",
       valueColor: followupDueCount2 > 0 ? "text-orange-700" : "text-gray-500",
-      href: "/dashboard?filter=followup-due",
+      href: "/dashboard?filter=followup2-due",
     },
   ];
 
