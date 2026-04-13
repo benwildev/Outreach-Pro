@@ -104,15 +104,9 @@ export async function GET(request: Request) {
 
         const followupBody = resolveFollowupBody(lead.step, lead.campaign.followup1, lead.campaign.followup2, followup1Templates);
 
-        // For step-1 leads: apply fu1GmailOverride if provided, UNLESS the lead already has a
-        // gmailThreadId — in that case the reply MUST come from the original sending account
-        // (sentGmailAuthUser) because the thread only exists in that Gmail inbox.
-        // Applying the override to a threaded lead would cause "conversation not found" errors.
+        // Determine the effective sending account for this lead.
         const isStep1Lead = lead.step === 1;
-        const hasThread = !!lead.gmailThreadId;
-        const effectiveFu1Email = isStep1Lead && fu1GmailOverride
-          ? (hasThread && lead.sentGmailAuthUser ? lead.sentGmailAuthUser : fu1GmailOverride)
-          : null;
+        const effectiveFu1Email = isStep1Lead && fu1GmailOverride ? fu1GmailOverride : null;
         const stepEmail = isStep1Lead
           ? (effectiveFu1Email || lead.campaign.gmailFollowupEmail)
           : (lead.campaign.gmailFollowup2Email || lead.campaign.gmailFollowupEmail);
@@ -132,6 +126,16 @@ export async function GET(request: Request) {
           (lead.campaign.gmailAuthUser ?? "").split(",")[0].trim() ||
           "";
 
+        // If the sending account differs from who originally sent the email, the existing
+        // thread does NOT exist in the sender's inbox — opening it would cause
+        // "conversation not found". Clear the thread ID so the extension sends a fresh
+        // compose from the override account instead of failing with a thread reply.
+        const originalSender = (lead.sentGmailAuthUser || "").toLowerCase().trim();
+        const effectiveSender = campaignGmailAuthUser.toLowerCase().trim();
+        const senderMatchesOriginal =
+          !effectiveSender || !originalSender || effectiveSender === originalSender;
+        const effectiveThreadId = senderMatchesOriginal ? (lead.gmailThreadId ?? "") : "";
+
         return {
           leadId: lead.id,
           campaignId: lead.campaignId,
@@ -139,7 +143,7 @@ export async function GET(request: Request) {
           campaignChatId: lead.campaign.chatGptChatId ?? "",
           campaignGmailAuthUser,
           campaignGmailAccountIndex,
-          gmailThreadId: lead.gmailThreadId ?? "",
+          gmailThreadId: effectiveThreadId,
           recipientName: lead.recipientName,
           recipientEmail: lead.recipientEmail,
           websiteUrl: lead.websiteUrl ?? "",
