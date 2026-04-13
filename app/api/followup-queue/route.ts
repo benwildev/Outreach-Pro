@@ -126,6 +126,13 @@ export async function GET(request: Request) {
           (lead.campaign.gmailAuthUser ?? "").split(",")[0].trim() ||
           "";
 
+        // Always use only the first email address — the field may contain multiple
+        // comma/semicolon-separated addresses from import; sending to all would cause failures.
+        const recipientEmail = (lead.recipientEmail ?? "")
+          .split(/[,;]/)
+          .map((e) => e.trim())
+          .filter(Boolean)[0] ?? "";
+
         return {
           leadId: lead.id,
           campaignId: lead.campaignId,
@@ -135,7 +142,7 @@ export async function GET(request: Request) {
           campaignGmailAccountIndex,
           gmailThreadId: lead.gmailThreadId ?? "",
           recipientName: lead.recipientName,
-          recipientEmail: lead.recipientEmail,
+          recipientEmail,
           websiteUrl: lead.websiteUrl ?? "",
           website: lead.websiteUrl ?? "",
           niche: lead.niche ?? "",
