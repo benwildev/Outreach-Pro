@@ -41,6 +41,7 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
   const [collapsed, setCollapsed] = useState(false);
   const [fu1GmailOverride, setFu1GmailOverride] = useState("");
   const [gmailAccounts, setGmailAccounts] = useState<GmailAccount[]>([]);
+  const [gmailAcct, setGmailAcct] = useState("");
 
   useEffect(() => {
     const schedLimitRaw = typeof window !== "undefined" ? window.localStorage.getItem(K_SCHED_LIMIT) : null;
@@ -130,6 +131,7 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
           scheduleSendTime: combinedSchedule,
           scheduleStaggerMs: staggerMinutes * 60 * 1000,
           ...(showFu1Override && fu1GmailOverride ? { fu1GmailOverride } : {}),
+          ...(gmailAcct ? { gmailAcct } : {}),
         },
       });
       if (!response?.success) {
@@ -275,6 +277,25 @@ export function BulkSchedulePanel({ currentCampaignId }: { currentCampaignId: st
                 </button>
               ))}
             </div>
+
+            {/* Source Gmail Acct filter — only process leads sent from this account */}
+            {gmailAccounts.length > 0 && (
+              <div className="flex items-center gap-2 bg-white border border-amber-200 rounded-lg px-3 py-1.5 shadow-sm">
+                <span className="text-[11px] font-semibold text-gray-600 whitespace-nowrap">Source acct</span>
+                <select
+                  value={gmailAcct}
+                  onChange={(e) => setGmailAcct(e.target.value)}
+                  disabled={isActive}
+                  className="h-7 rounded-md border border-gray-200 bg-white px-2 text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:border-transparent shadow-sm"
+                  title="Only schedule leads whose original cold email was sent from this account"
+                >
+                  <option value="">All accounts</option>
+                  {gmailAccounts.map((a) => (
+                    <option key={a.email} value={a.email}>{a.email}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* FU1 account override — shown when phase includes FU1 */}
             {(schedPhase === "both" || schedPhase === "followup" || schedPhase === "followup1") && gmailAccounts.length > 0 && (

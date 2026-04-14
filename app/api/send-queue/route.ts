@@ -17,6 +17,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const limit = parseLimit(url.searchParams.get("limit"));
     const campaignId = (url.searchParams.get("campaignId") ?? "").trim();
+    const gmailAcct = (url.searchParams.get("gmailAcct") ?? "").trim();
 
     // Leads claimed within the last 90 minutes are excluded — they are either
     // actively being processed or were mid-flight when automation stopped.
@@ -30,6 +31,9 @@ export async function GET(request: Request) {
       const campaignFilter = campaignId
         ? Prisma.sql`AND "campaignId" = ${campaignId}`
         : Prisma.empty;
+      const gmailAcctFilter = gmailAcct
+        ? Prisma.sql`AND lower("sentGmailAuthUser") LIKE ${"%" + gmailAcct.toLowerCase() + "%"}`
+        : Prisma.empty;
 
       const eligible = await tx.$queryRaw<Array<{ id: string }>>`
         SELECT id FROM "lead"
@@ -37,6 +41,7 @@ export async function GET(request: Request) {
           AND replied = false
           AND ("claimedAt" IS NULL OR "claimedAt" < ${claimCutoff})
         ${campaignFilter}
+        ${gmailAcctFilter}
         ORDER BY "createdAt" ASC
         LIMIT ${limit}
         FOR UPDATE SKIP LOCKED

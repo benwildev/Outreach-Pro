@@ -1284,6 +1284,7 @@ function createBulkAutomationState() {
     scheduleSendTime: "",
     limit: BULK_LIMIT_DEFAULT,
     campaignId: "",
+    gmailAcct: "",
     currentLeadId: "",
     currentRecipientEmail: "",
     startedAt: null,
@@ -1628,13 +1629,17 @@ function rejectBulkWorkflowCompletion(leadId, errorMsg) {
   return true;
 }
 
-async function fetchSendQueue(limit, campaignId) {
+async function fetchSendQueue(limit, campaignId, gmailAcct) {
   const maxLeads = normalizeBulkLimit(limit);
   const params = new URLSearchParams();
   params.set("limit", String(maxLeads));
   const normalizedCampaignId = String(campaignId || "").trim();
   if (normalizedCampaignId) {
     params.set("campaignId", normalizedCampaignId);
+  }
+  const normalizedGmailAcct = String(gmailAcct || "").trim();
+  if (normalizedGmailAcct) {
+    params.set("gmailAcct", normalizedGmailAcct);
   }
 
   const response = await fetch((await getApiBaseUrl()) + "/api/send-queue?" + params.toString());
@@ -1657,7 +1662,7 @@ async function fetchSendQueue(limit, campaignId) {
   return leads.map((item) => toBulkQueueItem(item, "send"));
 }
 
-async function fetchFollowupQueue(limit, campaignId, step, fu1GmailOverride) {
+async function fetchFollowupQueue(limit, campaignId, step, fu1GmailOverride, gmailAcct) {
   const maxLeads = normalizeBulkLimit(limit);
   const params = new URLSearchParams();
   params.set("limit", String(maxLeads));
@@ -1671,6 +1676,10 @@ async function fetchFollowupQueue(limit, campaignId, step, fu1GmailOverride) {
   const normalizedOverride = String(fu1GmailOverride || "").trim();
   if (normalizedOverride) {
     params.set("fu1GmailOverride", normalizedOverride);
+  }
+  const normalizedGmailAcct = String(gmailAcct || "").trim();
+  if (normalizedGmailAcct) {
+    params.set("gmailAcct", normalizedGmailAcct);
   }
 
   const response = await fetch((await getApiBaseUrl()) + "/api/followup-queue?" + params.toString());
@@ -1940,7 +1949,7 @@ async function runBulkAutomationQueue() {
       } else {
         bulkAutomationState.phase = "followup";
       }
-      const followupQueue = await fetchFollowupQueue(bulkAutomationState.limit, bulkAutomationState.campaignId, stepFilter, bulkAutomationState.fu1GmailOverride);
+      const followupQueue = await fetchFollowupQueue(bulkAutomationState.limit, bulkAutomationState.campaignId, stepFilter, bulkAutomationState.fu1GmailOverride, bulkAutomationState.gmailAcct);
       if (followupQueue.length > 0) {
         for (let i = 0; i < followupQueue.length; i++) {
           bulkAutomationState.queue.push(followupQueue[i]);
@@ -2003,7 +2012,8 @@ async function handleStartBulkAutomation(data) {
 
   // For "followup only" modes skip fetching the new-email queue entirely.
   const isFollowupOnly = (startPhase === "followup" || startPhase === "followup1" || startPhase === "followup2");
-  const queue = isFollowupOnly ? [] : await fetchSendQueue(limit, campaignId);
+  const gmailAcct = data && data.gmailAcct ? String(data.gmailAcct).trim() : "";
+  const queue = isFollowupOnly ? [] : await fetchSendQueue(limit, campaignId, gmailAcct);
 
   bulkAutomationState.queue = Array.isArray(queue) ? queue : [];
   bulkAutomationState.total = bulkAutomationState.queue.length;
@@ -2025,6 +2035,7 @@ async function handleStartBulkAutomation(data) {
   bulkAutomationState.limit = limit;
   bulkAutomationState.campaignId = campaignId;
   bulkAutomationState.fu1GmailOverride = data && data.fu1GmailOverride ? String(data.fu1GmailOverride).trim() : "";
+  bulkAutomationState.gmailAcct = gmailAcct;
   bulkAutomationState.phase = startPhase === "send" ? "send" : startPhase;
   bulkAutomationState.currentLeadId = "";
   bulkAutomationState.currentRecipientEmail = "";

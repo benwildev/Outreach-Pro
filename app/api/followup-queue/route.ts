@@ -35,6 +35,7 @@ export async function GET(request: Request) {
     const stepParam = url.searchParams.get("step");
     const step = stepParam ? parseInt(stepParam, 10) : null;
     const fu1GmailOverride = (url.searchParams.get("fu1GmailOverride") ?? "").trim();
+    const gmailAcct = (url.searchParams.get("gmailAcct") ?? "").trim();
 
     const where: Prisma.LeadWhereInput = {
       status: "sent",
@@ -45,6 +46,9 @@ export async function GET(request: Request) {
     };
     if (campaignId) {
       where.campaignId = campaignId;
+    }
+    if (gmailAcct) {
+      where.sentGmailAuthUser = { contains: gmailAcct, mode: "insensitive" };
     }
 
     const leads = await prisma.lead.findMany({
