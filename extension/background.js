@@ -528,7 +528,9 @@ async function handleStartWorkflow(data) {
     }
   }
   const chatUrlToOpen = mappedChatUrl || CHATGPT_DEFAULT_URL;
-  const tab = await chrome.tabs.create({ url: chatUrlToOpen, active: !RUN_TABS_IN_BACKGROUND });
+  const chatTabOptions = { url: chatUrlToOpen, active: !RUN_TABS_IN_BACKGROUND };
+  if (bulkAutomationState.automationWindowId != null) chatTabOptions.windowId = bulkAutomationState.automationWindowId;
+  const tab = await chrome.tabs.create(chatTabOptions);
   if (campaignId && campaignChatUrl && mappedChatUrl) {
     const save = await setCampaignChatUrl(campaignId, mappedChatUrl);
     if (save && save.success) {
@@ -645,7 +647,9 @@ async function handleChatGptDone(data, chatTabId) {
   // Open Gmail compose in the normal inbox context so Gmail does not exit a standalone compose route after send.
   // Do NOT put body in URL - it gets truncated. Content script will fill body.
   const gmailUrl = `${gmailBaseUrl}/#inbox?compose=new&to=${encodedTo}&su=${encodedSu}`;
-  const tab = await chrome.tabs.create({ url: gmailUrl, active: !RUN_TABS_IN_BACKGROUND });
+  const gmailTabOptions = { url: gmailUrl, active: !RUN_TABS_IN_BACKGROUND };
+  if (bulkAutomationState.automationWindowId != null) gmailTabOptions.windowId = bulkAutomationState.automationWindowId;
+  const tab = await chrome.tabs.create(gmailTabOptions);
   await waitForTabReady(tab.id);
   await delay(2000);
   let sentToGmail = await sendMessageToTabWithRetry(tab.id, {
@@ -1293,7 +1297,39 @@ function createBulkAutomationState() {
     // Domain throttle: max sends to the same email domain per run. 0 = disabled.
     domainThrottle: 0,
     sentDomainsThisRun: {},
+    // Dedicated automation window — keeps tabs active (not throttled) without
+    // disrupting the user's main browser window. null when not running.
+    automationWindowId: null,
   };
+}
+
+async function createAutomationWindow() {
+  try {
+    const win = await chrome.windows.create({
+      type: "normal",
+      state: "normal",
+      width: 960,
+      height: 680,
+      left: 0,
+      top: 0,
+    });
+    return win.id ?? null;
+  } catch (e) {
+    console.warn("[Leads Extension] Could not create automation window:", e);
+    return null;
+  }
+}
+
+async function closeAutomationWindow() {
+  const winId = bulkAutomationState.automationWindowId;
+  bulkAutomationState.automationWindowId = null;
+  if (winId == null) return;
+  try {
+    await chrome.windows.remove(winId);
+    console.log("[Leads Extension] Automation window closed:", winId);
+  } catch (e) {
+    // Window may already be closed by the user — not an error.
+  }
 }
 
 function normalizeBulkDelayMs(value) {
@@ -1968,6 +2004,7 @@ async function runBulkAutomationQueue() {
     bulkAutomationState.currentRecipientEmail = "";
     bulkAutomationState.finishedAt = Date.now();
     resetBulkWorkflowWaiters();
+    closeAutomationWindow();
   }
 }
 
@@ -2058,6 +2095,10 @@ async function handleStartBulkAutomation(data) {
     };
   }
 
+  // Open a dedicated automation window so tabs stay active (Chrome won't
+  // throttle them) while the user's main browser window remains free.
+  bulkAutomationState.automationWindowId = await createAutomationWindow();
+
   runBulkAutomationQueue().catch((err) => {
     bulkAutomationState.status = "failed";
     bulkAutomationState.lastError = err && err.message ? String(err.message) : "Bulk runner crashed";
@@ -2066,6 +2107,7 @@ async function handleStartBulkAutomation(data) {
     bulkAutomationState.stopRequested = false;
     bulkAutomationState.finishedAt = Date.now();
     resetBulkWorkflowWaiters();
+    closeAutomationWindow();
     console.error("[Leads Extension] Bulk automation crashed:", err);
   });
 
@@ -2251,7 +2293,9 @@ async function handleStartFollowupWorkflow(data) {
     const encodedSu = encodeURIComponent(subject || "");
     gmailUrl = gmailBaseUrl + "#inbox?compose=new&to=" + encodedTo + "&su=" + encodedSu;
   }
-  const tab = await chrome.tabs.create({ url: gmailUrl, active: !RUN_TABS_IN_BACKGROUND });
+  const fallbackTabOptions = { url: gmailUrl, active: !RUN_TABS_IN_BACKGROUND };
+  if (bulkAutomationState.automationWindowId != null) fallbackTabOptions.windowId = bulkAutomationState.automationWindowId;
+  const tab = await chrome.tabs.create(fallbackTabOptions);
   await waitForTabReady(tab.id);
   await delay(threadId ? 3000 : 2000);
   const resolvedScheduleTime = scheduleSendTime ? String(scheduleSendTime).trim() : "";
