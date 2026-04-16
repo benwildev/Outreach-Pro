@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { promoteScheduledLeads } from "@/lib/promoteScheduledLeads";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,7 @@ function resolveFollowupBody(
 
 export async function GET(request: Request) {
   try {
+    await promoteScheduledLeads();
     const url = new URL(request.url);
     const limit = parseLimit(url.searchParams.get("limit"));
     const campaignId = (url.searchParams.get("campaignId") ?? "").trim();

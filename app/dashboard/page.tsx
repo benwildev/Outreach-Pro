@@ -17,6 +17,7 @@ import { AdvancedFilters } from "./AdvancedFilters";
 import ExportDropdown from "./ExportDropdown";
 import { ShieldCheck, Download, BarChart2, Zap, LayoutDashboard, Settings } from "lucide-react";
 import { promoteScheduledLeads } from "@/lib/promoteScheduledLeads";
+import { ScheduledLeadPoller } from "./ScheduledLeadPoller";
 import Image from "next/image";
 
 const VALID_STATUSES = ["pending", "sent", "scheduled", "failed", "replied", "bounced"] as const;
@@ -75,6 +76,14 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
     .map((r) => r.sentGmailAuthUser!)
     .filter(Boolean)
     .sort();
+
+  // Fetch scheduled leads (just id + sentAt) for the client-side delivery poller.
+  // Only leads whose sentAt is in the future still need watching; past ones will
+  // have been promoted to "sent" by promoteScheduledLeads() above.
+  const scheduledLeadsForPoller = await prisma.lead.findMany({
+    where: { status: "scheduled", sentAt: { not: null } },
+    select: { id: true, sentAt: true },
+  });
 
   const isFollowUpDueFilter = filter === "followup-due" || filter === "followup1-due" || filter === "followup2-due";
   const followupDueStep = filter === "followup1-due" ? 1 : filter === "followup2-due" ? 2 : null;
@@ -317,6 +326,9 @@ export default async function DashboardPage({ searchParams }: DashboardPageProps
 
           {/* Table */}
           <LeadsTableClient leads={leads} campaigns={campaigns} />
+
+          {/* Auto-promotes scheduled leads to "sent" when their delivery time passes */}
+          <ScheduledLeadPoller scheduledLeads={scheduledLeadsForPoller} />
 
           {/* Pagination */}
           {totalPages > 1 && (
