@@ -359,6 +359,11 @@ export function LeadsTableClient({ leads, campaigns }: LeadsTableClientProps) {
                                                 >
                                                     {getStepLabel(lead)}
                                                 </Badge>
+                                                {lead.status === "scheduled" && (
+                                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-medium px-1.5 py-0.5 rounded border bg-amber-50 text-amber-600 border-amber-200">
+                                                        ⏰ Scheduled
+                                                    </span>
+                                                )}
                                                 {isFollowUpDue(lead) && (
                                                     <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
                                                         Due
