@@ -3144,8 +3144,12 @@
     let redirectReason = "";
 
     if (urlIsZero && expectedGmailAuthUser !== "0" && expectedGmailAuthUser !== "") {
-      shouldRedirect = true;
-      redirectReason = "At u/0 but expected specific account";
+      // Only redirect if the UI email is unknown or doesn't match — if we already know
+      // we're on the right account (e.g. nickgoodexp@gmail.com IS u/0), don't redirect.
+      if (!currentAccountEmail || !isExpectedAuthUser(currentAccountEmail, expectedGmailAuthUser)) {
+        shouldRedirect = true;
+        redirectReason = "At u/0 but expected specific account";
+      }
     }
 
     // If we know the real account email and it mismatches the expected one, redirect regardless
@@ -3197,9 +3201,16 @@
       const encodedAccount = encodeURIComponent(accountSlot).replace(/%40/g, "@");
       const targetUrl = "https://mail.google.com/mail/u/" + encodedAccount + "/" + (hash || "#inbox");
 
-      log("Executing redirect to:", targetUrl);
-      window.location.href = targetUrl;
-      return;
+      // Safety net: if the resolved slot is the same as the current slot, skip the
+      // redirect entirely — navigating to the same URL confuses Gmail's service worker.
+      if (accountSlot === currentAuthUser) {
+        log("Resolved slot matches current slot (" + accountSlot + ") — skipping self-redirect, proceeding.");
+        // fall through to normal processing below
+      } else {
+        log("Executing redirect to:", targetUrl);
+        window.location.href = targetUrl;
+        return;
+      }
     }
 
     log("Session verified or trusted. Current URL Auth:", currentAuthUser, "UI Email:", currentAccountEmail || "unknown", "Proceeding.");
